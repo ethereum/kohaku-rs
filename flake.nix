@@ -46,6 +46,7 @@
               cargo-audit
               cargo-autoinherit
               cargo-sort
+              cargo-insta
 
               foundry
               alto
