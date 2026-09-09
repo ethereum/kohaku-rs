@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tornadocash", "crates/userop-kit"]
+members = ["tornadocash", "userop-kit"]
 resolver = "3"
 
 [workspace.lints.clippy]
@@ -21,8 +21,8 @@ criterion = "0.8.2"
 futures = "0.3"
 hex = "0.4.3"
 insta = "1.48.0"
-kohaku-tornadocash = { path = "crates/tornadocash" }
-kohaku-userop-kit = { path = "crates/userop-kit" }
+kohaku-tornadocash = { path = "tornadocash" }
+kohaku-userop-kit = { path = "userop-kit" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"
 postcard = "1.1.3"
