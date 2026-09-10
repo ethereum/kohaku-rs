@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use std::sync::Arc;
 
 use crate::backend::KvStoreBackend;
@@ -32,8 +34,7 @@ impl Store {
     /// underlying backend.
     ///
     /// Keys written through the returned store are prefixed so they cannot
-    /// collide with keys in sibling scopes or the parent scope. Scopes can be
-    /// nested by calling `scope` again on the result.
+    /// collide with keys in sibling scopes or the parent scope.
     pub fn scope(&self, name: impl AsRef<[u8]>) -> Self {
         let mut prefix = self.prefix.clone();
         prefix.extend_from_slice(name.as_ref());
