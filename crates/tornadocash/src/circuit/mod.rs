@@ -4,7 +4,6 @@ use websnark_rs::proof::{Proof, prove_random};
 use crate::circuit::input::CircuitInputs;
 
 pub mod input;
-#[cfg(feature = "remote-circuit")]
 mod remote;
 
 /// A tornadocash circuit, which can generate withdrawal proofs for known notes.
@@ -20,8 +19,6 @@ pub enum CircuitError {
     Circuit(#[from] websnark_rs::circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
-
-    #[cfg(feature = "remote-circuit")]
     #[error("Remote artifact loading error: {0}")]
     RemoteArtifact(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -42,7 +39,6 @@ impl Circuit {
     ///
     /// # Errors
     /// Returns an error if the remote artifacts cannot be loaded.
-    #[cfg(feature = "remote-circuit")]
     pub async fn from_remote() -> Result<Self, CircuitError> {
         let circuit = remote::load_remote_circuit()
             .await
