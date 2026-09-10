@@ -1,14 +1,13 @@
-use std::sync::Arc;
-
 use alloy::{
     node_bindings::Anvil,
     primitives::address,
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
+use kohaku_kv_store::memory::MemoryStore;
 use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, kv::MemoryKvStore,
-    provider::tornado_provider::TornadoProvider, userop_provider::TornadoPaymasterExt,
+    circuit::Circuit, indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
+    userop_provider::TornadoPaymasterExt,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
@@ -41,19 +40,19 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let pool =
         common::local_paymaster_chain::deploy_local_pool_with_paymaster(provider.clone()).await?;
 
-    let syncer = Arc::new(RpcSyncer::new(provider.clone()).with_batch_size(10_000));
-    let store = Arc::new(MemoryKvStore::default());
+    let store = MemoryStore::new();
+    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
     let circuit = Circuit::from_remote().await?;
     let mut tornado_provider = TornadoProvider::new(
         provider.clone(),
-        store,
-        syncer.clone(),
-        syncer.clone(),
+        store.into(),
+        syncer.clone().into(),
+        syncer.clone().into(),
         circuit,
     );
 
     info!("Syncing pool provider");
-    tornado_provider.pool(pool)?;
+    tornado_provider.pool(pool);
     tornado_provider.sync().await?;
 
     info!("Depositing into pool");

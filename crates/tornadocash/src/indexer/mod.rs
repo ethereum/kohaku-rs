@@ -1,16 +1,14 @@
-use std::sync::Arc;
-
+use kohaku_kv_store::Store;
 use thiserror::Error;
 use tracing::info;
 
 use crate::{
     indexer::{
-        kv::IndexerStore,
+        kv::IndexerStoreExt,
         syncer::{SyncEvent, Syncer, SyncerError},
         verifier::{Verifier, VerifierError},
     },
-    kv::KvStore,
-    merkle_tree::tc::TcMerkleTree,
+    merkle_tree::TcMerkleTree,
     provider::pool::Pool,
 };
 
@@ -21,12 +19,15 @@ pub mod rpc;
 pub mod syncer;
 pub mod verifier;
 
+/// An indexer for a single tornadocash pool.
+///
+/// The indexer syncs the pool's events and maintains a local merkle tree of the pool's commitments.
 pub struct Indexer {
     pool: Pool,
-    syncer: Arc<dyn Syncer>,
-    verifier: Arc<dyn Verifier>,
+    store: Store,
+    syncer: Syncer,
+    verifier: Verifier,
     tree: TcMerkleTree,
-    store: Arc<dyn KvStore>,
 }
 
 #[derive(Debug, Error)]
@@ -38,29 +39,22 @@ pub enum IndexerError {
     #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
     UnknownPool(String, String, u64),
     #[error("Merkle tree error: {0}")]
-    MerkleTree(#[from] crate::merkle_tree::MerkleTreeError),
+    MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
 }
 
 impl Indexer {
     /// Creates a new indexer for the given pool, using the provided syncer and verifier.
-    ///
-    /// # Errors
-    /// Returns an error if the indexer state cannot be loaded from the database.
-    pub fn new(
-        store: Arc<dyn KvStore>,
-        pool: Pool,
-        syncer: Arc<dyn Syncer>,
-        verifier: Arc<dyn Verifier>,
-    ) -> Result<Self, IndexerError> {
+    #[must_use]
+    pub fn new(pool: Pool, store: Store, syncer: Syncer, verifier: Verifier) -> Self {
         let tree = TcMerkleTree::new(store.clone());
 
-        Ok(Self {
+        Self {
             pool,
+            store,
             syncer,
             verifier,
             tree,
-            store,
-        })
+        }
     }
 
     #[must_use]
@@ -110,19 +104,16 @@ impl Indexer {
         }
         info!("Syncing from {} to {}", from_block, to_block);
 
-        let events = self.syncer.sync(&self.pool, from_block, to_block).await?;
+        let events = self.syncer.sync(&self.pool, from_block..to_block).await?;
         info!("Synced {} events", events.len());
 
         let mut leaves = Vec::new();
-        let mut nullifiers = Vec::new();
         for event in events {
             match event {
                 SyncEvent::Deposit(d) => {
                     leaves.push((d.leafIndex, d.commitment.into()));
                 }
-                SyncEvent::Withdrawal(w) => {
-                    nullifiers.push(w.nullifierHash.into());
-                }
+                SyncEvent::Withdrawal(_) => {}
             }
         }
 
@@ -133,7 +124,7 @@ impl Indexer {
             self.tree.splice(start, &leaves).await?;
         }
 
-        self.store.commit(to_block, &nullifiers).await;
+        self.store.commit(to_block).await;
         Ok(())
     }
 }

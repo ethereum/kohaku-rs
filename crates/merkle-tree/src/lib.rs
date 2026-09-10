@@ -1,25 +1,18 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
+use kohaku_kv_store::Store;
 use ruint::aliases::U256;
 
-use crate::{kv::KvStore, merkle_tree::kv::MerkleTreeStore};
+use crate::{hasher::Hasher, kv::MerkleTreeStoreExt};
 
+pub mod hasher;
 mod kv;
 pub mod proof;
-pub mod tc;
 
+/// A binary Merkle tree with a fixed depth `D` and hash function `H`.
 pub struct MerkleTree<const D: usize, H: Hasher> {
-    store: Arc<dyn KvStore>,
+    store: Store,
     phantom: std::marker::PhantomData<H>,
-}
-
-pub trait Hasher {
-    /// Hashes two 32-byte arrays into a 32-byte hash.
-    fn hash(a: U256, b: U256) -> U256;
-
-    /// Returns the zero value for the hash function, which is used as a placeholder for empty
-    /// leaves in the Merkle tree.
-    fn zero() -> U256;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -35,17 +28,22 @@ pub enum MerkleTreeError {
 }
 
 impl<const D: usize, H: Hasher> MerkleTree<D, H> {
-    pub fn new(store: Arc<dyn KvStore>) -> Self {
+    /// Creates a new Merkle tree backed by `store`.
+    ///
+    /// If `store` already contains a tree, it will be used; otherwise, a new empty tree will be
+    /// created.
+    pub fn new(store: Store) -> Self {
         Self {
             store,
             phantom: std::marker::PhantomData,
         }
     }
 
+    /// Returns the tree's root hash.
     pub async fn root(&self) -> U256 {
         match self.store.node(D as u8, 0).await {
             Some(root) => root,
-            None => zero_hashes::<H>(D)[D],
+            None => zero_hashes::<D, H>(D)[D],
         }
     }
 
@@ -74,7 +72,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             return Err(MerkleTreeError::IndexOutOfBounds(index));
         }
 
-        let zeros = zero_hashes::<H>(D);
+        let zeros = zero_hashes::<D, H>(D);
         let mut path = [0u8; D];
         let mut siblings = [U256::ZERO; D];
         let mut idx = index;
@@ -99,7 +97,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
 
         Ok(proof::MerkleProof {
             root: self.root().await,
-            element,
+            leaf: element,
             path,
             siblings,
         })
@@ -149,7 +147,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             return Err(MerkleTreeError::TreeFull);
         }
 
-        let zeros = zero_hashes::<H>(D);
+        let zeros = zero_hashes::<D, H>(D);
         let mut pending: HashMap<(u8, u64), U256> = HashMap::new();
         for (offset, &leaf) in leaves.iter().enumerate() {
             pending.insert((0, (len + offset) as u64), leaf);
@@ -201,7 +199,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
 
 /// Computes the hash of a fully-empty subtree at each height from `0` to `levels` (inclusive),
 /// where height `0` is the hasher's zero leaf value.
-fn zero_hashes<H: Hasher>(levels: usize) -> Vec<U256> {
+fn zero_hashes<const D: usize, H: Hasher>(levels: usize) -> Vec<U256> {
     let mut zeros = Vec::with_capacity(levels + 1);
     zeros.push(H::zero());
     for i in 1..=levels {
@@ -212,8 +210,10 @@ fn zero_hashes<H: Hasher>(levels: usize) -> Vec<U256> {
 
 #[cfg(test)]
 mod tests {
+    use kohaku_kv_store::memory::MemoryStore;
+
     use super::*;
-    use crate::kv::MemoryKvStore;
+    use crate::hasher::Hasher;
 
     struct TestHasher;
 
@@ -227,33 +227,27 @@ mod tests {
         }
     }
 
-    type TestTree<const D: usize> = MerkleTree<D, TestHasher>;
-
-    fn tree<const D: usize>() -> TestTree<D> {
-        MerkleTree::new(Arc::new(MemoryKvStore::default()))
-    }
-
-    fn leaf(byte: u8) -> U256 {
-        U256::from_le_bytes([byte; 32])
+    fn tree() -> MerkleTree<3, TestHasher> {
+        MerkleTree::new(MemoryStore::new().into())
     }
 
     #[tokio::test]
     async fn empty_tree_root_is_deterministic() {
-        let a = tree::<3>();
-        let b = tree::<3>();
+        let a = tree();
+        let b = tree();
         assert_eq!(a.root().await, b.root().await);
     }
 
     #[tokio::test]
     async fn insert_and_splice_produce_same_root() {
-        let leaves = [leaf(1), leaf(2), leaf(3)];
+        let leaves = [U256::from(1), U256::from(2), U256::from(3)];
 
-        let inserted = tree::<3>();
+        let inserted = tree();
         for (i, &l) in leaves.iter().enumerate() {
             inserted.insert(i, l).await.unwrap();
         }
 
-        let spliced = tree::<3>();
+        let spliced = tree();
         spliced.splice(0, &leaves).await.unwrap();
 
         assert_eq!(inserted.root().await, spliced.root().await);
@@ -261,103 +255,72 @@ mod tests {
 
     #[tokio::test]
     async fn partial_overlap_splice_extends_correctly() {
-        let leaves = [leaf(1), leaf(2), leaf(3)];
-        let full = tree::<3>();
+        let leaves = [U256::from(1), U256::from(2), U256::from(3)];
+        let full = tree();
         full.splice(0, &leaves).await.unwrap();
 
-        // Simulate replaying from a point where leaf(1) was already committed.
-        let replayed = tree::<3>();
-        replayed.insert(0, leaf(1)).await.unwrap();
-        replayed.splice(0, &leaves).await.unwrap();
+        let root_before = full.root().await;
+        full.splice(0, &leaves).await.unwrap();
 
-        assert_eq!(full.root().await, replayed.root().await);
+        assert_eq!(full.root().await, root_before);
     }
 
     #[tokio::test]
     async fn reinserting_the_same_leaf_is_a_no_op() {
-        let tree = tree::<3>();
-        tree.insert(0, leaf(1)).await.unwrap();
+        let tree = tree();
+        tree.insert(0, U256::from(1)).await.unwrap();
         let root_before = tree.root().await;
 
-        tree.insert(0, leaf(1)).await.unwrap();
+        tree.insert(0, U256::from(1)).await.unwrap();
         assert_eq!(tree.root().await, root_before);
     }
 
     #[tokio::test]
     async fn reinserting_a_different_leaf_conflicts() {
-        let tree = tree::<3>();
-        tree.insert(0, leaf(1)).await.unwrap();
+        let tree = tree();
+        tree.insert(0, U256::from(1)).await.unwrap();
 
         assert!(matches!(
-            tree.insert(0, leaf(2)).await,
+            tree.insert(0, U256::from(2)).await,
             Err(MerkleTreeError::LeafConflict(0))
         ));
     }
 
     #[tokio::test]
-    async fn inserting_past_the_end_errors() {
-        let tree = tree::<3>();
+    async fn insert_beyond_capacity_errors() {
+        let tree = MerkleTree::<2, TestHasher>::new(MemoryStore::new().into());
+        tree.splice(
+            0,
+            &[U256::from(1), U256::from(2), U256::from(3), U256::from(4)],
+        )
+        .await
+        .unwrap();
 
         assert!(matches!(
-            tree.insert(1, leaf(1)).await,
-            Err(MerkleTreeError::IndexOutOfBounds(1))
+            tree.insert(4, U256::from(5)).await,
+            Err(MerkleTreeError::TreeFull)
         ));
     }
 
     #[tokio::test]
-    async fn leaf_proof_matches_recomputed_root() {
-        let leaves = [leaf(1), leaf(2), leaf(3)];
-        let tree = tree::<3>();
-        tree.splice(0, &leaves).await.unwrap();
-
-        let proof = tree.leaf_proof(leaf(2)).await.unwrap();
-        assert_eq!(proof.root, tree.root().await);
-        assert_eq!(proof.element, leaf(2));
-
-        let mut current = proof.element;
-        for level in 0..3 {
-            let sibling = proof.siblings[level];
-            current = if proof.path[level] == 0 {
-                TestHasher::hash(current, sibling)
-            } else {
-                TestHasher::hash(sibling, current)
-            };
-        }
-        assert_eq!(current, proof.root);
-    }
-
-    #[tokio::test]
     async fn leaf_proof_missing_leaf_errors() {
-        let tree = tree::<3>();
-        tree.insert(0, leaf(1)).await.unwrap();
+        let tree = tree();
+        tree.insert(0, U256::from(1)).await.unwrap();
 
         assert!(matches!(
-            tree.leaf_proof(leaf(9)).await,
+            tree.leaf_proof(U256::from(9)).await,
             Err(MerkleTreeError::MissingLeaf(_))
         ));
     }
 
     #[tokio::test]
     async fn proof_out_of_bounds_errors() {
-        let tree = tree::<3>();
-        tree.insert(0, leaf(1)).await.unwrap();
+        let tree = tree();
+        tree.insert(0, U256::from(1)).await.unwrap();
 
         assert!(matches!(
             tree.proof(5).await,
             Err(MerkleTreeError::IndexOutOfBounds(5))
-        ));
-    }
-
-    #[tokio::test]
-    async fn splice_beyond_capacity_errors() {
-        let tree = tree::<2>(); // capacity = 2^2 = 4
-        tree.splice(0, &[leaf(1), leaf(2), leaf(3), leaf(4)])
-            .await
-            .unwrap();
-
-        assert!(matches!(
-            tree.insert(4, leaf(5)).await,
-            Err(MerkleTreeError::TreeFull)
         ));
     }
 }

@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use alloy::{
     primitives::Address,
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
+use kohaku_kv_store::memory::MemoryStore;
 use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, kv::MemoryKvStore,
-    provider::pool_provider::PoolProvider,
+    circuit::Circuit, indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider,
 };
 use tracing::info;
 
@@ -24,17 +22,17 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
     let pool = common::local_chain::deploy_local_pool(provider.clone()).await?;
 
-    let syncer = Arc::new(RpcSyncer::new(provider.clone()).with_batch_size(10_000));
-    let store = Arc::new(MemoryKvStore::default());
+    let store = MemoryStore::new();
+    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
     let circuit = Circuit::from_remote().await?;
     let mut pool_provider = PoolProvider::new(
         pool,
         provider.clone(),
-        store,
-        syncer.clone(),
-        syncer.clone(),
+        store.into(),
+        syncer.clone().into(),
+        syncer.clone().into(),
         circuit,
-    )?;
+    );
     info!("Syncing pool provider");
     pool_provider.sync().await?;
 

@@ -16,13 +16,14 @@ use crate::{
         Tornado::{Deposit, Withdrawal},
     },
     indexer::{
-        syncer::{SyncEvent, Syncer, SyncerError},
-        verifier::{Verifier, VerifierError},
+        syncer::{SyncEvent, SyncerBackend, SyncerError},
+        verifier::{VerifierBackend, VerifierError},
     },
     provider::pool::Pool,
 };
 
 /// A syncer and verifier that reads from an Ethereum JSON-RPC provider
+#[derive(Clone)]
 pub struct RpcSyncer<P: Provider> {
     provider: P,
     batch_size: u64,
@@ -66,7 +67,7 @@ impl<P: Provider> RpcSyncer<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: Provider> Syncer for RpcSyncer<P> {
+impl<P: Provider> SyncerBackend for RpcSyncer<P> {
     async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
         Ok(self.latest_block(pool).await.map_err(SyncerError::other)?)
     }
@@ -86,7 +87,7 @@ impl<P: Provider> Syncer for RpcSyncer<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: Provider> Verifier for RpcSyncer<P> {
+impl<P: Provider> VerifierBackend for RpcSyncer<P> {
     async fn verify(&self, pool: &Pool, root: U256) -> Result<(), VerifierError> {
         info!("Verifying root {} for pool {}", root, pool.address);
 

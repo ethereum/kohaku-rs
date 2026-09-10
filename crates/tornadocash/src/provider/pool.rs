@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::provider::note::Note;
 
+/// Represents an asset in a tornadocash pool. Assets can either be native (e.g. ETH, MATIC) or
+/// ERC20 tokens.
+///
+/// Tornadocash assets are by convention represented by their symbol and decimal precision rather
+/// than their contract addresses.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Asset {
     Native {
@@ -31,8 +36,10 @@ pub struct Pool {
     pub adapter_address: Option<Address>,
 }
 
+/// Hardcoded list of known tornadocash assets.
 pub const ASSETS: &[Asset] = &[Asset::ETH, Asset::MATIC];
 
+/// Hardcoded list of known tornadocash pools.
 pub const POOLS: &[Pool] = &[
     Pool::SEPOLIA_ETHER_01,
     Pool::SEPOLIA_ETHER_1,

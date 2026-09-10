@@ -19,10 +19,10 @@ use crate::{
 
 const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 
-/// Extension trait for `UserOperationBuilder` that adds support for Tornado Cash paymasters.
+/// Extension trait for `UserOperationBuilder` that adds support for tornadocash paymasters.
 ///
-/// Tornadocash paymasters use a shielded note to pay for a UserOp's gas. The leftover note value is
-/// sent to the provided recipient address.
+/// Tornadocash paymasters use a shielded note to pay for a `UserOp`'s gas. The leftover note value
+/// is sent to the provided recipient address.
 pub trait TornadoPaymasterExt: Sized {
     fn with_tornadocash_paymaster<R>(
         self,
@@ -142,7 +142,7 @@ where
     Ok(builder)
 }
 
-/// Encodes the paymaster data for a Tornado Cash withdrawal call.
+/// Encodes the paymaster data for a tornadocash withdrawal call.
 fn encode_paymaster_data(adapter: Address, withdraw_call: Tornado::withdrawCall) -> Bytes {
     let adapter_data = TornadoAdapterData {
         proof: withdraw_call._proof,

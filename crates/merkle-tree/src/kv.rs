@@ -1,11 +1,18 @@
+use kohaku_kv_store::Store;
 use ruint::aliases::U256;
-
-use crate::kv::KvStore;
 
 const LEAF_COUNT_KEY: &[u8] = b"leaf_count";
 
-pub trait MerkleTreeStore: KvStore {
-    /// Reads the hash stored at `(level, index)`, if any.
+#[async_trait::async_trait]
+pub trait MerkleTreeStoreExt {
+    async fn node(&self, level: u8, index: u64) -> Option<U256>;
+    async fn leaf_count(&self) -> u64;
+    async fn commit(&self, leaf_count: u64, nodes: &[(u8, u64, U256)]);
+}
+
+#[async_trait::async_trait]
+impl MerkleTreeStoreExt for Store {
+    /// Reads the hash stored at (`level`, `index`), if any.
     async fn node(&self, level: u8, index: u64) -> Option<U256> {
         let key = node_key(level, index);
         self.get(&key).await.map(|v| U256::from_le_slice(&v))
@@ -13,9 +20,9 @@ pub trait MerkleTreeStore: KvStore {
 
     /// Returns the number of leaves currently committed.
     async fn leaf_count(&self) -> u64 {
-        self.get(LEAF_COUNT_KEY)
-            .await
-            .map_or(0, |v| u64::from_be_bytes(v.try_into().expect("leaf count is 8 bytes")))
+        self.get(LEAF_COUNT_KEY).await.map_or(0, |v| {
+            u64::from_be_bytes(v.try_into().expect("leaf count is 8 bytes"))
+        })
     }
 
     /// Atomically writes `nodes` and `leaf_count`.
@@ -33,12 +40,11 @@ pub trait MerkleTreeStore: KvStore {
             .collect();
         items.push((LEAF_COUNT_KEY, &count_bytes));
 
-        self.batch_put(&items).await;
+        self.batch_put(items).await;
     }
 }
 
-impl<T: KvStore + ?Sized> MerkleTreeStore for T {}
-
+/// Returns the key for a node at (`level`, `index`).
 fn node_key(level: u8, index: u64) -> [u8; 9] {
     let mut key = [0u8; 9];
     key[0] = level;

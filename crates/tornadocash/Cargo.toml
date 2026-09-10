@@ -14,7 +14,15 @@ remote-circuit = []
 bench = []
 
 [dependencies]
-alloy = { workspace = true, features = ["rpc", "rpc-types", "network", "providers", "transports", "sol-types", "reqwest"] }
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "network",
+    "providers",
+    "transports",
+    "sol-types",
+    "reqwest",
+] }
 ark-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 async-trait = { workspace = true }
@@ -34,18 +42,20 @@ tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 blake-hash = { workspace = true }
+kohaku-merkle-tree = { workspace = true }
+kohaku-kv-store = { workspace = true }
 
 [dev-dependencies]
-alloy = { workspace = true, features = ["signers", "signer-local", "provider-anvil-node", "contract"] }
+alloy = { workspace = true, features = [
+    "signers",
+    "signer-local",
+    "provider-anvil-node",
+    "contract",
+] }
 anyhow = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 insta = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
-[[bench]]
-name = "merkle"
-harness = false
-required-features = ["bench"]
 
 [[bench]]
 name = "prove"

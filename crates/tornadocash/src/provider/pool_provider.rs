@@ -1,4 +1,4 @@
-use std::{array::from_fn, sync::Arc};
+use std::array::from_fn;
 
 use alloy::{
     network::TransactionBuilder,
@@ -7,6 +7,7 @@ use alloy::{
     rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
+use kohaku_kv_store::Store;
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
@@ -15,8 +16,7 @@ use crate::{
     abis::tornado::Tornado,
     circuit::{Circuit, input::CircuitInputs},
     indexer::{Indexer, IndexerError, syncer::Syncer, verifier::Verifier},
-    kv::KvStore,
-    merkle_tree::tc::TcMerkleTree,
+    merkle_tree::TcMerkleTree,
     provider::{
         call::Call,
         note::Note,
@@ -43,7 +43,7 @@ pub enum PoolProviderError {
     #[error("Indexer error: {0}")]
     Indexer(#[from] IndexerError),
     #[error("Merkle proof generation error: {0}")]
-    MerkleProof(#[from] crate::merkle_tree::MerkleTreeError),
+    MerkleProof(#[from] kohaku_merkle_tree::MerkleTreeError),
     #[error("Circuit error: {0}")]
     Circuit(#[from] crate::circuit::CircuitError),
     #[error("Proof generation error: {0}")]
@@ -56,23 +56,21 @@ pub enum PoolProviderError {
 
 impl PoolProvider {
     /// Creates a new pool provider for the given pool.
-    ///
-    /// # Errors
-    /// Returns an error if the indexer cannot be created.
+    #[must_use]
     pub fn new(
         pool: Pool,
         provider: DynProvider,
-        store: Arc<dyn KvStore>,
-        syncer: Arc<dyn Syncer>,
-        verifier: Arc<dyn Verifier>,
+        store: Store,
+        syncer: Syncer,
+        verifier: Verifier,
         circuit: Circuit,
-    ) -> Result<Self, PoolProviderError> {
-        let indexer = Indexer::new(store, pool, syncer, verifier)?;
-        Ok(Self {
+    ) -> Self {
+        let indexer = Indexer::new(pool, store, syncer, verifier);
+        Self {
             indexer,
             provider,
             circuit,
-        })
+        }
     }
 
     /// Get the pool associated with this provider.

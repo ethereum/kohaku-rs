@@ -1,0 +1,19 @@
+[package]
+name = "kohaku-merkle-tree"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+ruint = { workspace = true }
+kohaku-kv-store = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+criterion = { workspace = true, features = ["async_tokio"] }
+rand = { workspace = true }
+
+[[bench]]
+name = "merkle"
+harness = false

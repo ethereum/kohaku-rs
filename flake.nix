@@ -45,6 +45,7 @@
               bacon
               cargo-audit
               cargo-autoinherit
+              cargo-machete
               cargo-sort
               cargo-insta
 
