@@ -58,11 +58,6 @@ insta = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]
-name = "merkle"
-harness = false
-required-features = ["bench"]
-
-[[bench]]
 name = "prove"
 harness = false
 required-features = ["bench"]
