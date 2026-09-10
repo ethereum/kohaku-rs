@@ -5,8 +5,8 @@ use std::{
 
 use crate::backend::KvStoreBackend;
 
-/// An in-memory [`KvStore`], useful for tests and other non-persistent use cases.
-#[derive(Debug, Default)]
+/// An in-memory [`KvStoreBackend`], useful for tests and other non-persistent use cases.
+#[derive(Default)]
 pub struct MemoryStore(Mutex<HashMap<Vec<u8>, Vec<u8>>>);
 
 impl MemoryStore {
@@ -48,25 +48,22 @@ mod tests {
     use super::*;
     use crate::Store;
 
-    /// Asserts that MemoryStore returns None for a nonexistent key.
     #[tokio::test]
-    async fn test_memory_store_get_none() {
+    async fn nonexistent_key_is_none() {
         let store: Store = MemoryStore::new().into();
         assert_eq!(store.get("nonexistent_key").await, None);
     }
 
-    /// Asserts that MemoryStore can put and get a value correctly.
     #[tokio::test]
-    async fn test_memory_store_get_put() {
+    async fn get_put_value() {
         let store: Store = MemoryStore::new().into();
 
         store.put("key", "value").await;
         assert_eq!(store.get("key").await, Some(b"value".to_vec()));
     }
 
-    /// Asserts that MemoryStore returns None for a deleted key.
     #[tokio::test]
-    async fn test_memory_store_get_deleted() {
+    async fn delete_removes_value() {
         let store: Store = MemoryStore::new().into();
 
         store.put("key", "value").await;
@@ -75,9 +72,8 @@ mod tests {
         assert_eq!(store.get("key").await, None);
     }
 
-    /// Asserts that overwriting a key in MemoryStore updates the value correctly.
     #[tokio::test]
-    async fn test_memory_store_overwrite() {
+    async fn overwriting_a_key_updates_value() {
         let store: Store = MemoryStore::new().into();
 
         store.put("key", "test_value_1").await;
@@ -87,9 +83,8 @@ mod tests {
         assert_eq!(store.get("key").await, Some(b"test_value_2".to_vec()));
     }
 
-    /// Asserts that putting an unrelated key in MemoryStore does not affect other keys.
     #[tokio::test]
-    async fn test_memory_store_unrelated_key() {
+    async fn unrelated_keys_do_not_interfere() {
         let store: Store = MemoryStore::new().into();
 
         store.put("key1", "value1").await;
@@ -98,5 +93,20 @@ mod tests {
         store.put("key2", "value2").await;
         assert_eq!(store.get("key1").await, Some(b"value1".to_vec()));
         assert_eq!(store.get("key2").await, Some(b"value2".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn scopes_are_unique() {
+        let store: Store = MemoryStore::new().into();
+
+        let a = store.scope("ab");
+        let ab = store.scope("a").scope("b");
+
+        a.put("key", "a_value").await;
+        ab.put("key", "ab_value").await;
+
+        assert_eq!(a.get("key").await, Some(b"a_value".to_vec()));
+        assert_eq!(ab.get("key").await, Some(b"ab_value".to_vec()));
+        assert_eq!(store.get("key").await, None);
     }
 }
