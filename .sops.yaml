@@ -1,7 +1,8 @@
 keys:
   - &robert age1wrc3nndwc8vqg5fy4ks9xcldfnzd3wgkd9z6ak5edxa93cs4g4ysjxt0w5
   - &kass age176x0ecch5xcg8paqglf79yl5v5n4hcr0zgv4lchaz5vp4w3zcf2sd2x27m
+  - &github-secrets age199en2kemryjttju33ztqspyhxu3wg7tgr6vy43t2w6ca69tdqcdqejzj8z
 creation_rules:
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     key_groups:
-      - age: [*robert, *kass]
+      - age: [*robert, *kass, *github-secrets]
