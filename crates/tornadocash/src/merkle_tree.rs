@@ -3,12 +3,10 @@ use std::sync::OnceLock;
 use alloy::primitives::keccak256;
 use ark_bn254::Fr;
 use ark_ff::{BigInt, PrimeField};
+use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
 use ruint::{aliases::U256, uint};
 
-use crate::{
-    crypto::mimc::mimc_sponge_hash,
-    merkle_tree::{Hasher, MerkleTree},
-};
+use crate::crypto::mimc::mimc_sponge_hash;
 
 pub type TcMerkleTree = MerkleTree<20, TcMerkleTreeHasher>;
 

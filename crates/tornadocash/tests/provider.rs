@@ -5,9 +5,9 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
+use kohaku_kv_store::memory::MemoryStore;
 use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, kv::MemoryKvStore,
-    provider::tornado_provider::TornadoProvider,
+    circuit::Circuit, indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
 };
 use tracing::info;
 
@@ -25,11 +25,11 @@ async fn test_provider() -> Result<(), anyhow::Error> {
     let pool = common::local_chain::deploy_local_pool(provider.clone()).await?;
 
     let syncer = Arc::new(RpcSyncer::new(provider.clone()).with_batch_size(10_000));
-    let db = Arc::new(MemoryKvStore::default());
+    let store = MemoryStore::new().into();
     let circuit = Circuit::from_remote().await?;
     let mut tornado_provider = TornadoProvider::new(
         provider.clone(),
-        db,
+        store,
         syncer.clone(),
         syncer.clone(),
         circuit,

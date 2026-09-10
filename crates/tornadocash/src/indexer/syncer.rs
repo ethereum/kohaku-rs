@@ -8,11 +8,11 @@ use crate::{
 /// A syncer for tornadocash.
 #[async_trait::async_trait]
 pub trait Syncer: Send + Sync {
-    /// Returns the latest block accessible by the syncer for the given pool.
+    /// Returns the latest block accessible by the syncer for the given `pool`.
     async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError>;
 
     /// Returns a list of all sync events between `from_block` and `to_block` for
-    /// the given pool.
+    /// the given `pool`.
     async fn sync(
         &self,
         pool: &Pool,

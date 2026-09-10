@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use alloy::{primitives::Address, providers::DynProvider, sol_types::SolCall};
+use kohaku_kv_store::Store;
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use thiserror::Error;
@@ -9,7 +10,6 @@ use crate::{
     abis::tornado::Tornado,
     circuit::Circuit,
     indexer::{rpc::RpcSyncer, syncer::Syncer, verifier::Verifier},
-    kv::KvStore,
     provider::{
         call::Call,
         note::Note,
@@ -24,7 +24,7 @@ use crate::{
 /// interface.
 pub struct TornadoProvider {
     provider: DynProvider,
-    store: Arc<dyn KvStore>,
+    store: Store,
     syncer: Arc<dyn Syncer>,
     verifier: Arc<dyn Verifier>,
     pools: Vec<PoolProvider>,
@@ -44,7 +44,7 @@ pub enum TornadoProviderError {
 impl TornadoProvider {
     pub fn new(
         provider: DynProvider,
-        store: Arc<dyn KvStore>,
+        store: Store,
         syncer: Arc<dyn Syncer>,
         verifier: Arc<dyn Verifier>,
         circuit: Circuit,
@@ -59,7 +59,7 @@ impl TornadoProvider {
         }
     }
 
-    pub fn from_rpc(provider: DynProvider, store: Arc<dyn KvStore>, circuit: Circuit) -> Self {
+    pub fn from_rpc(provider: DynProvider, store: Store, circuit: Circuit) -> Self {
         let syncer = Arc::new(RpcSyncer::new(provider.clone()));
         Self::new(provider, store, syncer.clone(), syncer, circuit)
     }

@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
+use kohaku_kv_store::Store;
 use thiserror::Error;
 use tracing::info;
 
 use crate::{
     indexer::{
-        kv::IndexerStore,
+        kv::IndexerStoreExt,
         syncer::{SyncEvent, Syncer, SyncerError},
         verifier::{Verifier, VerifierError},
     },
-    kv::KvStore,
-    merkle_tree::tc::TcMerkleTree,
+    merkle_tree::TcMerkleTree,
     provider::pool::Pool,
 };
 
@@ -26,7 +26,7 @@ pub struct Indexer {
     syncer: Arc<dyn Syncer>,
     verifier: Arc<dyn Verifier>,
     tree: TcMerkleTree,
-    store: Arc<dyn KvStore>,
+    store: Store,
 }
 
 #[derive(Debug, Error)]
@@ -38,7 +38,7 @@ pub enum IndexerError {
     #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
     UnknownPool(String, String, u64),
     #[error("Merkle tree error: {0}")]
-    MerkleTree(#[from] crate::merkle_tree::MerkleTreeError),
+    MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
 }
 
 impl Indexer {
@@ -47,7 +47,7 @@ impl Indexer {
     /// # Errors
     /// Returns an error if the indexer state cannot be loaded from the database.
     pub fn new(
-        store: Arc<dyn KvStore>,
+        store: Store,
         pool: Pool,
         syncer: Arc<dyn Syncer>,
         verifier: Arc<dyn Verifier>,
@@ -114,15 +114,12 @@ impl Indexer {
         info!("Synced {} events", events.len());
 
         let mut leaves = Vec::new();
-        let mut nullifiers = Vec::new();
         for event in events {
             match event {
                 SyncEvent::Deposit(d) => {
                     leaves.push((d.leafIndex, d.commitment.into()));
                 }
-                SyncEvent::Withdrawal(w) => {
-                    nullifiers.push(w.nullifierHash.into());
-                }
+                SyncEvent::Withdrawal(_) => {}
             }
         }
 
@@ -133,7 +130,7 @@ impl Indexer {
             self.tree.splice(start, &leaves).await?;
         }
 
-        self.store.commit(to_block, &nullifiers).await;
+        self.store.commit(to_block).await;
         Ok(())
     }
 }
