@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use alloy::primitives::{Address, B256, U64};
 use serde::{Deserialize, Deserializer};
 
-/// The saga-sync manifest (`index.json`): a map of stream key to its published chunks.
+/// The saga-sync manifest (`index.json`).
 ///
+/// A map of stream key to its published chunks. See the documentation for more details:
 /// <https://github.com/fatlabsxyz/saga-sync/blob/master/SPEC.md#31-manifest>
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Manifest {
-    #[serde(flatten)]
-    pub streams: HashMap<String, StreamEntry>,
+    pub available_protocols: HashMap<String, StreamEntry>,
 }
 
 #[expect(dead_code)]

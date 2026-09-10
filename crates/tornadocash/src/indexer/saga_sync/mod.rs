@@ -13,11 +13,17 @@ use crate::{
 mod decode;
 mod manifest;
 
-/// A syncer that reads pre-scraped, verifiable event chunks published under the
+/// A syncer that reads pre-scraped event chunks published under the
 /// [saga-sync](https://github.com/fatlabsxyz/saga-sync) protocol.
 ///
 /// Fetches the protocol's manifest, verifies each overlapping chunk's sha256 digest against it,
 /// and decodes the chunk's events into [`SyncEvent`]s.
+///
+/// Does not currently implement chunk caching or chunk signature verification.
+/// - Chunk caching could be added to reduce redundant network downloads, but is not required for
+///   this MVP.
+/// - I don't fully buy the benefits of signature verification. Since invalid chunks would result in
+///   invalid merkle roots, we can detect and skip invalid chunks regardless.
 pub struct SagaSyncSyncer {
     client: reqwest::Client,
     base_url: String,
@@ -62,7 +68,7 @@ impl SyncerBackend for SagaSyncSyncer {
         let key = stream_key(pool);
 
         Ok(manifest
-            .streams
+            .available_protocols
             .get(&key)
             .and_then(manifest::StreamEntry::last_block)
             .unwrap_or(pool.deployed_block))
@@ -78,7 +84,7 @@ impl SyncerBackend for SagaSyncSyncer {
 
         let manifest = self.fetch_manifest().await.map_err(SyncerError::other)?;
         let key = stream_key(pool);
-        let Some(entry) = manifest.streams.get(&key) else {
+        let Some(entry) = manifest.available_protocols.get(&key) else {
             return Ok(Vec::new());
         };
 
