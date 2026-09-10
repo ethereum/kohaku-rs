@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use kohaku_kv_store::Store;
 use thiserror::Error;
 use tracing::info;
@@ -23,8 +21,8 @@ pub mod verifier;
 
 pub struct Indexer {
     pool: Pool,
-    syncer: Arc<dyn Syncer>,
-    verifier: Arc<dyn Verifier>,
+    syncer: Syncer,
+    verifier: Verifier,
     tree: TcMerkleTree,
     store: Store,
 }
@@ -43,24 +41,17 @@ pub enum IndexerError {
 
 impl Indexer {
     /// Creates a new indexer for the given pool, using the provided syncer and verifier.
-    ///
-    /// # Errors
-    /// Returns an error if the indexer state cannot be loaded from the database.
-    pub fn new(
-        store: Store,
-        pool: Pool,
-        syncer: Arc<dyn Syncer>,
-        verifier: Arc<dyn Verifier>,
-    ) -> Result<Self, IndexerError> {
+    #[must_use]
+    pub fn new(store: Store, pool: Pool, syncer: Syncer, verifier: Verifier) -> Self {
         let tree = TcMerkleTree::new(store.clone());
 
-        Ok(Self {
+        Self {
             pool,
             syncer,
             verifier,
             tree,
             store,
-        })
+        }
     }
 
     #[must_use]
@@ -110,7 +101,7 @@ impl Indexer {
         }
         info!("Syncing from {} to {}", from_block, to_block);
 
-        let events = self.syncer.sync(&self.pool, from_block, to_block).await?;
+        let events = self.syncer.sync(&self.pool, from_block..to_block).await?;
         info!("Synced {} events", events.len());
 
         let mut leaves = Vec::new();

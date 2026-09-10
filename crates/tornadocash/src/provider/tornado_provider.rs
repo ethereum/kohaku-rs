@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use alloy::{primitives::Address, providers::DynProvider, sol_types::SolCall};
 use kohaku_kv_store::Store;
 use rand::CryptoRng;
@@ -9,7 +7,7 @@ use thiserror::Error;
 use crate::{
     abis::tornado::Tornado,
     circuit::Circuit,
-    indexer::{rpc::RpcSyncer, syncer::Syncer, verifier::Verifier},
+    indexer::{syncer::Syncer, verifier::Verifier},
     provider::{
         call::Call,
         note::Note,
@@ -25,8 +23,8 @@ use crate::{
 pub struct TornadoProvider {
     provider: DynProvider,
     store: Store,
-    syncer: Arc<dyn Syncer>,
-    verifier: Arc<dyn Verifier>,
+    syncer: Syncer,
+    verifier: Verifier,
     pools: Vec<PoolProvider>,
     circuit: Circuit,
 }
@@ -42,11 +40,12 @@ pub enum TornadoProviderError {
 }
 
 impl TornadoProvider {
+    #[must_use]
     pub fn new(
         provider: DynProvider,
         store: Store,
-        syncer: Arc<dyn Syncer>,
-        verifier: Arc<dyn Verifier>,
+        syncer: Syncer,
+        verifier: Verifier,
         circuit: Circuit,
     ) -> Self {
         Self {
@@ -59,19 +58,11 @@ impl TornadoProvider {
         }
     }
 
-    pub fn from_rpc(provider: DynProvider, store: Store, circuit: Circuit) -> Self {
-        let syncer = Arc::new(RpcSyncer::new(provider.clone()));
-        Self::new(provider, store, syncer.clone(), syncer, circuit)
-    }
-
     /// Get a mutable reference to the provider for a given pool, creating it if it doesn't exist.
-    ///
-    /// # Errors
-    /// Returns an error if the pool cannot be initialized.
     #[allow(clippy::missing_panics_doc)]
-    pub fn pool(&mut self, pool: Pool) -> Result<&mut PoolProvider, PoolProviderError> {
+    pub fn pool(&mut self, pool: Pool) -> &mut PoolProvider {
         if let Some(i) = self.pools.iter().position(|p| *p.pool() == pool) {
-            return Ok(&mut self.pools[i]);
+            return &mut self.pools[i];
         }
 
         let provider = PoolProvider::new(
@@ -81,12 +72,12 @@ impl TornadoProvider {
             self.syncer.clone(),
             self.verifier.clone(),
             self.circuit.clone(),
-        )?;
+        );
 
         self.pools.retain(|p| *p.pool() != pool);
         self.pools.push(provider);
         // SAFETY: We just pushed a new provider, so the last element is guaranteed to be available.
-        Ok(self.pools.last_mut().unwrap())
+        self.pools.last_mut().unwrap()
     }
 
     /// Create a deposit transaction and note for a given pool.
@@ -140,8 +131,7 @@ impl TornadoProvider {
     /// Create withdrawal calldata.
     ///
     /// # Errors
-    /// Returns an error if the pool cannot be found, is not initialized, or if the withdrawal
-    /// calldata cannot be created.
+    /// Returns an error if the pool cannot be synced or the withdrawal call cannot be created.
     pub async fn withdraw_call(
         &mut self,
         note: &Note,
@@ -153,7 +143,7 @@ impl TornadoProvider {
     ) -> Result<Tornado::withdrawCall, TornadoProviderError> {
         let pool = self.pool_from_note(note)?;
 
-        let provider = self.pool(pool)?;
+        let provider = self.pool(pool);
         provider.sync().await?;
         Ok(provider
             .withdraw_call(note, recipient, relayer, fee, refund, rng)
@@ -164,14 +154,13 @@ impl TornadoProvider {
     /// no-op.
     ///
     /// # Errors
-    /// Returns an error if the pool cannot be found or if the quote cannot be
-    /// queried.
+    /// Returns an error if the quote cannot be queried.
     pub async fn quote_wei_in_fee_token(
         &mut self,
         pool: Pool,
         wei_amount: U256,
     ) -> Result<U256, TornadoProviderError> {
-        let provider = self.pool(pool)?;
+        let provider = self.pool(pool);
         Ok(provider.quote_wei_in_fee_token(wei_amount).await?)
     }
 

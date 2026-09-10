@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use tracing::info;
 
 use crate::{
-    indexer::syncer::{SyncEvent, Syncer, SyncerError},
+    indexer::syncer::{SyncEvent, Syncer, SyncerBackend, SyncerError},
     provider::pool::Pool,
 };
 
@@ -13,7 +11,7 @@ use crate::{
 /// latest block of each syncer.
 #[derive(Default)]
 pub struct ChainedSyncer {
-    syncers: Vec<Arc<dyn Syncer>>,
+    syncers: Vec<Syncer>,
 }
 
 impl ChainedSyncer {
@@ -26,21 +24,14 @@ impl ChainedSyncer {
 
     /// Adds a syncer to the chain. Syncers are queried in the order they are added.
     #[must_use]
-    pub fn then<S: Syncer + 'static>(mut self, syncer: S) -> Self {
-        self.syncers.push(Arc::new(syncer));
-        self
-    }
-
-    /// Adds a syncer to the chain. Syncers are queried in the order they are added.
-    #[must_use]
-    pub fn then_arc(mut self, syncer: Arc<dyn Syncer>) -> Self {
-        self.syncers.push(syncer);
+    pub fn then<S: SyncerBackend + 'static>(mut self, syncer: S) -> Self {
+        self.syncers.push(syncer.into());
         self
     }
 }
 
 #[async_trait::async_trait]
-impl Syncer for ChainedSyncer {
+impl SyncerBackend for ChainedSyncer {
     async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
         let mut max_block = 0u64;
         for syncer in &self.syncers {
@@ -77,7 +68,7 @@ impl Syncer for ChainedSyncer {
             }
 
             let range_end = syncer_latest.min(to_block);
-            match syncer.sync(pool, current_from, range_end).await {
+            match syncer.sync(pool, current_from..range_end).await {
                 Ok(events) => all_events.extend(events),
                 Err(e) => {
                     tracing::warn!("Syncer {} failed: {}", i, e);

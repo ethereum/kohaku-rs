@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{
     abis::tornado::Tornado::{Deposit, Withdrawal},
-    indexer::syncer::{SyncEvent, Syncer, SyncerError},
+    indexer::syncer::{SyncEvent, SyncerBackend, SyncerError},
     provider::pool::Pool,
 };
 
@@ -57,7 +57,7 @@ impl RemoteSyncer {
 }
 
 #[async_trait::async_trait]
-impl Syncer for RemoteSyncer {
+impl SyncerBackend for RemoteSyncer {
     async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
         let deposits = self.deposits(pool).await.map_err(SyncerError::other)?;
         let withdrawals = self.withdrawals(pool).await.map_err(SyncerError::other)?;

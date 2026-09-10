@@ -1,4 +1,4 @@
-use std::{array::from_fn, sync::Arc};
+use std::array::from_fn;
 
 use alloy::{
     network::TransactionBuilder,
@@ -56,23 +56,21 @@ pub enum PoolProviderError {
 
 impl PoolProvider {
     /// Creates a new pool provider for the given pool.
-    ///
-    /// # Errors
-    /// Returns an error if the indexer cannot be created.
+    #[must_use]
     pub fn new(
         pool: Pool,
         provider: DynProvider,
         store: Store,
-        syncer: Arc<dyn Syncer>,
-        verifier: Arc<dyn Verifier>,
+        syncer: Syncer,
+        verifier: Verifier,
         circuit: Circuit,
-    ) -> Result<Self, PoolProviderError> {
-        let indexer = Indexer::new(store, pool, syncer, verifier)?;
-        Ok(Self {
+    ) -> Self {
+        let indexer = Indexer::new(store, pool, syncer, verifier);
+        Self {
             indexer,
             provider,
             circuit,
-        })
+        }
     }
 
     /// Get the pool associated with this provider.

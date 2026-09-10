@@ -21,7 +21,7 @@ const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 
 /// Extension trait for `UserOperationBuilder` that adds support for Tornado Cash paymasters.
 ///
-/// Tornadocash paymasters use a shielded note to pay for a UserOp's gas. The leftover note value is
+/// Tornadocash paymasters use a shielded note to pay for a `UserOp`'s gas. The leftover note value is
 /// sent to the provided recipient address.
 pub trait TornadoPaymasterExt: Sized {
     fn with_tornadocash_paymaster<R>(
