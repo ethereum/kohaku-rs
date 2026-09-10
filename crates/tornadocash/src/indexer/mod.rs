@@ -19,12 +19,15 @@ pub mod rpc;
 pub mod syncer;
 pub mod verifier;
 
+/// An indexer for a single tornadocash pool.
+///
+/// The indexer syncs the pool's events and maintains a local merkle tree of the pool's commitments.
 pub struct Indexer {
     pool: Pool,
+    store: Store,
     syncer: Syncer,
     verifier: Verifier,
     tree: TcMerkleTree,
-    store: Store,
 }
 
 #[derive(Debug, Error)]
@@ -42,15 +45,15 @@ pub enum IndexerError {
 impl Indexer {
     /// Creates a new indexer for the given pool, using the provided syncer and verifier.
     #[must_use]
-    pub fn new(store: Store, pool: Pool, syncer: Syncer, verifier: Verifier) -> Self {
+    pub fn new(pool: Pool, store: Store, syncer: Syncer, verifier: Verifier) -> Self {
         let tree = TcMerkleTree::new(store.clone());
 
         Self {
             pool,
+            store,
             syncer,
             verifier,
             tree,
-            store,
         }
     }
 
