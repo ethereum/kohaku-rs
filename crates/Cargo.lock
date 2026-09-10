@@ -3051,19 +3051,13 @@ dependencies = [
 name = "kohaku-merkle-tree"
 version = "0.1.0"
 dependencies = [
- "alloy",
- "alloy-sol-types",
- "anyhow",
  "async-trait",
- "cfg_aliases",
- "futures",
- "insta",
- "reqwest",
- "serde",
- "serde_json",
+ "criterion",
+ "kohaku-kv-store",
+ "rand 0.10.2",
+ "ruint",
  "thiserror",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -3081,6 +3075,8 @@ dependencies = [
  "criterion",
  "hex",
  "insta",
+ "kohaku-kv-store",
+ "kohaku-merkle-tree",
  "kohaku-userop-kit",
  "num-bigint 0.5.1",
  "num-traits",
