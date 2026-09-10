@@ -1,0 +1,35 @@
+[package]
+name = "kohaku-merkle-tree"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["bundler"]
+bundler = []
+
+[dependencies]
+alloy = { workspace = true, features = [
+    "signers",
+    "dyn-abi",
+    "rpc",
+    "rpc-types",
+] }
+alloy-sol-types = { workspace = true, features = ["eip712-serde"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
