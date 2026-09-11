@@ -1,56 +1,48 @@
-// use std::sync::Arc;
+use alloy::providers::{Provider, ProviderBuilder};
+use kohaku_kv_store::memory::MemoryStore;
+use kohaku_tornadocash::{
+    circuit::Circuit, indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider,
+};
+use tracing::info;
 
-// use alloy::{
-//     providers::{Provider, ProviderBuilder},
-//     signers::local::PrivateKeySigner,
-// };
-// use tornadocash::{
-//     indexer::{chained::ChainedSyncer, remote::RemoteSyncer, rpc::RpcSyncer},
-//     kv::MemoryKvStore,
-//     provider::{pool::Pool, pool_provider::PoolProvider},
-// };
-// use tracing::info;
+mod common;
 
-// mod common;
+#[tokio::test]
+#[ignore = "run with `cargo test --release -- --ignored`"]
+async fn test_sync() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_test_writer()
+        .try_init()
+        .ok();
 
-// #[tokio::test]
-// #[ignore = "run with `cargo test --release -- --ignored`"]
-// async fn test_sync() -> Result<(), anyhow::Error> {
-//     tracing_subscriber::fmt()
-//         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-//         .with_test_writer()
-//         .try_init()
-//         .ok();
+    let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
+    let pool = common::local_chain::deploy_local_pool(provider.clone()).await?;
 
-//     let pool = Pool::SEPOLIA_ETHER_01;
-//     let fork_url = std::env::var("RPC_URL_SEPOLIA").expect("RPC_URL_SEPOLIA must be set");
+    let store = MemoryStore::new();
+    let syncer = RpcSyncer::new(provider.clone());
+    let circuit = Circuit::from_remote().await?;
+    let mut pool_provider = PoolProvider::new(
+        pool,
+        provider.clone(),
+        store.into(),
+        syncer.clone().into(),
+        syncer.clone().into(),
+        circuit,
+    );
 
-//     let signer: PrivateKeySigner =
-//         "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".parse()?;
-//     let provider = ProviderBuilder::new()
-//         .wallet(signer)
-//         .connect(&fork_url)
-//         .await?
-//         .erased();
+    // Populate many arbitrary deposits
+    for _ in 0..50 {
+        let (deposit_call, _) = pool_provider.deposit(&mut rand::rng());
+        provider
+            .send_transaction(deposit_call.into())
+            .await?
+            .get_receipt()
+            .await?;
+    }
 
-//     let rpc_syncer = Arc::new(RpcSyncer::new(provider.clone()).with_batch_size(10_000));
-//     let syncer = Arc::new(
-//         ChainedSyncer::new().then(RemoteSyncer::new("https://raw.githubusercontent.com/Robert-MacWha/privacy-protocols/refs/heads/sync-state/tornadocash-sync"))
-//         .then_arc(rpc_syncer.clone()));
+    info!("Syncing pool provider");
+    pool_provider.sync().await?;
 
-//     let store = Arc::new(MemoryKvStore::default());
-//     let circuit = common::circuit::load_remote_circuit().await?;
-//     let mut pool_provider = PoolProvider::new(
-//         pool,
-//         provider.clone(),
-//         store,
-//         syncer.clone(),
-//         rpc_syncer.clone(),
-//         circuit,
-//     )
-//     .await?;
-//     info!("Syncing pool provider");
-//     pool_provider.sync().await?;
-
-//     Ok(())
-// }
+    Ok(())
+}

@@ -4,8 +4,6 @@ const CIRCUIT_URL: &str =
     "https://github.com/Robert-MacWha/privacy-protocol-artifacts/raw/refs/heads/main/artifacts/";
 
 /// Loads a tornadocash circuit from a remote source.
-///
-/// Requires the `remote-circuit` feature to be enabled.
 pub async fn load_remote_circuit() -> Result<Circuit, Box<dyn std::error::Error + Send + Sync>> {
     let circuit_url = format!("{CIRCUIT_URL}/tornadocash-classic/circuit.json.br");
     let pk_url = format!("{CIRCUIT_URL}/tornadocash-classic/proving_key.bin.br");

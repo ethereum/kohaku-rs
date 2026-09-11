@@ -53,6 +53,7 @@
               alto
 
               just
+              sops
             ];
           };
 

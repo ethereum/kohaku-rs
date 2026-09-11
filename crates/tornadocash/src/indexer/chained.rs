@@ -14,6 +14,13 @@ pub struct ChainedSyncer {
     syncers: Vec<Syncer>,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("no syncer available to cover blocks {from}..{to}")]
+struct NoSyncerAvailable {
+    from: u64,
+    to: u64,
+}
+
 impl ChainedSyncer {
     #[must_use]
     pub fn new() -> Self {
@@ -55,27 +62,48 @@ impl SyncerBackend for ChainedSyncer {
     ) -> Result<Vec<SyncEvent>, SyncerError> {
         info!("Syncing from {} to {}", from_block, to_block);
         let mut current_from = from_block;
-
         let mut all_events = Vec::new();
+
         for (i, syncer) in self.syncers.iter().enumerate() {
-            if current_from > to_block {
+            if current_from >= to_block {
                 break;
             }
 
-            let syncer_latest = syncer.latest_block(pool).await?;
-            if syncer_latest < current_from {
+            let syncer_latest = match syncer.latest_block(pool).await {
+                Ok(block) => block,
+                Err(e) => {
+                    tracing::warn!("Syncer {} failed to get latest block: {}", i, e);
+                    continue;
+                }
+            };
+            if syncer_latest <= current_from {
                 continue;
             }
 
             let range_end = syncer_latest.min(to_block);
             match syncer.sync(pool, current_from..range_end).await {
-                Ok(events) => all_events.extend(events),
+                Ok(events) => {
+                    all_events.extend(events);
+                    current_from = range_end;
+                }
                 Err(e) => {
-                    tracing::warn!("Syncer {} failed: {}", i, e);
+                    tracing::warn!(
+                        "Syncer {} failed for range {}..{}: {}, trying next syncer",
+                        i,
+                        current_from,
+                        range_end,
+                        e
+                    );
+                    // Leave `current_from` unchanged so the next syncer retries this range.
                 }
             }
+        }
 
-            current_from = range_end + 1;
+        if current_from < to_block {
+            return Err(SyncerError::other(NoSyncerAvailable {
+                from: current_from,
+                to: to_block,
+            }));
         }
 
         Ok(all_events)
