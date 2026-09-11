@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     indexer::{
-        kv::IndexerStoreExt,
+        indexer_store::IndexerStoreExt,
         syncer::{SyncEvent, Syncer, SyncerError},
         verifier::{Verifier, VerifierError},
     },
@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub mod chained;
-mod kv;
+mod indexer_store;
 pub mod remote;
 pub mod rpc;
 #[cfg(feature = "saga-sync")]
