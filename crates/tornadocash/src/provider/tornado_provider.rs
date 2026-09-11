@@ -59,16 +59,16 @@ impl TornadoProvider {
     }
 
     /// Get a mutable reference to the provider for a given pool, creating it if it doesn't exist.
-    #[allow(clippy::missing_panics_doc)]
     pub fn pool(&mut self, pool: Pool) -> &mut PoolProvider {
         if let Some(i) = self.pools.iter().position(|p| *p.pool() == pool) {
             return &mut self.pools[i];
         }
 
+        let scoped_store = self.store.scope(pool.id());
         let provider = PoolProvider::new(
             pool,
             self.provider.clone(),
-            self.store.clone(),
+            scoped_store,
             self.syncer.clone(),
             self.verifier.clone(),
             self.circuit.clone(),
@@ -76,7 +76,11 @@ impl TornadoProvider {
 
         self.pools.retain(|p| *p.pool() != pool);
         self.pools.push(provider);
-        // SAFETY: We just pushed a new provider, so the last element is guaranteed to be available.
+
+        #[expect(
+            clippy::missing_panics_doc,
+            reason = "We just pushed a new provider, so the last element is guaranteed to be available."
+        )]
         self.pools.last_mut().unwrap()
     }
 
@@ -196,7 +200,7 @@ impl TornadoProvider {
             return Ok(*pool);
         }
 
-        Pool::from_id(&note.amount, &note.symbol, note.chain_id).ok_or_else(|| {
+        Pool::from_raw(&note.amount, &note.symbol, note.chain_id).ok_or_else(|| {
             TornadoProviderError::UnknownPool(
                 note.amount.clone(),
                 note.symbol.clone(),

@@ -164,11 +164,11 @@ impl Pool {
 
     #[must_use]
     pub fn from_note(note: &Note) -> Option<Self> {
-        Self::from_id(&note.amount, &note.symbol, note.chain_id)
+        Self::from_raw(&note.amount, &note.symbol, note.chain_id)
     }
 
     #[must_use]
-    pub fn from_id(amount: &str, symbol: &str, chain_id: u64) -> Option<Self> {
+    pub fn from_raw(amount: &str, symbol: &str, chain_id: u64) -> Option<Self> {
         POOLS
             .iter()
             .find(|pool| {
@@ -180,6 +180,12 @@ impl Pool {
     #[must_use]
     pub fn from_address(address: Address) -> Option<Self> {
         POOLS.iter().find(|pool| pool.address == address).copied()
+    }
+
+    /// Pool ID, e.g. "ETH-0.1-1" for the 0.1 ETH pool on Ethereum mainnet.
+    #[must_use]
+    pub fn id(&self) -> String {
+        format!("{}-{}-{}", self.symbol(), self.amount(), self.chain_id)
     }
 
     /// Pool asset symbol, e.g. "ETH" or "MATIC"
@@ -201,13 +207,7 @@ impl Pool {
 
 impl Display for Pool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "eip155:{}/{}/{}",
-            self.chain_id,
-            self.symbol(),
-            self.amount()
-        )
+        f.write_str(&self.id())
     }
 }
 
@@ -235,4 +235,15 @@ fn format_amount(amount: u128, decimals: u8) -> String {
     }
 
     format!("{whole}.{frac_str}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pool_id() {
+        let pool = Pool::ETHEREUM_ETHER_01;
+        assert_eq!(pool.id(), "ETH-0.1-1");
+    }
 }
