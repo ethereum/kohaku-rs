@@ -2,6 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use rand::{CryptoRng, RngExt};
 use ruint::aliases::U256;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::crypto::pedersen::pedersen_hash;
@@ -10,7 +11,7 @@ use crate::crypto::pedersen::pedersen_hash;
 ///
 /// Notes are produced when a user deposits funds into a tornadocash pool. They
 /// are used to withdraw the funds from the same pool later.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
     /// 31-byte little-endian nullifier (248 bits of entropy).
     pub nullifier: [u8; 31],
