@@ -65,7 +65,8 @@ impl PoolProvider {
         verifier: Verifier,
         circuit: Circuit,
     ) -> Self {
-        let indexer = Indexer::new(pool, store, syncer, verifier);
+        let indexer_store = store.scope("indexer");
+        let indexer = Indexer::new(pool, indexer_store, syncer, verifier);
         Self {
             indexer,
             provider,
