@@ -65,7 +65,6 @@
 
               foundry
               alto
-              sops
             ];
           };
         };

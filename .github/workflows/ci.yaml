@@ -27,6 +27,4 @@ jobs:
     - run: nix develop .#ci
     - run: nix develop .#ci --command bash -c "cd crates && cargo clippy"
     - run: nix develop .#ci --command bash -c "cd crates && cargo test --release"
-    - run: nix develop .#ci --command sops exec-env secrets/secrets.yaml "cd crates && cargo test --release -- --ignored"
-      env:
-        SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+    - run: nix develop .#ci --command bash -c "cd crates && cargo test --release -- --ignored"
