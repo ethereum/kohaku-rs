@@ -4,6 +4,13 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
+use kohaku_fork_kit::{
+    alto::AltoBuilder,
+    entry_point::deploy_entry_point,
+    paymaster::{deploy_fee_adapter, deploy_paymaster},
+    pool::deploy_pool,
+    simple_account::deploy_simple_account,
+};
 use kohaku_kv_store::memory::MemoryStore;
 use kohaku_tornadocash::{
     circuit::Circuit, indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
@@ -11,12 +18,9 @@ use kohaku_tornadocash::{
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
-    entry_point::ENTRY_POINT_08,
     smart_account::simple_7702_smart_account::{Call, Simple7702SmartAccount},
 };
 use tracing::info;
-
-mod common;
 
 const ALTO_EXECUTOR_PK: &str = "0x4a3a02862ddcb260ed52d40ef03f8e3d78fa3d174b0ef333afdf1ffb4a648cd5";
 const ALTO_UTILITY_PK: &str = "0xdd4b2564c83ff7de602c39ffda1146055dc1814b07c083d7971722384f1f01a6";
@@ -37,8 +41,25 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .erased();
     let chain_id = provider.get_chain_id().await?;
 
-    let pool =
-        common::local_paymaster_chain::deploy_local_pool_with_paymaster(provider.clone()).await?;
+    let entrypoint = deploy_entry_point(&provider).await?;
+    deploy_simple_account(&provider).await?;
+
+    let mut pool = deploy_pool(provider.clone()).await?;
+
+    let placeholder_factory = address!("0x0000000000000000000000000000000000000011");
+    let placeholder_weth = address!("0x0000000000000000000000000000000000000022");
+    let paymaster_address = deploy_paymaster(
+        provider.clone(),
+        entrypoint,
+        placeholder_factory,
+        placeholder_weth,
+    )
+    .await?;
+    let adapter_address =
+        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
+
+    pool.paymaster_address = Some(paymaster_address);
+    pool.adapter_address = Some(adapter_address);
 
     let store = MemoryStore::new();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
@@ -68,9 +89,9 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     tornado_provider.sync().await?;
 
     info!("Starting local alto bundler");
-    let alto = common::alto::AltoBuilder::new(
+    let alto = AltoBuilder::new(
         anvil.endpoint_url().to_string(),
-        ENTRY_POINT_08,
+        entrypoint,
         ALTO_EXECUTOR_PK,
         ALTO_UTILITY_PK,
     )

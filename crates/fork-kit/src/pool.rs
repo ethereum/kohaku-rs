@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
 use alloy::{
     primitives::U256,
@@ -10,27 +10,28 @@ use kohaku_tornadocash::provider::pool::{Asset, Pool};
 sol!(
     #[sol(rpc)]
     Hasher,
-    "tests/fixtures/hasher.json"
+    "fixtures/hasher.json"
 );
-
 sol!(
     #[sol(rpc)]
     Verifier,
-    "tests/fixtures/verifier.json"
+    "fixtures/verifier.json"
 );
-
 sol!(
     #[sol(rpc)]
     ETHTornado,
-    "tests/fixtures/eth_tornado.json"
+    "fixtures/eth_tornado.json"
 );
 
 const DENOMINATION_WEI: u128 = 10_u128.pow(17);
 const MERKLE_TREE_HEIGHT: u32 = 20;
 
-/// Deploy a fresh Hasher, Verifier, and ETHTornado instance to `provider` and return the
+/// Deploy a fresh Hasher, Verifier, and `ETHTornado` instance to `provider` and return the
 /// corresponding [`Pool`].
-pub async fn deploy_local_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
+///
+/// # Errors
+/// Returns an error if any contract fails to deploy.
+pub async fn deploy_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
     let hasher = Hasher::deploy(&provider).await?;
     let verifier = Verifier::deploy(&provider).await?;
     let tornado = ETHTornado::deploy(

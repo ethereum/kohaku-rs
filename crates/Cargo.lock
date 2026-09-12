@@ -3066,6 +3066,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kohaku-fork-kit"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "kohaku-tornadocash",
+ "kohaku-userop-kit",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "kohaku-kv-store"
 version = "0.1.0"
 dependencies = [
@@ -3102,6 +3114,7 @@ dependencies = [
  "flate2",
  "hex",
  "insta",
+ "kohaku-fork-kit",
  "kohaku-kv-store",
  "kohaku-merkle-tree",
  "kohaku-userop-kit",
