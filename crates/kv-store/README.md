@@ -13,9 +13,12 @@ async fn main() {
     store.put("key1", "value1").await;
     store.put("key2", "value2").await;
 
+    // Put batched values into the store
+    store.batch_put(vec![("key3", "value3"), ("key4", "value4")]).await;
+
     // Retrieve values from the store
     assert_eq!(store.get("key1").await, Some(b"value1".to_vec()));
-    assert_eq!(store.get("key3").await, None);
+    assert_eq!(store.get("key5").await, None);
 
     // Delete keys from the store
     store.delete("key1").await;
