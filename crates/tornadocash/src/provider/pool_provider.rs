@@ -57,6 +57,10 @@ pub enum PoolProviderError {
 impl PoolProvider {
     /// Creates a new pool provider for the given pool.
     #[must_use]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "consistent with other parameters"
+    )]
     pub fn new(
         pool: Pool,
         provider: DynProvider,

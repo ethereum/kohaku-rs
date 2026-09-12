@@ -21,6 +21,9 @@ pub mod saga_sync;
 pub mod syncer;
 pub mod verifier;
 
+/// Number of blocks to re-sync behind the last synced block, to recover from shallow reorgs.
+const REORG_MARGIN: u64 = 32;
+
 /// An indexer for a single tornadocash pool.
 ///
 /// The indexer syncs the pool's events and maintains a local merkle tree of the pool's commitments.
@@ -99,7 +102,9 @@ impl Indexer {
     pub async fn sync_to(&mut self, to_block: u64) -> Result<(), IndexerError> {
         let latest = self.store.latest_block().await;
 
-        let from_block = latest.max(self.pool.deployed_block);
+        let from_block = latest
+            .saturating_sub(REORG_MARGIN)
+            .max(self.pool.deployed_block);
         if from_block >= to_block {
             info!("Already synced to block {}", latest);
             return Ok(());

@@ -10,7 +10,7 @@ ruint = { workspace = true }
 kohaku-kv-store = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 criterion = { workspace = true, features = ["async_tokio"] }
 rand = { workspace = true }
 

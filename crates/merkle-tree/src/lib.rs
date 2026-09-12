@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use kohaku_kv_store::Store;
 use ruint::aliases::U256;
 
-use crate::{hasher::Hasher, kv::MerkleTreeStoreExt};
+use crate::{hasher::Hasher, store::MerkleTreeStoreExt};
 
 pub mod hasher;
-mod kv;
 pub mod proof;
+mod store;
 
 /// A binary Merkle tree with a fixed depth `D` and hash function `H`.
 pub struct MerkleTree<const D: usize, H: Hasher> {
@@ -23,8 +23,6 @@ pub enum MerkleTreeError {
     MissingLeaf(U256),
     #[error("Index {0} is out of bounds")]
     IndexOutOfBounds(usize),
-    #[error("Leaf at index {0} conflicts with an existing value")]
-    LeafConflict(usize),
 }
 
 impl<const D: usize, H: Hasher> MerkleTree<D, H> {
@@ -103,22 +101,20 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
         })
     }
 
-    /// Inserts a single leaf at `index`. If a leaf already exists at that index, it must match
-    /// `leaf`.
+    /// Inserts a single leaf at `index`. If a leaf already exists at that index, it is
+    /// replaced.
     ///
     /// # Errors
-    /// Returns an error if the index is out of bounds or if the leaf conflicts with an existing
-    /// value.
+    /// Returns an error if the index is out of bounds or the tree is full.
     pub async fn insert(&self, index: usize, leaf: U256) -> Result<(), MerkleTreeError> {
         self.splice(index, &[leaf]).await
     }
 
-    /// Splices in `leaves` starting at at `index`. If any leaves already exist at those indices,
-    /// they must match the corresponding values in `leaves`.
+    /// Splices in `leaves` starting at `index`. If any leaves already exist at those indices,
+    /// they are replaced.
     ///
     /// # Errors
-    /// Returns an error if the index is out of bounds or if any leaf conflicts with an existing
-    /// value.
+    /// Returns an error if the index is out of bounds or the tree is full.
     pub async fn splice(&self, index: usize, leaves: &[U256]) -> Result<(), MerkleTreeError> {
         if leaves.is_empty() {
             return Ok(());
@@ -129,20 +125,8 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             return Err(MerkleTreeError::IndexOutOfBounds(index));
         }
 
-        let overlap = (len - index).min(leaves.len());
-        for (offset, &leaf) in leaves[..overlap].iter().enumerate() {
-            if self.store.node(0, (index + offset) as u64).await != Some(leaf) {
-                return Err(MerkleTreeError::LeafConflict(index + offset));
-            }
-        }
-
-        let leaves = &leaves[overlap..];
-        if leaves.is_empty() {
-            return Ok(());
-        }
-
         let capacity = 2usize.checked_pow(D as u32).unwrap_or(usize::MAX);
-        let new_len = len + leaves.len();
+        let new_len = (index + leaves.len()).max(len);
         if new_len > capacity {
             return Err(MerkleTreeError::TreeFull);
         }
@@ -150,17 +134,16 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
         let zeros = zero_hashes::<D, H>(D);
         let mut pending: HashMap<(u8, u64), U256> = HashMap::new();
         for (offset, &leaf) in leaves.iter().enumerate() {
-            pending.insert((0, (len + offset) as u64), leaf);
+            pending.insert((0, (index + offset) as u64), leaf);
         }
 
+        let mut range_start = index;
+        let mut range_end = index + leaves.len();
         let mut child_len = len;
-        let mut child_new_len = new_len;
+
         for level in 1..=D {
-            // Groups fully backed by real children before this write are already final; only the
-            // (at most one) previously-incomplete trailing group and any brand-new groups need
-            // recomputing.
-            let start = child_len / 2;
-            let end = child_new_len.div_ceil(2);
+            let start = range_start / 2;
+            let end = range_end.div_ceil(2);
 
             for parent_idx in start..end {
                 let mut children = [zeros[level - 1]; 2];
@@ -183,8 +166,9 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
                 );
             }
 
+            range_start = start;
+            range_end = end;
             child_len = child_len.div_ceil(2);
-            child_new_len = end;
         }
 
         let nodes: Vec<(u8, u64, U256)> = pending
@@ -276,14 +260,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reinserting_a_different_leaf_conflicts() {
+    async fn reinserting_a_different_leaf_replaces_it() {
         let tree = tree();
         tree.insert(0, U256::from(1)).await.unwrap();
+        let root_before = tree.root().await;
 
-        assert!(matches!(
-            tree.insert(0, U256::from(2)).await,
-            Err(MerkleTreeError::LeafConflict(0))
-        ));
+        tree.insert(0, U256::from(2)).await.unwrap();
+
+        assert_ne!(tree.root().await, root_before);
+        assert_eq!(
+            tree.leaf_proof(U256::from(2)).await.unwrap().leaf,
+            U256::from(2)
+        );
     }
 
     #[tokio::test]
