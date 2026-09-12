@@ -4,13 +4,12 @@ use alloy::{
     rpc::types::anvil::ReorgOptions,
     signers::local::PrivateKeySigner,
 };
+use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_kv_store::memory::MemoryStore;
 use kohaku_tornadocash::{
     circuit::Circuit, indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider,
 };
 use tracing::info;
-
-mod common;
 
 #[tokio::test]
 #[ignore = "run with `cargo test --release -- --ignored`"]
@@ -21,7 +20,7 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = common::local_chain::deploy_local_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone()).await?;
 
     let store = MemoryStore::new();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
@@ -85,7 +84,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
         .with_simple_nonce_management()
         .connect_anvil_with_wallet()
         .erased();
-    let pool = common::local_chain::deploy_local_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone()).await?;
 
     let store = MemoryStore::new();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);

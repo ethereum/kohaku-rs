@@ -1,0 +1,29 @@
+[package]
+name = "kohaku-fork-kit"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "network",
+    "providers",
+    "transports",
+    "sol-types",
+    "reqwest",
+    "contract",
+    "signers",
+    "signer-local",
+] }
+anyhow = { workspace = true }
+kohaku-tornadocash = { workspace = true }
+kohaku-userop-kit = { workspace = true }
+tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
+tracing = { workspace = true }
+
+[lints]
+workspace = true
