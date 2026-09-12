@@ -56,6 +56,7 @@ anyhow = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]
