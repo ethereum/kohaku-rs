@@ -36,6 +36,10 @@
         alto = pkgs.callPackage ./nix/alto/package.nix { };
       in
       {
+        packages = {
+          inherit alto;
+        };
+
         devShells = {
           default = pkgs.mkShell {
             packages = with pkgs; [
