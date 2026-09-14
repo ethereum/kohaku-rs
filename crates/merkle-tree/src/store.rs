@@ -40,7 +40,7 @@ impl MerkleTreeStoreExt for Store {
             .collect();
         items.push((LEAF_COUNT_KEY, &count_bytes));
 
-        self.batch_put(items).await;
+        self.put_batch(items).await;
     }
 }
 

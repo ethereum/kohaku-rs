@@ -21,6 +21,6 @@ impl IndexerStoreExt for Store {
         let latest_block_bytes = latest_block.to_be_bytes();
         let items = vec![(LATEST_BLOCK_KEY, &latest_block_bytes)];
 
-        self.batch_put(items).await;
+        self.put_batch(items).await;
     }
 }

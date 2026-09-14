@@ -17,19 +17,23 @@ impl MemoryStore {
 
 #[async_trait::async_trait]
 impl KvStoreBackend for MemoryStore {
-    async fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.lock().get(key).cloned()
+    async fn get_batch(&self, keys: &[&[u8]]) -> Vec<Option<Vec<u8>>> {
+        let store = self.lock();
+        keys.iter().map(|&key| store.get(key).cloned()).collect()
     }
 
-    async fn batch_put(&self, items: &[(&[u8], &[u8])]) {
+    async fn put_batch(&self, items: &[(&[u8], &[u8])]) {
         let mut store = self.lock();
         for &(key, value) in items {
             store.insert(key.to_vec(), value.to_vec());
         }
     }
 
-    async fn delete(&self, key: &[u8]) {
-        self.lock().remove(key);
+    async fn delete_batch(&self, keys: &[&[u8]]) {
+        let mut store = self.lock();
+        for &key in keys {
+            store.remove(key);
+        }
     }
 }
 
