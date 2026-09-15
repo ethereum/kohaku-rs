@@ -73,17 +73,6 @@ impl Indexer {
         &self.tree
     }
 
-    /// Verifies that the current root is known on-chain
-    ///
-    /// # Errors
-    /// Returns an error if the root is invalid or the verifier fails to verify the root.
-    pub async fn verify(&self) -> Result<(), IndexerError> {
-        Ok(self
-            .verifier
-            .verify(&self.pool, self.tree.root().await)
-            .await?)
-    }
-
     /// Syncs the indexer to the latest block.
     ///
     /// # Errors
@@ -91,14 +80,15 @@ impl Indexer {
     /// database.
     pub async fn sync(&self) -> Result<(), IndexerError> {
         let latest = self.syncer.latest_block(&self.pool).await?;
-        self.sync_to(latest).await
+        self.sync_to(latest).await?;
+
+        Ok(self
+            .verifier
+            .verify(&self.pool, self.tree.root().await)
+            .await?)
     }
 
     /// Syncs the indexer to the given block.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer fails, or if the indexer fails to save its state to the
-    /// database.
     #[tracing::instrument(skip(self))]
     async fn sync_to(&self, to_block: u64) -> Result<(), IndexerError> {
         let latest = self.store.latest_block().await;

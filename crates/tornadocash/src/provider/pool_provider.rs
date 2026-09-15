@@ -66,16 +66,7 @@ impl PoolProvider {
     /// # Errors
     /// Returns an error if the syncer or verifier fails.
     pub async fn sync(&self) -> Result<(), PoolProviderError> {
-        self.indexer.sync().await?;
-        self.verify().await
-    }
-
-    /// Verify the tree state of the provider.
-    ///
-    /// # Errors
-    /// Returns an error if the verifier fails.
-    pub async fn verify(&self) -> Result<(), PoolProviderError> {
-        Ok(self.indexer.verify().await?)
+        Ok(self.indexer.sync().await?)
     }
 
     /// Create a deposit transaction and note for this pool.

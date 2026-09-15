@@ -34,8 +34,6 @@ pub struct TornadoProvider {
 pub enum TornadoProviderError {
     #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
     UnknownPool(String, String, u64),
-    #[error("Pool not initialized: {0}")]
-    PoolNotInitialized(Pool),
     #[error(transparent)]
     Pool(#[from] PoolProviderError),
 }
