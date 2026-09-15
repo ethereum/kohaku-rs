@@ -62,7 +62,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     pool.adapter_address = Some(adapter_address);
 
     let store = Store::create();
-    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
+    let syncer = RpcSyncer::new(provider.clone());
     let mut tornado_provider =
         TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
 

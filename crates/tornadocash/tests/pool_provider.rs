@@ -21,7 +21,7 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
     let pool = deploy_pool(provider.clone()).await?;
 
     let store = Store::create();
-    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
+    let syncer = RpcSyncer::new(provider.clone());
     let pool_provider =
         PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
     info!("Syncing pool provider");
