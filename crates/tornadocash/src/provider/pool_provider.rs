@@ -26,6 +26,7 @@ use crate::{
 ///
 /// The provider manages syncing and verifying the trie state, generating merkle proofs, and
 /// creating deposit and withdrawal transactions.
+#[derive(Clone)]
 pub struct PoolProvider {
     indexer: Indexer,
     provider: DynProvider,
@@ -84,20 +85,9 @@ impl PoolProvider {
     ///
     /// # Errors
     /// Returns an error if the syncer or verifier fails.
-    pub async fn sync(&mut self) -> Result<(), PoolProviderError> {
+    pub async fn sync(&self) -> Result<(), PoolProviderError> {
         self.indexer.sync().await?;
         self.verify().await
-    }
-
-    /// Sync the provider to a specific block.
-    ///
-    /// Will not verify the tree state after syncing because tornadocash
-    /// only stores the merkle root for the past ~100 blocks.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer fails.
-    pub async fn sync_to(&mut self, block: u64) -> Result<(), PoolProviderError> {
-        Ok(self.indexer.sync_to(block).await?)
     }
 
     /// Verify the tree state of the provider.

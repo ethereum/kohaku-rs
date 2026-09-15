@@ -27,6 +27,7 @@ const REORG_MARGIN: u64 = 32;
 /// An indexer for a single tornadocash pool.
 ///
 /// The indexer syncs the pool's events and maintains a local merkle tree of the pool's commitments.
+#[derive(Clone)]
 pub struct Indexer {
     pool: Pool,
     store: Store,
@@ -88,7 +89,7 @@ impl Indexer {
     /// # Errors
     /// Returns an error if the syncer fails, or if the indexer fails to save its state to the
     /// database.
-    pub async fn sync(&mut self) -> Result<(), IndexerError> {
+    pub async fn sync(&self) -> Result<(), IndexerError> {
         let latest = self.syncer.latest_block(&self.pool).await?;
         self.sync_to(latest).await
     }
@@ -99,7 +100,7 @@ impl Indexer {
     /// Returns an error if the syncer fails, or if the indexer fails to save its state to the
     /// database.
     #[tracing::instrument(skip(self))]
-    pub async fn sync_to(&mut self, to_block: u64) -> Result<(), IndexerError> {
+    async fn sync_to(&self, to_block: u64) -> Result<(), IndexerError> {
         let latest = self.store.latest_block().await;
 
         let from_block = latest

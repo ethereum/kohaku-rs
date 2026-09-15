@@ -24,10 +24,10 @@ const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 pub trait TornadoPaymasterExt: Sized {
     fn with_tornadocash_paymaster<R>(
         self,
+        bundler: &dyn Bundler,
+        tornado_provider: &mut TornadoProvider,
         note: &Note,
         recipient: Address,
-        tornado_provider: &mut TornadoProvider,
-        bundler: &dyn Bundler,
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
     where
@@ -67,10 +67,10 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
     #[tracing::instrument(skip_all)]
     async fn with_tornadocash_paymaster<R>(
         self,
+        bundler: &dyn Bundler,
+        tornado_provider: &mut TornadoProvider,
         note: &Note,
         recipient: Address,
-        tornado_provider: &mut TornadoProvider,
-        bundler: &dyn Bundler,
         rng: &mut R,
     ) -> Result<Self, TornadoPaymasterError>
     where

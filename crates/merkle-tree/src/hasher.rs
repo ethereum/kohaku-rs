@@ -5,7 +5,7 @@ use ruint::aliases::U256;
 /// The hash function should be collision-resistant and deterministic. It's
 /// used to hash a pair of nodes into a parent node, and to provide the zero
 /// value for empty leaves.
-pub trait Hasher {
+pub trait Hasher: Clone {
     /// Hashes two 32-byte arrays into a 32-byte hash.
     fn hash(a: U256, b: U256) -> U256;
 

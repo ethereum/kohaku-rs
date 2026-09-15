@@ -25,7 +25,7 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
     let circuit = Circuit::from_remote().await?;
-    let mut pool_provider = PoolProvider::new(
+    let pool_provider = PoolProvider::new(
         pool,
         store,
         provider.clone(),
@@ -89,7 +89,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
     let circuit = Circuit::from_remote().await?;
-    let mut pool_provider = PoolProvider::new(
+    let pool_provider = PoolProvider::new(
         pool,
         store,
         provider.clone(),

@@ -72,14 +72,13 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         circuit,
     );
 
-    info!("Syncing pool provider");
-    tornado_provider.pool(pool);
-    tornado_provider.sync().await?;
-
     info!("Depositing into pool");
     let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng())?;
     info!("Deposit call: {deposit_call:?}");
     info!("Deposit note: {note:?}");
+
+    info!("Syncing pool provider");
+    tornado_provider.sync().await?;
 
     provider
         .send_transaction(deposit_call.into())
@@ -111,10 +110,10 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
             ..Default::default()
         }])
         .with_tornadocash_paymaster(
+            &*alto,
+            &mut tornado_provider,
             &note,
             owner.address(),
-            &mut tornado_provider,
-            &*alto,
             &mut rand::rng(),
         )
         .await?

@@ -21,7 +21,7 @@ async fn test_sync() -> Result<(), anyhow::Error> {
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
     let circuit = Circuit::from_remote().await?;
-    let mut pool_provider = PoolProvider::new(
+    let pool_provider = PoolProvider::new(
         pool,
         store,
         provider.clone(),

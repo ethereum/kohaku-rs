@@ -31,14 +31,14 @@ async fn test_provider() -> Result<(), anyhow::Error> {
         syncer.clone().into(),
         circuit,
     );
-    info!("Syncing pool provider");
-    tornado_provider.pool(pool);
-    tornado_provider.sync().await?;
 
     info!("Depositing into pool");
     let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng())?;
     info!("Deposit call: {deposit_call:?}");
     info!("Deposit note: {note:?}");
+
+    info!("Syncing pool provider");
+    tornado_provider.sync().await?;
 
     let receipt = provider
         .send_transaction(deposit_call.into())
