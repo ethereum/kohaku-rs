@@ -1,0 +1,32 @@
+[package]
+name = "kohaku-tornadocash-circuit"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+serde = ["dep:serde"]
+parallel = ["websnark-rs/parallel"]
+
+[dependencies]
+brotli = { workspace = true }
+postcard = { workspace = true }
+serde_json = { workspace = true }
+websnark-rs = { workspace = true }
+alloy = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+rand = { workspace = true }
+ruint = { workspace = true, features = ["num-bigint"] }
+
+[dev-dependencies]
+tokio = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "prove"
+required-features = ["serde"]
+harness = false

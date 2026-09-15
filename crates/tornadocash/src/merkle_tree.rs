@@ -10,6 +10,7 @@ use crate::crypto::mimc::mimc_sponge_hash;
 
 pub type TcMerkleTree = MerkleTree<20, TcMerkleTreeHasher>;
 
+#[derive(Copy, Clone)]
 pub struct TcMerkleTreeHasher;
 
 const FIELD_SIZE: U256 =

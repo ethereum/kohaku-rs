@@ -4,6 +4,7 @@ use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
 use rand::RngExt;
 use ruint::aliases::U256;
 
+#[derive(Copy, Clone)]
 struct BenchHasher;
 
 impl Hasher for BenchHasher {

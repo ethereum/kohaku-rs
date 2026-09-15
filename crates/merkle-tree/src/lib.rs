@@ -10,6 +10,7 @@ pub mod proof;
 mod store;
 
 /// A binary Merkle tree with a fixed depth `D` and hash function `H`.
+#[derive(Clone)]
 pub struct MerkleTree<const D: usize, H: Hasher> {
     store: Store,
     phantom: std::marker::PhantomData<H>,
@@ -199,6 +200,7 @@ mod tests {
     use super::*;
     use crate::hasher::Hasher;
 
+    #[derive(Copy, Clone)]
     struct TestHasher;
 
     impl Hasher for TestHasher {

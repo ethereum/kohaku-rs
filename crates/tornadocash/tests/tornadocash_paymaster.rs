@@ -13,7 +13,7 @@ use kohaku_fork_kit::{
 };
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
+    indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
     userop_provider::TornadoPaymasterExt,
 };
 use kohaku_userop_kit::{
@@ -62,24 +62,17 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     pool.adapter_address = Some(adapter_address);
 
     let store = Store::create();
-    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let circuit = Circuit::from_remote().await?;
-    let mut tornado_provider = TornadoProvider::new(
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-        circuit,
-    );
-
-    info!("Syncing pool provider");
-    tornado_provider.pool(pool);
-    tornado_provider.sync().await?;
+    let syncer = RpcSyncer::new(provider.clone());
+    let mut tornado_provider =
+        TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
 
     info!("Depositing into pool");
-    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng())?;
+    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
     info!("Deposit call: {deposit_call:?}");
     info!("Deposit note: {note:?}");
+
+    info!("Syncing pool provider");
+    tornado_provider.sync().await?;
 
     provider
         .send_transaction(deposit_call.into())
@@ -111,10 +104,11 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
             ..Default::default()
         }])
         .with_tornadocash_paymaster(
+            &*alto,
+            &provider,
+            &mut tornado_provider,
             &note,
             owner.address(),
-            &mut tornado_provider,
-            &*alto,
             &mut rand::rng(),
         )
         .await?

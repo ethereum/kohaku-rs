@@ -1,5 +1,12 @@
 [workspace]
-members = ["fork-kit", "kv-store", "merkle-tree", "tornadocash", "userop-kit"]
+members = [
+    "fork-kit",
+    "kv-store",
+    "merkle-tree",
+    "tornadocash",
+    "tornadocash-circuit",
+    "userop-kit",
+]
 resolver = "3"
 
 [workspace.lints.clippy]
@@ -26,6 +33,7 @@ kohaku-fork-kit = { path = "fork-kit" }
 kohaku-kv-store = { path = "kv-store" }
 kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-tornadocash = { path = "tornadocash" }
+kohaku-tornadocash-circuit = { path = "tornadocash-circuit" }
 kohaku-userop-kit = { path = "userop-kit" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"

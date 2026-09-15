@@ -1,20 +1,17 @@
 use std::array::from_fn;
 
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes},
-    providers::{DynProvider, Provider},
-    rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
 use kohaku_kv_store::Store;
+use kohaku_tornadocash_circuit::{CircuitInputs, prove};
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
 
 use crate::{
     abis::tornado::Tornado,
-    circuit::{Circuit, input::CircuitInputs},
     indexer::{Indexer, IndexerError, syncer::Syncer, verifier::Verifier},
     merkle_tree::TcMerkleTree,
     note::Note,
@@ -26,10 +23,9 @@ use crate::{
 ///
 /// The provider manages syncing and verifying the trie state, generating merkle proofs, and
 /// creating deposit and withdrawal transactions.
+#[derive(Clone)]
 pub struct PoolProvider {
     indexer: Indexer,
-    provider: DynProvider,
-    circuit: Circuit,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -41,13 +37,9 @@ pub enum PoolProviderError {
     #[error("Merkle proof generation error: {0}")]
     MerkleProof(#[from] kohaku_merkle_tree::MerkleTreeError),
     #[error("Circuit error: {0}")]
-    Circuit(#[from] crate::circuit::CircuitError),
+    Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
-    #[error("Provider error: {0}")]
-    Provider(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
-    #[error("Sol error: {0}")]
-    Sol(#[from] alloy::sol_types::Error),
 }
 
 impl PoolProvider {
@@ -57,21 +49,10 @@ impl PoolProvider {
         clippy::needless_pass_by_value,
         reason = "consistent with other parameters"
     )]
-    pub fn new(
-        pool: Pool,
-        store: Store,
-        provider: DynProvider,
-        syncer: Syncer,
-        verifier: Verifier,
-        circuit: Circuit,
-    ) -> Self {
+    pub fn new(pool: Pool, store: Store, syncer: Syncer, verifier: Verifier) -> Self {
         let indexer_store = store.scope("indexer");
         let indexer = Indexer::new(pool, indexer_store, syncer, verifier);
-        Self {
-            indexer,
-            provider,
-            circuit,
-        }
+        Self { indexer }
     }
 
     /// Get the pool associated with this provider.
@@ -84,28 +65,8 @@ impl PoolProvider {
     ///
     /// # Errors
     /// Returns an error if the syncer or verifier fails.
-    pub async fn sync(&mut self) -> Result<(), PoolProviderError> {
-        self.indexer.sync().await?;
-        self.verify().await
-    }
-
-    /// Sync the provider to a specific block.
-    ///
-    /// Will not verify the tree state after syncing because tornadocash
-    /// only stores the merkle root for the past ~100 blocks.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer fails.
-    pub async fn sync_to(&mut self, block: u64) -> Result<(), PoolProviderError> {
-        Ok(self.indexer.sync_to(block).await?)
-    }
-
-    /// Verify the tree state of the provider.
-    ///
-    /// # Errors
-    /// Returns an error if the verifier fails.
-    pub async fn verify(&self) -> Result<(), PoolProviderError> {
-        Ok(self.indexer.verify().await?)
+    pub async fn sync(&self) -> Result<(), PoolProviderError> {
+        Ok(self.indexer.sync().await?)
     }
 
     /// Create a deposit transaction and note for this pool.
@@ -214,7 +175,7 @@ impl PoolProvider {
             path_indices,
         );
 
-        let proof = self.circuit.prove(&circuit_inputs, &mut rng)?;
+        let proof = prove(&circuit_inputs, &mut rng)?;
         let proof = into_solidity_proof(&proof);
         let call = Tornado::withdrawCall {
             _proof: proof,
@@ -227,42 +188,6 @@ impl PoolProvider {
         };
 
         Ok(call)
-    }
-
-    /// Quote the amount of fee token from a given wei amount. If the pool is native, this is a
-    /// no-op.
-    ///
-    /// # Errors
-    /// Returns an error if the quote cannot be queried.
-    pub async fn quote_wei_in_fee_token(
-        &self,
-        wei_amount: U256,
-    ) -> Result<U256, PoolProviderError> {
-        match self.pool().asset {
-            Asset::Native { .. } => Ok(wei_amount),
-            Asset::Erc20 { address, .. } => self.quote_wei_in_token(address, wei_amount).await,
-        }
-    }
-
-    async fn quote_wei_in_token(
-        &self,
-        token_address: Address,
-        wei_amount: U256,
-    ) -> Result<U256, PoolProviderError> {
-        let call = Tornado::quoteWeiInTokenCall::new((token_address, wei_amount)).abi_encode();
-
-        let result = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(self.pool().address)
-                    .input(call.into()),
-            )
-            .await?;
-
-        let result = Tornado::quoteWeiInTokenCall::abi_decode_returns(&result)?;
-
-        Ok(result)
     }
 }
 

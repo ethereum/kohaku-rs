@@ -6,9 +6,7 @@ use alloy::{
 };
 use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_kv_store::Store;
-use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider,
-};
+use kohaku_tornadocash::{indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider};
 use tracing::info;
 
 #[tokio::test]
@@ -23,16 +21,9 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
     let pool = deploy_pool(provider.clone()).await?;
 
     let store = Store::create();
-    let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let circuit = Circuit::from_remote().await?;
-    let mut pool_provider = PoolProvider::new(
-        pool,
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-        circuit,
-    );
+    let syncer = RpcSyncer::new(provider.clone());
+    let pool_provider =
+        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
     info!("Syncing pool provider");
     pool_provider.sync().await?;
 
@@ -88,15 +79,8 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let circuit = Circuit::from_remote().await?;
-    let mut pool_provider = PoolProvider::new(
-        pool,
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-        circuit,
-    );
+    let pool_provider =
+        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
     pool_provider.sync().await?;
 
     info!("Depositing note_a");

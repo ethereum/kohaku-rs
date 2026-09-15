@@ -8,8 +8,8 @@ crate-type = ["rlib"]
 
 [features]
 default = ["paymaster", "saga-sync"]
+parallel = ["kohaku-tornadocash-circuit/parallel"]
 paymaster = ["dep:kohaku-userop-kit"]
-parallel = ["websnark-rs/parallel"]
 saga-sync = ["dep:flate2", "dep:sha2"]
 
 [dependencies]
@@ -45,6 +45,7 @@ num-traits = { workspace = true }
 blake-hash = { workspace = true }
 kohaku-merkle-tree = { workspace = true }
 kohaku-kv-store = { workspace = true }
+kohaku-tornadocash-circuit = { workspace = true }
 
 [dev-dependencies]
 alloy = { workspace = true, features = [
@@ -58,10 +59,6 @@ insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
-[[bench]]
-name = "prove"
-harness = false
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

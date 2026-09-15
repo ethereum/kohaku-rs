@@ -3117,6 +3117,7 @@ dependencies = [
  "kohaku-fork-kit",
  "kohaku-kv-store",
  "kohaku-merkle-tree",
+ "kohaku-tornadocash-circuit",
  "kohaku-userop-kit",
  "num-bigint 0.5.1",
  "num-traits",
@@ -3131,6 +3132,23 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "websnark-rs",
+]
+
+[[package]]
+name = "kohaku-tornadocash-circuit"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "brotli",
+ "criterion",
+ "postcard",
+ "rand 0.10.2",
+ "ruint",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
  "websnark-rs",
 ]
 
