@@ -1,5 +1,6 @@
 use alloy::{
     primitives::{Address, Bytes, U256},
+    providers::DynProvider,
     sol,
     sol_types::SolValue,
 };
@@ -15,6 +16,9 @@ use crate::{
     provider::tornado_provider::{TornadoProvider, TornadoProviderError},
 };
 
+mod quote;
+use quote::QuoteError;
+
 const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 
 /// Extension trait for `UserOperationBuilder` that adds support for tornadocash paymasters.
@@ -25,6 +29,7 @@ pub trait TornadoPaymasterExt: Sized {
     fn with_tornadocash_paymaster<R>(
         self,
         bundler: &dyn Bundler,
+        provider: &DynProvider,
         tornado_provider: &mut TornadoProvider,
         note: &Note,
         recipient: Address,
@@ -44,6 +49,8 @@ pub enum TornadoPaymasterError {
     Bundler(#[from] kohaku_userop_kit::bundler::BundlerError),
     #[error(transparent)]
     TornadoProvider(#[from] TornadoProviderError),
+    #[error(transparent)]
+    Quote(#[from] QuoteError),
 }
 
 sol!(
@@ -68,6 +75,7 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
     async fn with_tornadocash_paymaster<R>(
         self,
         bundler: &dyn Bundler,
+        provider: &DynProvider,
         tornado_provider: &mut TornadoProvider,
         note: &Note,
         recipient: Address,
@@ -103,7 +111,7 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
             builder = builder.with_gas_estimate(bundler).await?;
 
             let wei = max_gas(&builder);
-            let new_fee_estimate = tornado_provider.quote_wei_in_fee_token(pool, wei).await?;
+            let new_fee_estimate = quote::quote_wei_in_fee_token(provider, &pool, wei).await?;
             if new_fee_estimate <= fee_estimate {
                 break;
             }

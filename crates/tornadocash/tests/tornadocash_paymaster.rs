@@ -63,12 +63,8 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let mut tornado_provider = TornadoProvider::new(
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-    );
+    let mut tornado_provider =
+        TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
 
     info!("Depositing into pool");
     let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
@@ -109,6 +105,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         }])
         .with_tornadocash_paymaster(
             &*alto,
+            &provider,
             &mut tornado_provider,
             &note,
             owner.address(),

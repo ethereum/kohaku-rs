@@ -22,13 +22,8 @@ async fn test_pool_provider() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let pool_provider = PoolProvider::new(
-        pool,
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-    );
+    let pool_provider =
+        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
     info!("Syncing pool provider");
     pool_provider.sync().await?;
 
@@ -84,13 +79,8 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone()).with_batch_size(10_000);
-    let pool_provider = PoolProvider::new(
-        pool,
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-    );
+    let pool_provider =
+        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
     pool_provider.sync().await?;
 
     info!("Depositing note_a");

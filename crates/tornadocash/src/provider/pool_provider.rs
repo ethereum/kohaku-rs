@@ -1,10 +1,7 @@
 use std::array::from_fn;
 
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes},
-    providers::{DynProvider, Provider},
-    rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
 use kohaku_kv_store::Store;
@@ -29,7 +26,6 @@ use crate::{
 #[derive(Clone)]
 pub struct PoolProvider {
     indexer: Indexer,
-    provider: DynProvider,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -44,10 +40,6 @@ pub enum PoolProviderError {
     Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
-    #[error("Provider error: {0}")]
-    Provider(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
-    #[error("Sol error: {0}")]
-    Sol(#[from] alloy::sol_types::Error),
 }
 
 impl PoolProvider {
@@ -57,16 +49,10 @@ impl PoolProvider {
         clippy::needless_pass_by_value,
         reason = "consistent with other parameters"
     )]
-    pub fn new(
-        pool: Pool,
-        store: Store,
-        provider: DynProvider,
-        syncer: Syncer,
-        verifier: Verifier,
-    ) -> Self {
+    pub fn new(pool: Pool, store: Store, syncer: Syncer, verifier: Verifier) -> Self {
         let indexer_store = store.scope("indexer");
         let indexer = Indexer::new(pool, indexer_store, syncer, verifier);
-        Self { indexer, provider }
+        Self { indexer }
     }
 
     /// Get the pool associated with this provider.
@@ -211,42 +197,6 @@ impl PoolProvider {
         };
 
         Ok(call)
-    }
-
-    /// Quote the amount of fee token from a given wei amount. If the pool is native, this is a
-    /// no-op.
-    ///
-    /// # Errors
-    /// Returns an error if the quote cannot be queried.
-    pub async fn quote_wei_in_fee_token(
-        &self,
-        wei_amount: U256,
-    ) -> Result<U256, PoolProviderError> {
-        match self.pool().asset {
-            Asset::Native { .. } => Ok(wei_amount),
-            Asset::Erc20 { address, .. } => self.quote_wei_in_token(address, wei_amount).await,
-        }
-    }
-
-    async fn quote_wei_in_token(
-        &self,
-        token_address: Address,
-        wei_amount: U256,
-    ) -> Result<U256, PoolProviderError> {
-        let call = Tornado::quoteWeiInTokenCall::new((token_address, wei_amount)).abi_encode();
-
-        let result = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(self.pool().address)
-                    .input(call.into()),
-            )
-            .await?;
-
-        let result = Tornado::quoteWeiInTokenCall::abi_decode_returns(&result)?;
-
-        Ok(result)
     }
 }
 

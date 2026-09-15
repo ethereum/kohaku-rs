@@ -18,13 +18,8 @@ async fn test_sync() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let pool_provider = PoolProvider::new(
-        pool,
-        store,
-        provider.clone(),
-        syncer.clone().into(),
-        syncer.clone().into(),
-    );
+    let pool_provider =
+        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
 
     // Populate many arbitrary deposits
     for _ in 0..50 {

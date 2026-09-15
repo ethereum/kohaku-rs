@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::{primitives::Address, providers::DynProvider, sol_types::SolCall};
+use alloy::{primitives::Address, sol_types::SolCall};
 use kohaku_kv_store::Store;
 use rand::CryptoRng;
 use ruint::aliases::U256;
@@ -25,7 +25,6 @@ use crate::{
 #[derive(Clone)]
 pub struct TornadoProvider {
     store: Store,
-    provider: DynProvider,
     syncer: Syncer,
     verifier: Verifier,
     pools: Arc<Mutex<Vec<PoolProvider>>>,
@@ -43,10 +42,9 @@ pub enum TornadoProviderError {
 
 impl TornadoProvider {
     #[must_use]
-    pub fn new(store: Store, provider: DynProvider, syncer: Syncer, verifier: Verifier) -> Self {
+    pub fn new(store: Store, syncer: Syncer, verifier: Verifier) -> Self {
         Self {
             store,
-            provider,
             syncer,
             verifier,
             pools: Arc::new(Mutex::new(Vec::new())),
@@ -64,7 +62,6 @@ impl TornadoProvider {
         let provider = PoolProvider::new(
             pool,
             scoped_store,
-            self.provider.clone(),
             self.syncer.clone(),
             self.verifier.clone(),
         );
@@ -138,20 +135,6 @@ impl TornadoProvider {
         Ok(provider
             .withdraw_call(note, recipient, relayer, fee, refund, rng)
             .await?)
-    }
-
-    /// Quote the amount of fee token from a given wei amount. If the pool is native, this is a
-    /// no-op.
-    ///
-    /// # Errors
-    /// Returns an error if the quote cannot be queried.
-    pub async fn quote_wei_in_fee_token(
-        &mut self,
-        pool: Pool,
-        wei_amount: U256,
-    ) -> Result<U256, TornadoProviderError> {
-        let provider = self.pool(pool).await;
-        Ok(provider.quote_wei_in_fee_token(wei_amount).await?)
     }
 
     /// Manually trigger a sync of the provider for all pools.
