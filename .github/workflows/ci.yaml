@@ -25,6 +25,7 @@ jobs:
         workspaces: "crates"
 
     - run: nix develop .#ci
-    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --release"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --release -- --ignored"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo check --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --all-features --release"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --all-features --release -- --ignored"
