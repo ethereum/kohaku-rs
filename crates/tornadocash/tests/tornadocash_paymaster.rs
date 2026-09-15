@@ -71,7 +71,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng())?;
+    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
     info!("Deposit call: {deposit_call:?}");
     info!("Deposit note: {note:?}");
 

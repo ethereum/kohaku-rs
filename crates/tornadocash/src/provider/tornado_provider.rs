@@ -1,10 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use alloy::{primitives::Address, providers::DynProvider, sol_types::SolCall};
 use kohaku_kv_store::Store;
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 use crate::{
     abis::tornado::Tornado,
@@ -36,8 +37,6 @@ pub enum TornadoProviderError {
     UnknownPool(String, String, u64),
     #[error("Pool not initialized: {0}")]
     PoolNotInitialized(Pool),
-    #[error("Lock poisoned")]
-    Lock,
     #[error(transparent)]
     Pool(#[from] PoolProviderError),
 }
@@ -55,11 +54,11 @@ impl TornadoProvider {
     }
 
     /// Get a reference to the provider for a given pool, creating it if it doesn't exist.
-    pub fn pool(&self, pool: Pool) -> Result<PoolProvider, TornadoProviderError> {
-        let mut pools = self.pools.lock().map_err(|_| TornadoProviderError::Lock)?;
+    pub async fn pool(&self, pool: Pool) -> PoolProvider {
+        let mut pools = self.pools.lock().await;
 
         if let Some(p) = pools.iter().find(|p| *p.pool() == pool) {
-            return Ok(p.clone());
+            return p.clone();
         }
         let scoped_store = self.store.scope(pool.id());
         let provider = PoolProvider::new(
@@ -72,27 +71,23 @@ impl TornadoProvider {
 
         pools.retain(|p| *p.pool() != pool);
         pools.push(provider.clone());
-        Ok(provider)
+        provider
     }
 
     /// Create a deposit transaction and note for a given pool.
-    pub fn deposit(
-        &self,
-        pool: Pool,
-        rng: &mut impl CryptoRng,
-    ) -> Result<(Call, Note), TornadoProviderError> {
-        let provider = self.pool(pool)?;
-        Ok(provider.deposit(rng))
+    pub async fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> (Call, Note) {
+        let provider = self.pool(pool).await;
+        provider.deposit(rng)
     }
 
     /// Create deposit calldata and note for a given pool.
-    pub fn deposit_call(
+    pub async fn deposit_call(
         &self,
         pool: Pool,
         rng: &mut impl CryptoRng,
-    ) -> Result<(Tornado::depositCall, Note), TornadoProviderError> {
-        let provider = self.pool(pool)?;
-        Ok(provider.deposit_call(rng))
+    ) -> (Tornado::depositCall, Note) {
+        let provider = self.pool(pool).await;
+        provider.deposit_call(rng)
     }
 
     /// Create a withdrawal transaction for the given note to the recipient address.
@@ -109,7 +104,7 @@ impl TornadoProvider {
         refund: Option<U256>,
         rng: &mut impl CryptoRng,
     ) -> Result<Call, TornadoProviderError> {
-        let pool = self.pool_from_note(note)?;
+        let pool = self.pool_from_note(note).await?;
 
         let data = self
             .withdraw_call(note, recipient, relayer, fee, refund, rng)
@@ -136,9 +131,9 @@ impl TornadoProvider {
         refund: Option<U256>,
         rng: &mut impl CryptoRng,
     ) -> Result<Tornado::withdrawCall, TornadoProviderError> {
-        let pool = self.pool_from_note(note)?;
+        let pool = self.pool_from_note(note).await?;
 
-        let provider = self.pool(pool)?;
+        let provider = self.pool(pool).await;
         provider.sync().await?;
         Ok(provider
             .withdraw_call(note, recipient, relayer, fee, refund, rng)
@@ -155,7 +150,7 @@ impl TornadoProvider {
         pool: Pool,
         wei_amount: U256,
     ) -> Result<U256, TornadoProviderError> {
-        let provider = self.pool(pool)?;
+        let provider = self.pool(pool).await;
         Ok(provider.quote_wei_in_fee_token(wei_amount).await?)
     }
 
@@ -164,20 +159,15 @@ impl TornadoProvider {
     /// # Errors
     /// Returns an error if the pool cannot be synced.
     pub async fn sync(&self) -> Result<(), TornadoProviderError> {
-        for provider in self
-            .pools
-            .lock()
-            .map_err(|_| TornadoProviderError::Lock)?
-            .iter()
-        {
+        for provider in self.pools.lock().await.iter() {
             provider.sync().await?;
         }
         Ok(())
     }
 
     /// Get the pool for a given note, preferring an already-registered pool if available.
-    pub(crate) fn pool_from_note(&self, note: &Note) -> Result<Pool, TornadoProviderError> {
-        let pools = self.pools.lock().map_err(|_| TornadoProviderError::Lock)?;
+    pub(crate) async fn pool_from_note(&self, note: &Note) -> Result<Pool, TornadoProviderError> {
+        let pools = self.pools.lock().await;
 
         if let Some(pool) = pools.iter().map(PoolProvider::pool).find(|pool| {
             pool.chain_id == note.chain_id

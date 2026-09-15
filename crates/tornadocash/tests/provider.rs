@@ -29,7 +29,7 @@ async fn test_provider() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng())?;
+    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
     info!("Deposit call: {deposit_call:?}");
     info!("Deposit note: {note:?}");
 
