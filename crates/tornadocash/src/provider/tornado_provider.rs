@@ -8,7 +8,6 @@ use thiserror::Error;
 
 use crate::{
     abis::tornado::Tornado,
-    circuit::Circuit,
     indexer::{syncer::Syncer, verifier::Verifier},
     note::Note,
     pool::Pool,
@@ -29,7 +28,6 @@ pub struct TornadoProvider {
     syncer: Syncer,
     verifier: Verifier,
     pools: Arc<Mutex<Vec<PoolProvider>>>,
-    circuit: Circuit,
 }
 
 #[derive(Debug, Error)]
@@ -46,20 +44,13 @@ pub enum TornadoProviderError {
 
 impl TornadoProvider {
     #[must_use]
-    pub fn new(
-        store: Store,
-        provider: DynProvider,
-        syncer: Syncer,
-        verifier: Verifier,
-        circuit: Circuit,
-    ) -> Self {
+    pub fn new(store: Store, provider: DynProvider, syncer: Syncer, verifier: Verifier) -> Self {
         Self {
             store,
             provider,
             syncer,
             verifier,
             pools: Arc::new(Mutex::new(Vec::new())),
-            circuit,
         }
     }
 
@@ -77,7 +68,6 @@ impl TornadoProvider {
             self.provider.clone(),
             self.syncer.clone(),
             self.verifier.clone(),
-            self.circuit.clone(),
         );
 
         pools.retain(|p| *p.pool() != pool);

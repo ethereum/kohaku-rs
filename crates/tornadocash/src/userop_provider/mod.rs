@@ -77,7 +77,7 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
         R: rand::CryptoRng,
     {
         let mut builder = self;
-        let pool = tornado_provider.pool_from_note(note)?;
+        let pool = tornado_provider.pool_from_note(note).await?;
 
         let paymaster = pool
             .paymaster_address

@@ -8,13 +8,13 @@ use alloy::{
     sol_types::SolCall,
 };
 use kohaku_kv_store::Store;
+use kohaku_tornadocash_circuit::{CircuitInputs, prove};
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
 
 use crate::{
     abis::tornado::Tornado,
-    circuit::{Circuit, input::CircuitInputs},
     indexer::{Indexer, IndexerError, syncer::Syncer, verifier::Verifier},
     merkle_tree::TcMerkleTree,
     note::Note,
@@ -30,7 +30,6 @@ use crate::{
 pub struct PoolProvider {
     indexer: Indexer,
     provider: DynProvider,
-    circuit: Circuit,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +41,7 @@ pub enum PoolProviderError {
     #[error("Merkle proof generation error: {0}")]
     MerkleProof(#[from] kohaku_merkle_tree::MerkleTreeError),
     #[error("Circuit error: {0}")]
-    Circuit(#[from] crate::circuit::CircuitError),
+    Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
     #[error("Provider error: {0}")]
@@ -64,15 +63,10 @@ impl PoolProvider {
         provider: DynProvider,
         syncer: Syncer,
         verifier: Verifier,
-        circuit: Circuit,
     ) -> Self {
         let indexer_store = store.scope("indexer");
         let indexer = Indexer::new(pool, indexer_store, syncer, verifier);
-        Self {
-            indexer,
-            provider,
-            circuit,
-        }
+        Self { indexer, provider }
     }
 
     /// Get the pool associated with this provider.
@@ -204,7 +198,7 @@ impl PoolProvider {
             path_indices,
         );
 
-        let proof = self.circuit.prove(&circuit_inputs, &mut rng)?;
+        let proof = prove(&circuit_inputs, &mut rng)?;
         let proof = into_solidity_proof(&proof);
         let call = Tornado::withdrawCall {
             _proof: proof,

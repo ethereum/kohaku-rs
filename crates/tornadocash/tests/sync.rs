@@ -1,9 +1,7 @@
 use alloy::providers::{Provider, ProviderBuilder};
 use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_kv_store::Store;
-use kohaku_tornadocash::{
-    circuit::Circuit, indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider,
-};
+use kohaku_tornadocash::{indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider};
 use tracing::info;
 
 #[tokio::test]
@@ -20,14 +18,12 @@ async fn test_sync() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let circuit = Circuit::from_remote().await?;
     let pool_provider = PoolProvider::new(
         pool,
         store,
         provider.clone(),
         syncer.clone().into(),
         syncer.clone().into(),
-        circuit,
     );
 
     // Populate many arbitrary deposits
