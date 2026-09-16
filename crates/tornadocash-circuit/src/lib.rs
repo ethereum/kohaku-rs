@@ -14,6 +14,8 @@ pub enum CircuitError {
     Circuit(#[from] websnark_rs::circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
+    #[error("Field conversion error: {0}")]
+    ToField(#[from] ruint::ToFieldError),
 }
 
 /// Generates a proof for the given circuit inputs.
@@ -24,7 +26,7 @@ pub fn prove(inputs: &CircuitInputs, rng: &mut impl CryptoRng) -> Result<Proof, 
     let circuit = circuit();
     let proving_key = proving_key();
 
-    let signals = inputs.as_signals();
+    let signals = inputs.as_signals()?;
     let witness = circuit.witness(signals)?;
     let (proof, _) = prove_random(proving_key, &witness, rng)?;
     Ok(proof)

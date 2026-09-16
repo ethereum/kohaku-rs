@@ -5,19 +5,17 @@ edition = "2024"
 
 [features]
 default = []
-serde = ["dep:serde"]
 parallel = ["websnark-rs/parallel"]
 
 [dependencies]
 brotli = { workspace = true }
 postcard = { workspace = true }
 serde_json = { workspace = true }
-websnark-rs = { workspace = true }
-alloy = { workspace = true }
+websnark-rs = { workspace = true, features = ["serde"] }
 thiserror = { workspace = true }
-serde = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
 rand = { workspace = true }
-ruint = { workspace = true, features = ["num-bigint"] }
+ruint = { workspace = true, features = ["ark-ff-06"] }
 
 [dev-dependencies]
 tokio = { workspace = true }
