@@ -24,6 +24,7 @@ Kohaku-rs is a collection of rust crates for working with Ethereum privacy proto
 - [`kohaku-kv-store`](./crates/kv-store/) - Key-value store implementation for kohaku-rs. Used by other kohaku-rs crates for data persistence.
 - [`kohaku-merkle-tree`](./crates/merkle-tree/) - Merkle tree implementation backed by `kohaku-kv-store`.
 - [`kohaku-fork-kit`](./crates/fork-kit/) - Forking kit for testing and development of kohaku-rs crates.
+- [`kohaku-pir-provider`](./crates/pir-provider/) - Helios-style dual-endpoint Ethereum provider: PIR for private account reads, fallback JSON-RPC for everything else.
 
 ### Experiments
 

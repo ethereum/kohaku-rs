@@ -1,0 +1,57 @@
+[package]
+name = "kohaku-pir-provider"
+version = "0.1.0"
+edition = "2024"
+description = "Hybrid Ethereum JSON-RPC provider: PIR for private account reads, fallback RPC for the rest"
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "pir-rpc"
+path = "src/bin/pir-rpc.rs"
+required-features = ["client"]
+
+[features]
+default = []
+# Live `pir-client` (C++/OpenSSL). Needs the inspire-gpu submodule.
+client = ["dep:pir-client"]
+
+[dependencies]
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "json-rpc",
+    "network",
+    "providers",
+    "transports",
+    "reqwest",
+] }
+async-trait = { workspace = true }
+axum = { version = "0.8", features = ["json"] }
+clap = { version = "4.5", features = ["derive"] }
+hex = { workspace = true }
+pir-client = { path = "../../../inspire-gpu-serving/crates/client", optional = true }
+pir-keyword = { path = "../../../inspire-gpu-serving/crates/keyword" }
+reqwest = { workspace = true, features = ["json", "rustls"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+tower = "0.5"
+tracing = { workspace = true }
+
+[dev-dependencies]
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "json-rpc",
+    "network",
+    "providers",
+    "transports",
+    "reqwest",
+] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
