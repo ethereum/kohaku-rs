@@ -2,12 +2,12 @@ use std::sync::LazyLock;
 
 use websnark_rs::{circuit::Circuit, proving_key::ProvingKey};
 
-const CIRCUIT_BR: &[u8] = include_bytes!("../data/circuit.json.br");
+const CIRCUIT_BR: &[u8] = include_bytes!("../data/circuit.bin.br");
 const PROVING_KEY_BR: &[u8] = include_bytes!("../data/proving_key.bin.br");
 
 static CIRCUIT: LazyLock<Circuit> = LazyLock::new(|| {
     let data = decompress(CIRCUIT_BR);
-    serde_json::from_slice(&data).expect("embedded circuit is valid")
+    postcard::from_bytes(&data).expect("embedded circuit is valid")
 });
 
 static PROVING_KEY: LazyLock<ProvingKey> = LazyLock::new(|| {
