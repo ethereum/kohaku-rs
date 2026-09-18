@@ -26,5 +26,4 @@ workspace = true
 
 [[bench]]
 name = "prove"
-required-features = ["serde"]
 harness = false
