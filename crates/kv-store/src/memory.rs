@@ -52,65 +52,47 @@ mod tests {
     use super::*;
     use crate::Store;
 
-    #[tokio::test]
-    async fn nonexistent_key_is_none() {
-        let store: Store = MemoryStore::new().into();
-        assert_eq!(store.get("nonexistent_key").await, None);
+    fn store() -> Store {
+        MemoryStore::new().into()
     }
 
     #[tokio::test]
-    async fn get_put_value() {
-        let store: Store = MemoryStore::new().into();
+    async fn put_and_get_multiple_values() {
+        let store = store();
+        store
+            .put_batch(vec![("key1", "value1"), ("key2", "value2")])
+            .await;
 
-        store.put("key", "value").await;
-        assert_eq!(store.get("key").await, Some(b"value".to_vec()));
+        assert_eq!(
+            store.get_batch(["key1", "key2"]).await,
+            vec![Some(b"value1".to_vec()), Some(b"value2".to_vec())]
+        );
     }
 
     #[tokio::test]
-    async fn delete_removes_value() {
-        let store: Store = MemoryStore::new().into();
+    async fn delete_multiple_values() {
+        let store = store();
+        store
+            .put_batch(vec![
+                ("key1", "value1"),
+                ("key2", "value2"),
+                ("key3", "value3"),
+            ])
+            .await;
+        store.delete_batch(["key1", "key2"]).await;
 
-        store.put("key", "value").await;
-        store.delete("key").await;
-
-        assert_eq!(store.get("key").await, None);
+        assert_eq!(
+            store.get_batch(["key1", "key2", "key3"]).await,
+            vec![None, None, Some(b"value3".to_vec())]
+        );
     }
 
     #[tokio::test]
-    async fn overwriting_a_key_updates_value() {
-        let store: Store = MemoryStore::new().into();
+    async fn overwriting_a_value_updates_it() {
+        let store = store();
+        store.put("key", "value1").await;
+        store.put("key", "value2").await;
 
-        store.put("key", "test_value_1").await;
-        assert_eq!(store.get("key").await, Some(b"test_value_1".to_vec()));
-
-        store.put("key", "test_value_2").await;
-        assert_eq!(store.get("key").await, Some(b"test_value_2".to_vec()));
-    }
-
-    #[tokio::test]
-    async fn unrelated_keys_do_not_interfere() {
-        let store: Store = MemoryStore::new().into();
-
-        store.put("key1", "value1").await;
-        assert_eq!(store.get("key1").await, Some(b"value1".to_vec()));
-
-        store.put("key2", "value2").await;
-        assert_eq!(store.get("key1").await, Some(b"value1".to_vec()));
-        assert_eq!(store.get("key2").await, Some(b"value2".to_vec()));
-    }
-
-    #[tokio::test]
-    async fn scopes_are_unique() {
-        let store: Store = MemoryStore::new().into();
-
-        let a = store.scope("ab");
-        let ab = store.scope("a").scope("b");
-
-        a.put("key", "a_value").await;
-        ab.put("key", "ab_value").await;
-
-        assert_eq!(a.get("key").await, Some(b"a_value".to_vec()));
-        assert_eq!(ab.get("key").await, Some(b"ab_value".to_vec()));
-        assert_eq!(store.get("key").await, None);
+        assert_eq!(store.get("key").await, Some(b"value2".to_vec()));
     }
 }

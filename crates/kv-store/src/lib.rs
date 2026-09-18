@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::backend::KvStoreBackend;
 
 pub mod backend;
+pub mod file;
 pub mod memory;
 
 /// Separates a scope's prefix from the next scope segment or the leaf key.

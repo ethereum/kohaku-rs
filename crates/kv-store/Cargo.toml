@@ -5,6 +5,10 @@ edition = "2024"
 
 [dependencies]
 async-trait = { workspace = true }
+redb = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
