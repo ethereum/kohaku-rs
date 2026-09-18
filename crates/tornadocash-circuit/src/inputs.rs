@@ -52,7 +52,9 @@ impl CircuitInputs {
     }
 
     /// Convert the circuit inputs into a circuit input signal map
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns an error if any of the inputs are not valid field elements.
     pub fn as_signals(&self) -> Result<HashMap<String, Value>, ToFieldError> {
         Ok(HashMap::from([
             ("root".into(), to_value(self.root)?),
