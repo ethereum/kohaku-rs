@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::backend::KvStoreBackend;
+use crate::backend::{KvStoreBackend, StoreError};
 
 pub mod backend;
 pub mod file;
@@ -52,20 +52,24 @@ impl Store {
     }
 
     /// Gets the value associated with the given key.
-    pub async fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-        self.backend
+    pub async fn get(&self, key: impl AsRef<[u8]>) -> Result<Option<Vec<u8>>, StoreError> {
+        Ok(self
+            .backend
             .get_batch(&[&self.scoped_key(key)])
-            .await
+            .await?
             .into_iter()
             .next()
-            .unwrap_or(None)
+            .unwrap_or(None))
     }
 
     /// Gets the values associated with the given keys in a batch operation.
     ///
     /// Will always return a vector of the same length as the input keys, with `None` for keys that
     /// do not exist in the store.
-    pub async fn get_batch<K>(&self, keys: impl IntoIterator<Item = K>) -> Vec<Option<Vec<u8>>>
+    pub async fn get_batch<K>(
+        &self,
+        keys: impl IntoIterator<Item = K>,
+    ) -> Result<Vec<Option<Vec<u8>>>, StoreError>
     where
         K: AsRef<[u8]>,
     {
@@ -75,10 +79,14 @@ impl Store {
     }
 
     /// Puts a value associated with the given key.
-    pub async fn put(&self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
+    pub async fn put(
+        &self,
+        key: impl AsRef<[u8]>,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(), StoreError> {
         self.backend
             .put_batch(&[(&self.scoped_key(key), value.as_ref())])
-            .await;
+            .await
     }
 
     /// Puts multiple key-value pairs in a batch operation.
@@ -86,7 +94,10 @@ impl Store {
     /// The batch operation must be atomic, meaning either all kv pairs are
     /// written or none are written. Rollbacks should automatically occur if any
     /// part of the batch operation fails.
-    pub async fn put_batch<K, V>(&self, items: impl IntoIterator<Item = (K, V)>)
+    pub async fn put_batch<K, V>(
+        &self,
+        items: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), StoreError>
     where
         K: AsRef<[u8]>,
         V: AsRef<[u8]>,
@@ -99,25 +110,28 @@ impl Store {
             .iter()
             .map(|(k, v)| (k.as_slice(), v.as_ref()))
             .collect();
-        self.backend.put_batch(&refs).await;
+        self.backend.put_batch(&refs).await
     }
 
     /// Deletes the value associated with the given key.
-    pub async fn delete(&self, key: impl AsRef<[u8]>) {
-        self.backend.delete_batch(&[&self.scoped_key(key)]).await;
+    pub async fn delete(&self, key: impl AsRef<[u8]>) -> Result<(), StoreError> {
+        self.backend.delete_batch(&[&self.scoped_key(key)]).await
     }
 
     /// Deletes multiple keys in a batch operation.
     ///
     /// The batch operation must be atomic, meaning either all keys are deleted or none are deleted.
     /// Rollbacks should automatically occur if any part of the batch operation fails.
-    pub async fn delete_batch<K>(&self, keys: impl IntoIterator<Item = K>)
+    pub async fn delete_batch<K>(
+        &self,
+        keys: impl IntoIterator<Item = K>,
+    ) -> Result<(), StoreError>
     where
         K: AsRef<[u8]>,
     {
         let scoped_keys: Vec<Vec<u8>> = keys.into_iter().map(|k| self.scoped_key(k)).collect();
         let key_refs: Vec<&[u8]> = scoped_keys.iter().map(|k| k.as_slice()).collect();
-        self.backend.delete_batch(&key_refs).await;
+        self.backend.delete_batch(&key_refs).await
     }
 
     fn scoped_key(&self, key: impl AsRef<[u8]>) -> Vec<u8> {

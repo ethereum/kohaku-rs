@@ -1,4 +1,4 @@
-use kohaku_kv_store::Store;
+use kohaku_kv_store::{Store, backend::StoreError};
 use thiserror::Error;
 use tracing::info;
 
@@ -46,6 +46,8 @@ pub enum IndexerError {
     UnknownPool(String, String, u64),
     #[error("Merkle tree error: {0}")]
     MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
+    #[error("Store error: {0}")]
+    Store(#[from] StoreError),
 }
 
 impl Indexer {
@@ -84,14 +86,14 @@ impl Indexer {
 
         Ok(self
             .verifier
-            .verify(&self.pool, self.tree.root().await)
+            .verify(&self.pool, self.tree.root().await?)
             .await?)
     }
 
     /// Syncs the indexer to the given block.
     #[tracing::instrument(skip(self))]
     async fn sync_to(&self, to_block: u64) -> Result<(), IndexerError> {
-        let latest = self.store.latest_block().await;
+        let latest = self.store.latest_block().await?;
 
         let from_block = latest
             .saturating_sub(REORG_MARGIN)
@@ -122,7 +124,7 @@ impl Indexer {
             self.tree.splice(start, &leaves).await?;
         }
 
-        self.store.commit(to_block).await;
+        self.store.commit(to_block).await?;
         Ok(())
     }
 }

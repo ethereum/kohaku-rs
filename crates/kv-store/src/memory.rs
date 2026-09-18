@@ -3,7 +3,7 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
-use crate::backend::KvStoreBackend;
+use crate::backend::{KvStoreBackend, StoreError};
 
 /// An in-memory [`KvStoreBackend`], useful for tests and other non-persistent use cases.
 #[derive(Default)]
@@ -17,23 +17,27 @@ impl MemoryStore {
 
 #[async_trait::async_trait]
 impl KvStoreBackend for MemoryStore {
-    async fn get_batch(&self, keys: &[&[u8]]) -> Vec<Option<Vec<u8>>> {
+    async fn get_batch(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, StoreError> {
         let store = self.lock();
-        keys.iter().map(|&key| store.get(key).cloned()).collect()
+        Ok(keys.iter().map(|&key| store.get(key).cloned()).collect())
     }
 
-    async fn put_batch(&self, items: &[(&[u8], &[u8])]) {
+    async fn put_batch(&self, items: &[(&[u8], &[u8])]) -> Result<(), StoreError> {
         let mut store = self.lock();
         for &(key, value) in items {
             store.insert(key.to_vec(), value.to_vec());
         }
+
+        Ok(())
     }
 
-    async fn delete_batch(&self, keys: &[&[u8]]) {
+    async fn delete_batch(&self, keys: &[&[u8]]) -> Result<(), StoreError> {
         let mut store = self.lock();
         for &key in keys {
             store.remove(key);
         }
+
+        Ok(())
     }
 }
 
@@ -61,10 +65,11 @@ mod tests {
         let store = store();
         store
             .put_batch(vec![("key1", "value1"), ("key2", "value2")])
-            .await;
+            .await
+            .unwrap();
 
         assert_eq!(
-            store.get_batch(["key1", "key2"]).await,
+            store.get_batch(["key1", "key2"]).await.unwrap(),
             vec![Some(b"value1".to_vec()), Some(b"value2".to_vec())]
         );
     }
@@ -78,11 +83,12 @@ mod tests {
                 ("key2", "value2"),
                 ("key3", "value3"),
             ])
-            .await;
-        store.delete_batch(["key1", "key2"]).await;
+            .await
+            .unwrap();
+        store.delete_batch(["key1", "key2"]).await.unwrap();
 
         assert_eq!(
-            store.get_batch(["key1", "key2", "key3"]).await,
+            store.get_batch(["key1", "key2", "key3"]).await.unwrap(),
             vec![None, None, Some(b"value3".to_vec())]
         );
     }
@@ -90,9 +96,9 @@ mod tests {
     #[tokio::test]
     async fn overwriting_a_value_updates_it() {
         let store = store();
-        store.put("key", "value1").await;
-        store.put("key", "value2").await;
+        store.put("key", "value1").await.unwrap();
+        store.put("key", "value2").await.unwrap();
 
-        assert_eq!(store.get("key").await, Some(b"value2".to_vec()));
+        assert_eq!(store.get("key").await.unwrap(), Some(b"value2".to_vec()));
     }
 }

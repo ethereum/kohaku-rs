@@ -1,32 +1,32 @@
-use kohaku_kv_store::Store;
+use kohaku_kv_store::{Store, backend::StoreError};
 use ruint::aliases::U256;
 
 const LEAF_COUNT_KEY: &[u8] = b"leaf_count";
 
 #[async_trait::async_trait]
 pub trait MerkleTreeStoreExt {
-    async fn node(&self, level: u8, index: u64) -> Option<U256>;
-    async fn leaf_count(&self) -> u64;
-    async fn commit(&self, leaf_count: u64, nodes: &[(u8, u64, U256)]);
+    async fn node(&self, level: u8, index: u64) -> Result<Option<U256>, StoreError>;
+    async fn leaf_count(&self) -> Result<u64, StoreError>;
+    async fn commit(&self, leaf_count: u64, nodes: &[(u8, u64, U256)]) -> Result<(), StoreError>;
 }
 
 #[async_trait::async_trait]
 impl MerkleTreeStoreExt for Store {
     /// Reads the hash stored at (`level`, `index`), if any.
-    async fn node(&self, level: u8, index: u64) -> Option<U256> {
+    async fn node(&self, level: u8, index: u64) -> Result<Option<U256>, StoreError> {
         let key = node_key(level, index);
-        self.get(&key).await.map(|v| U256::from_le_slice(&v))
+        Ok(self.get(&key).await?.map(|v| U256::from_le_slice(&v)))
     }
 
     /// Returns the number of leaves currently committed.
-    async fn leaf_count(&self) -> u64 {
-        self.get(LEAF_COUNT_KEY).await.map_or(0, |v| {
+    async fn leaf_count(&self) -> Result<u64, StoreError> {
+        Ok(self.get(LEAF_COUNT_KEY).await?.map_or(0, |v| {
             u64::from_be_bytes(v.try_into().expect("leaf count is 8 bytes"))
-        })
+        }))
     }
 
     /// Atomically writes `nodes` and `leaf_count`.
-    async fn commit(&self, leaf_count: u64, nodes: &[(u8, u64, U256)]) {
+    async fn commit(&self, leaf_count: u64, nodes: &[(u8, u64, U256)]) -> Result<(), StoreError> {
         let keys: Vec<[u8; 9]> = nodes
             .iter()
             .map(|(level, index, _)| node_key(*level, *index))
@@ -40,7 +40,7 @@ impl MerkleTreeStoreExt for Store {
             .collect();
         items.push((LEAF_COUNT_KEY, &count_bytes));
 
-        self.put_batch(items).await;
+        self.put_batch(items).await
     }
 }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use kohaku_kv_store::Store;
+use kohaku_kv_store::{Store, backend::StoreError};
 use ruint::aliases::U256;
 
 use crate::{hasher::Hasher, store::MerkleTreeStoreExt};
@@ -24,6 +24,8 @@ pub enum MerkleTreeError {
     MissingLeaf(U256),
     #[error("Index {0} is out of bounds")]
     IndexOutOfBounds(usize),
+    #[error("store error: {0}")]
+    Store(#[from] StoreError),
 }
 
 impl<const D: usize, H: Hasher> MerkleTree<D, H> {
@@ -39,11 +41,14 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
     }
 
     /// Returns the tree's root hash.
-    pub async fn root(&self) -> U256 {
-        match self.store.node(D as u8, 0).await {
+    ///
+    /// # Errors
+    /// Returns an error if the store fails to read the root node.
+    pub async fn root(&self) -> Result<U256, MerkleTreeError> {
+        Ok(match self.store.node(D as u8, 0).await? {
             Some(root) => root,
             None => zero_hashes::<D, H>(D)[D],
-        }
+        })
     }
 
     /// Returns the inclusion proof for the given leaf.
@@ -51,9 +56,9 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
     /// # Errors
     /// Returns an error if the leaf is not found in the tree.
     pub async fn leaf_proof(&self, leaf: U256) -> Result<proof::MerkleProof<D>, MerkleTreeError> {
-        let len = self.store.leaf_count().await;
+        let len = self.store.leaf_count().await?;
         for index in 0..len {
-            if self.store.node(0, index).await == Some(leaf) {
+            if self.store.node(0, index).await? == Some(leaf) {
                 return self.proof(index as usize).await;
             }
         }
@@ -66,7 +71,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
     /// # Errors
     /// Returns an error if the index is out of bounds.
     pub async fn proof(&self, index: usize) -> Result<proof::MerkleProof<D>, MerkleTreeError> {
-        let len = self.store.leaf_count().await as usize;
+        let len = self.store.leaf_count().await? as usize;
         if index >= len {
             return Err(MerkleTreeError::IndexOutOfBounds(index));
         }
@@ -80,7 +85,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             path[level] = (idx % 2) as u8;
 
             let sibling_idx = (idx ^ 1) as u64;
-            siblings[level] = match self.store.node(level as u8, sibling_idx).await {
+            siblings[level] = match self.store.node(level as u8, sibling_idx).await? {
                 Some(node) => node,
                 None => zeros[level],
             };
@@ -91,11 +96,11 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
         let element = self
             .store
             .node(0, index as u64)
-            .await
+            .await?
             .ok_or(MerkleTreeError::IndexOutOfBounds(index))?;
 
         Ok(proof::MerkleProof {
-            root: self.root().await,
+            root: self.root().await?,
             leaf: element,
             path,
             siblings,
@@ -121,7 +126,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             return Ok(());
         }
 
-        let len = self.store.leaf_count().await as usize;
+        let len = self.store.leaf_count().await? as usize;
         if index > len {
             return Err(MerkleTreeError::IndexOutOfBounds(index));
         }
@@ -155,7 +160,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
                     } else if (child_idx as usize) < child_len {
                         self.store
                             .node((level - 1) as u8, child_idx)
-                            .await
+                            .await?
                             .unwrap_or(zeros[level - 1])
                     } else {
                         zeros[level - 1]
@@ -176,7 +181,7 @@ impl<const D: usize, H: Hasher> MerkleTree<D, H> {
             .into_iter()
             .map(|((level, node_index), hash)| (level, node_index, hash))
             .collect();
-        self.store.commit(new_len as u64, &nodes).await;
+        self.store.commit(new_len as u64, &nodes).await?;
 
         Ok(())
     }
@@ -221,7 +226,7 @@ mod tests {
     async fn empty_tree_root_is_deterministic() {
         let a = tree();
         let b = tree();
-        assert_eq!(a.root().await, b.root().await);
+        assert_eq!(a.root().await.unwrap(), b.root().await.unwrap());
     }
 
     #[tokio::test]
@@ -236,7 +241,10 @@ mod tests {
         let spliced = tree();
         spliced.splice(0, &leaves).await.unwrap();
 
-        assert_eq!(inserted.root().await, spliced.root().await);
+        assert_eq!(
+            inserted.root().await.unwrap(),
+            spliced.root().await.unwrap()
+        );
     }
 
     #[tokio::test]
@@ -245,31 +253,31 @@ mod tests {
         let full = tree();
         full.splice(0, &leaves).await.unwrap();
 
-        let root_before = full.root().await;
+        let root_before = full.root().await.unwrap();
         full.splice(0, &leaves).await.unwrap();
 
-        assert_eq!(full.root().await, root_before);
+        assert_eq!(full.root().await.unwrap(), root_before);
     }
 
     #[tokio::test]
     async fn reinserting_the_same_leaf_is_a_no_op() {
         let tree = tree();
         tree.insert(0, U256::from(1)).await.unwrap();
-        let root_before = tree.root().await;
+        let root_before = tree.root().await.unwrap();
 
         tree.insert(0, U256::from(1)).await.unwrap();
-        assert_eq!(tree.root().await, root_before);
+        assert_eq!(tree.root().await.unwrap(), root_before);
     }
 
     #[tokio::test]
     async fn reinserting_a_different_leaf_replaces_it() {
         let tree = tree();
         tree.insert(0, U256::from(1)).await.unwrap();
-        let root_before = tree.root().await;
+        let root_before = tree.root().await.unwrap();
 
         tree.insert(0, U256::from(2)).await.unwrap();
 
-        assert_ne!(tree.root().await, root_before);
+        assert_ne!(tree.root().await.unwrap(), root_before);
         assert_eq!(
             tree.leaf_proof(U256::from(2)).await.unwrap().leaf,
             U256::from(2)

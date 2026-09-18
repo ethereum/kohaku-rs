@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use redb::{Database, ReadableDatabase, TableDefinition, TableError};
 
-use crate::backend::KvStoreBackend;
+use crate::backend::{KvStoreBackend, StoreError};
 
 /// A persistent, disk-backed [`KvStoreBackend`] with ACID transactions.
 ///
@@ -29,23 +29,23 @@ impl FileStore {
 
 #[async_trait::async_trait]
 impl KvStoreBackend for FileStore {
-    async fn get_batch(&self, keys: &[&[u8]]) -> Vec<Option<Vec<u8>>> {
+    async fn get_batch(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, StoreError> {
         let db = self.db.clone();
         let keys: Vec<Vec<u8>> = keys.iter().map(|key| key.to_vec()).collect();
         tokio::task::spawn_blocking(move || {
-            let read_txn = db.begin_read().expect("failed to begin read transaction");
+            let read_txn = db.begin_read().map_err(store_error)?;
             let table = match read_txn.open_table(TABLE) {
                 Ok(table) => Some(table),
                 Err(TableError::TableDoesNotExist(_)) => None,
-                Err(err) => panic!("failed to open table: {err}"),
+                Err(err) => return Err(store_error(err)),
             };
             keys.iter()
                 .map(|key| {
-                    let value = table
-                        .as_ref()?
-                        .get(key.as_slice())
-                        .expect("failed to read key");
-                    value.map(|guard| guard.value().to_vec())
+                    let Some(table) = table.as_ref() else {
+                        return Ok(None);
+                    };
+                    let value = table.get(key.as_slice()).map_err(store_error)?;
+                    Ok(value.map(|guard| guard.value().to_vec()))
                 })
                 .collect()
         })
@@ -53,48 +53,49 @@ impl KvStoreBackend for FileStore {
         .expect("get_batch task panicked")
     }
 
-    async fn put_batch(&self, items: &[(&[u8], &[u8])]) {
+    async fn put_batch(&self, items: &[(&[u8], &[u8])]) -> Result<(), StoreError> {
         let db = self.db.clone();
         let items: Vec<(Vec<u8>, Vec<u8>)> = items
             .iter()
             .map(|(key, value)| (key.to_vec(), value.to_vec()))
             .collect();
         tokio::task::spawn_blocking(move || {
-            let write_txn = db.begin_write().expect("failed to begin write transaction");
+            let write_txn = db.begin_write().map_err(store_error)?;
             {
-                let mut table = write_txn.open_table(TABLE).expect("failed to open table");
+                let mut table = write_txn.open_table(TABLE).map_err(store_error)?;
                 for (key, value) in &items {
                     table
                         .insert(key.as_slice(), value.as_slice())
-                        .expect("failed to insert key");
+                        .map_err(store_error)?;
                 }
             }
-            write_txn
-                .commit()
-                .expect("failed to commit write transaction");
+            write_txn.commit().map_err(store_error)
         })
         .await
-        .expect("put_batch task panicked");
+        .expect("put_batch task panicked")
     }
 
-    async fn delete_batch(&self, keys: &[&[u8]]) {
+    async fn delete_batch(&self, keys: &[&[u8]]) -> Result<(), StoreError> {
         let db = self.db.clone();
         let keys: Vec<Vec<u8>> = keys.iter().map(|key| key.to_vec()).collect();
         tokio::task::spawn_blocking(move || {
-            let write_txn = db.begin_write().expect("failed to begin write transaction");
+            let write_txn = db.begin_write().map_err(store_error)?;
             {
-                let mut table = write_txn.open_table(TABLE).expect("failed to open table");
+                let mut table = write_txn.open_table(TABLE).map_err(store_error)?;
                 for key in &keys {
-                    table.remove(key.as_slice()).expect("failed to remove key");
+                    table.remove(key.as_slice()).map_err(store_error)?;
                 }
             }
-            write_txn
-                .commit()
-                .expect("failed to commit write transaction");
+            write_txn.commit().map_err(store_error)
         })
         .await
-        .expect("delete_batch task panicked");
+        .expect("delete_batch task panicked")
     }
+}
+
+/// Boxes a redb error into a [`StoreError`].
+fn store_error(err: impl std::error::Error + Send + Sync + 'static) -> StoreError {
+    StoreError::from(Box::new(err) as Box<dyn std::error::Error + Send + Sync>)
 }
 
 #[cfg(test)]
@@ -115,10 +116,11 @@ mod tests {
         let (store, _dir) = store();
         store
             .put_batch(vec![("key1", "value1"), ("key2", "value2")])
-            .await;
+            .await
+            .unwrap();
 
         assert_eq!(
-            store.get_batch(["key1", "key2"]).await,
+            store.get_batch(["key1", "key2"]).await.unwrap(),
             vec![Some(b"value1".to_vec()), Some(b"value2".to_vec())]
         );
     }
@@ -132,11 +134,12 @@ mod tests {
                 ("key2", "value2"),
                 ("key3", "value3"),
             ])
-            .await;
-        store.delete_batch(["key1", "key2"]).await;
+            .await
+            .unwrap();
+        store.delete_batch(["key1", "key2"]).await.unwrap();
 
         assert_eq!(
-            store.get_batch(["key1", "key2", "key3"]).await,
+            store.get_batch(["key1", "key2", "key3"]).await.unwrap(),
             vec![None, None, Some(b"value3".to_vec())]
         );
     }
@@ -144,10 +147,10 @@ mod tests {
     #[tokio::test]
     async fn overwriting_a_value_updates_it() {
         let (store, _dir) = store();
-        store.put("key", "value1").await;
-        store.put("key", "value2").await;
+        store.put("key", "value1").await.unwrap();
+        store.put("key", "value2").await.unwrap();
 
-        assert_eq!(store.get("key").await, Some(b"value2".to_vec()));
+        assert_eq!(store.get("key").await.unwrap(), Some(b"value2".to_vec()));
     }
 
     #[tokio::test]
@@ -166,10 +169,10 @@ mod tests {
         let path = dir.path().join("test.redb");
 
         let store: Store = FileStore::open(&path).expect("failed to open store").into();
-        store.put("key", "value").await;
+        store.put("key", "value").await.unwrap();
         drop(store);
 
         let store: Store = FileStore::open(&path).expect("failed to open store").into();
-        assert_eq!(store.get("key").await, Some(b"value".to_vec()));
+        assert_eq!(store.get("key").await.unwrap(), Some(b"value".to_vec()));
     }
 }

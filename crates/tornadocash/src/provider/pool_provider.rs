@@ -155,7 +155,7 @@ impl PoolProvider {
         }
 
         let merkle_tree = self.indexer.tree();
-        let root = merkle_tree.root().await;
+        let root = merkle_tree.root().await?;
         let nullifier_hash = note.nullifier_hash();
         let relayer = relayer.unwrap_or_default();
         let fee = fee.unwrap_or_default();
