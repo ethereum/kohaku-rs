@@ -6,7 +6,7 @@ pub enum PirProviderError {
     /// Blocking PIR lookup / connect task panicked.
     #[error("PIR worker task failed: {0}")]
     Join(#[from] tokio::task::JoinError),
-    /// `pir-client` returned a string error (connect, lookup, extract).
+    /// Lookup backend failed (connect, lookup, extract).
     #[error("PIR client: {0}")]
     Client(String),
     /// Fallback HTTP failed.
