@@ -1,22 +1,13 @@
 use std::sync::Arc;
 
-use pir_keyword::manifest::DatasetManifest;
 use serde_json::Value;
 use tracing::debug;
 
 use crate::{
-    FallbackRpc, LookupBackend, MapFallback, MapLookup, PirProviderError, Route, RouteTable,
+    DatasetManifest, FallbackRpc, LookupBackend, MapFallback, MapLookup, PirProviderError, Route,
+    RouteTable,
     routes::{encode_bytes, encode_qty, encode_uint256, encode_zero, parse_address_param},
 };
-
-/// Dual-endpoint constructor arguments.
-#[derive(Clone, Debug)]
-pub struct PirProviderConfig {
-    /// PIR serving front (`pir-front` / `pir-server`), e.g. `http://127.0.0.1:8080`.
-    pub pir_url: String,
-    /// Ordinary Ethereum JSON-RPC URL.
-    pub rpc_url: String,
-}
 
 /// Hybrid router: PIR allowlist + JSON-RPC fallback.
 pub struct PirRouter {
@@ -26,24 +17,24 @@ pub struct PirRouter {
 }
 
 impl PirRouter {
-    /// Connect to a live PIR server and fallback node.
+    /// Wrap a lookup backend with HTTP JSON-RPC fallback.
+    ///
+    /// `lookup` is how PIR bytes are fetched (remote `pir-client` wrapper, or
+    /// a test map). `rpc_url` is the ordinary Ethereum node.
     ///
     /// # Errors
     ///
-    /// Returns [`PirProviderError`] if either endpoint cannot be reached or
-    /// the PIR manifest is invalid.
-    #[cfg(feature = "client")]
-    pub async fn connect(config: PirProviderConfig) -> Result<Self, PirProviderError> {
-        let pir_url = config.pir_url.clone();
-        let client =
-            tokio::task::spawn_blocking(move || pir_client::PirClient::connect(&pir_url)).await?;
-        let client = client.map_err(PirProviderError::Client)?;
-        let datasets = client.manifest.datasets.clone();
-        Ok(Self {
-            lookup: Arc::new(crate::PirLookup::new(client)),
-            fallback: Arc::new(crate::HttpFallback::new(&config.rpc_url)?),
-            routes: RouteTable::from_datasets(datasets),
-        })
+    /// Returns [`PirProviderError::InvalidUrl`] if `rpc_url` is not a valid HTTP URL.
+    pub fn with_rpc(
+        lookup: Arc<dyn LookupBackend>,
+        rpc_url: &str,
+        datasets: Vec<DatasetManifest>,
+    ) -> Result<Self, PirProviderError> {
+        Ok(Self::from_parts(
+            lookup,
+            Arc::new(crate::HttpFallback::new(rpc_url)?),
+            datasets,
+        ))
     }
 
     /// Build a router from injected backends (tests, custom transports).
@@ -159,7 +150,7 @@ struct AccountView {
 
 #[cfg(test)]
 mod tests {
-    use pir_keyword::manifest::DatasetManifest;
+    use crate::DatasetManifest;
     use serde_json::json;
 
     use super::*;

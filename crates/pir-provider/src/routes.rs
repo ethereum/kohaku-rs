@@ -1,6 +1,7 @@
 use alloy::primitives::keccak256;
-use pir_keyword::manifest::DatasetManifest;
 use serde_json::Value;
+
+use crate::DatasetManifest;
 
 /// Where a JSON-RPC method should be answered.
 #[derive(Clone, Debug, PartialEq, Eq)]

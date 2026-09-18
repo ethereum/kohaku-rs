@@ -121,24 +121,18 @@ impl TransportConnect for PirConnect {
     }
 }
 
-/// Build a type-erased provider on top of the hybrid router.
+/// Build a type-erased alloy provider from a lookup backend and fallback RPC.
 ///
 /// # Errors
 ///
-/// Returns [`PirProviderError`] if PIR connect, fallback URL parse, or alloy
-/// transport startup fails.
-#[cfg(feature = "client")]
+/// Returns [`PirProviderError`] if the fallback URL is invalid or the alloy
+/// transport fails to start.
 pub async fn connect_provider(
-    pir_url: &str,
+    lookup: Arc<dyn crate::LookupBackend>,
     rpc_url: &str,
+    datasets: Vec<crate::DatasetManifest>,
 ) -> Result<alloy::providers::DynProvider, PirProviderError> {
-    let router = Arc::new(
-        PirRouter::connect(crate::PirProviderConfig {
-            pir_url: pir_url.to_string(),
-            rpc_url: rpc_url.to_string(),
-        })
-        .await?,
-    );
+    let router = Arc::new(PirRouter::with_rpc(lookup, rpc_url, datasets)?);
     alloy::providers::ProviderBuilder::default()
         .connect_with(&PirConnect::new(router))
         .await

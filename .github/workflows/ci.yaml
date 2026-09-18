@@ -25,11 +25,7 @@ jobs:
         workspaces: "crates"
 
     - run: nix develop .#ci
-    - run: nix develop .#ci --command bash -c "cd crates && cargo check --workspace --all-targets --all-features --exclude kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo check --all-targets -p kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --workspace --all-targets --all-features --exclude kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --all-targets -p kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --workspace --all-targets --all-features --release --exclude kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --release -p kohaku-pir-provider"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --workspace --all-targets --all-features --release --exclude kohaku-pir-provider -- --ignored"
-    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --release -p kohaku-pir-provider -- --ignored"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo check --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --all-features --release"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --all-features --release -- --ignored"

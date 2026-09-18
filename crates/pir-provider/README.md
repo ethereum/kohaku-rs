@@ -1,45 +1,46 @@
 # kohaku-pir-provider
 
 Helios-style dual-endpoint Ethereum JSON-RPC provider. A small allowlist of
-methods is answered via `pir-client` from inspire-gpu-serving (private lookup).
-Everything else is forwarded to a normal Ethereum node.
+methods is answered via a [`LookupBackend`] (private PIR lookup). Everything
+else is forwarded to a normal Ethereum node.
 
 ```text
 get_balance / get_transaction_count / matched eth_call
-        → PIR server (pir-front / pir-server)
+        → LookupBackend (usually remote pir-server via pir-client)
 everything else (eth_getLogs, unmatched eth_call, …)
         → fallback JSON-RPC
 ```
 
-Two URLs, always:
-
-- `--pir-url` / `pir_url` — PIR serving front (`http://127.0.0.1:8080`)
-- `--rpc-url` / `rpc_url` — ordinary Ethereum JSON-RPC
-
-## Native (alloy)
+This crate does **not** depend on inspire-gpu-serving. Wire `pir_client::PirClient`
+in the binary that talks to a remote PIR HTTP API:
 
 ```rust,ignore
-use kohaku_pir_provider::{PirConnect, PirRouter};
-use alloy::providers::ProviderBuilder;
+use std::sync::{Arc, Mutex};
+use kohaku_pir_provider::{LookupBackend, PirConnect, PirProviderError, PirRouter};
+use pir_client::PirClient;
 
-let router = PirRouter::connect(config).await?; // requires `--features client`
+struct PirLookup(Mutex<PirClient>);
+
+impl LookupBackend for PirLookup {
+    fn lookup(&self, key: &[u8]) -> Result<Option<Vec<u8>>, PirProviderError> {
+        let mut client = self.0.lock().unwrap();
+        client
+            .lookup(key)
+            .map(|found| found.map(|l| l.value))
+            .map_err(PirProviderError::Client)
+    }
+}
+
+let client = PirClient::connect("https://pir.example:8080")?;
+let router = PirRouter::with_rpc(
+    Arc::new(PirLookup(Mutex::new(client))),
+    "https://eth.example",
+    Vec::new(),
+)?;
 let provider = ProviderBuilder::default()
-    .connect_with(&PirConnect::new(std::sync::Arc::new(router)))
+    .connect_with(&PirConnect::new(Arc::new(router)))
     .await?;
-let wei = provider.get_balance(address).await?;
 ```
-
-Live PIR (`PirRouter::connect`, `pir-rpc`, `connect_provider`) is behind the
-`client` cargo feature: it links `pir-client` (C++ / OpenSSL) and needs the
-inspire-gpu submodule.
-
-```bash
-cargo run -p kohaku-pir-provider --features client --bin pir-rpc -- \
-  --pir-url http://127.0.0.1:8080 --rpc-url http://127.0.0.1:8545 --listen 127.0.0.1:8546
-cast balance 0xabc... --rpc-url http://127.0.0.1:8546
-```
-
-Point `@kohaku-eth/provider/pir` at that listen address as `pirUrl`.
 
 ## `eth_call` routing
 
@@ -47,12 +48,10 @@ PIR cannot run the EVM. A matched static call means the client recognizes
 `(to, selector)`, derives a PIR key from the dataset advertisement on
 `/manifest`, looks the key up, and ABI-encodes the bytes.
 
-Unknown `(to, selector)` stays on the fallback RPC. Do not add call routes
-until the PIR server actually indexes that dataset.
+Unknown `(to, selector)` stays on the fallback RPC.
 
 ## Privacy
 
-A PIR miss is proven non-membership in **this** database (the chain follower
-is incomplete). Allowlisted methods do **not** silently fall back — that would
-leak the address to the RPC node. Missing accounts return `0x0`, matching
-ordinary `eth_getBalance` for empty accounts.
+A PIR miss is proven non-membership in **this** database. Allowlisted methods
+do **not** silently fall back — that would leak the address to the RPC node.
+Missing accounts return `0x0`.
