@@ -69,6 +69,11 @@ impl RelayerProvider {
         }
     }
 
+    /// Returns a reference to the underlying Tornadocash provider.
+    pub fn tornado(&self) -> &TornadoProvider {
+        &self.tornado
+    }
+
     /// Quotes the relayer's current fee for withdrawing `note`, given `refund`.
     ///
     /// # Errors
