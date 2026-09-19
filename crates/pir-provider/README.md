@@ -1,6 +1,6 @@
 # kohaku-pir-provider
 
-Helios-style dual-endpoint Ethereum JSON-RPC provider. A small allowlist of
+Dual-endpoint Ethereum JSON-RPC provider. A small allowlist of
 methods is answered via a [`LookupBackend`] (private PIR lookup). Everything
 else is forwarded to a normal Ethereum node.
 
