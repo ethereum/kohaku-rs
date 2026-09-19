@@ -23,7 +23,7 @@ use crate::{
     pool::Pool,
     provider::tornado_provider::{TornadoProvider, TornadoProviderError},
     relayer::{
-        client::{JobReceipt, JobStatus, RelayerClient, RelayerClientError},
+        client::{JobReceipt, JobResponse, JobStatus, RelayerClient, RelayerClientError},
         status::RelayerStatus,
     },
 };
@@ -60,6 +60,15 @@ pub enum RelayerProviderError {
 enum PollOutcome {
     Pending,
     Done(Option<TxHash>),
+}
+
+/// What to do next given the relayer's reported job status. Kept free of I/O so the decision
+/// logic can be unit tested without a live relayer or provider.
+#[derive(Debug, PartialEq, Eq)]
+enum JobAction {
+    Pending,
+    CheckNullifierSpent { failed_reason: String },
+    CheckReceipt(TxHash),
 }
 
 impl RelayerProvider {
@@ -162,15 +171,6 @@ impl RelayerProvider {
     }
 
     /// Polls the relayer for the status of `receipt`'s withdrawal job.
-    ///
-    /// Follows the following logic:
-    /// - If the job is failed, check and return whether the nullifier has been spent.
-    /// - If the job is confirmed, check and return whether the transaction has been mined.
-    /// - If the job is pending, return `PollOutcome::Pending`.
-    ///
-    /// NOTE: It is possible for a relayer to hold onto a job indefinitely, so a failed
-    /// job does not guarantee that the withdrawal will not later be mined. Once a
-    /// withdrawal proof has been shared, assume it might be mined at any time.
     async fn poll_job(
         &self,
         receipt: &JobReceipt,
@@ -178,29 +178,50 @@ impl RelayerProvider {
     ) -> Result<PollOutcome, RelayerProviderError> {
         let job = self.relayer.job_status(&receipt.id).await?;
 
-        if job.status == JobStatus::Failed {
-            if is_nullifier_spent(provider, receipt.pool.address, receipt.nullifier_hash).await? {
-                return Ok(PollOutcome::Done(None));
+        match decide_job_action(&job) {
+            JobAction::Pending => Ok(PollOutcome::Pending),
+            JobAction::CheckNullifierSpent { failed_reason } => {
+                let is_spent =
+                    is_nullifier_spent(provider, receipt.pool.address, receipt.nullifier_hash)
+                        .await?;
+
+                match is_spent {
+                    true => Ok(PollOutcome::Done(None)),
+                    false => Err(RelayerProviderError::Relayer(
+                        RelayerClientError::RelayerError(failed_reason),
+                    )),
+                }
             }
-            let reason = job
+            JobAction::CheckReceipt(tx_hash) => {
+                let receipt = provider.get_transaction_receipt(tx_hash).await?;
+                match receipt {
+                    Some(_) => Ok(PollOutcome::Done(Some(tx_hash))),
+                    None => Ok(PollOutcome::Pending),
+                }
+            }
+        }
+    }
+}
+
+/// Helper to decide the next action based on the relayer's reported status. Sans-I/O
+/// for simpler unit testing.
+fn decide_job_action(job: &JobResponse) -> JobAction {
+    if job.status == JobStatus::Failed {
+        return JobAction::CheckNullifierSpent {
+            failed_reason: job
                 .failed_reason
-                .unwrap_or_else(|| "unknown error".to_string());
-            return Err(RelayerProviderError::Relayer(
-                RelayerClientError::RelayerError(reason),
-            ));
-        }
-
-        if job.status != JobStatus::Confirmed {
-            return Ok(PollOutcome::Pending);
-        }
-        let Some(tx_hash) = job.tx_hash else {
-            return Ok(PollOutcome::Pending);
+                .clone()
+                .unwrap_or_else(|| "unknown error".to_string()),
         };
-        if provider.get_transaction_receipt(tx_hash).await?.is_none() {
-            return Ok(PollOutcome::Pending);
-        }
+    }
 
-        Ok(PollOutcome::Done(Some(tx_hash)))
+    if job.status != JobStatus::Confirmed {
+        return JobAction::Pending;
+    }
+
+    match job.tx_hash {
+        Some(tx_hash) => JobAction::CheckReceipt(tx_hash),
+        None => JobAction::Pending,
     }
 }
 
@@ -220,4 +241,73 @@ async fn is_nullifier_spent(
         .await?;
 
     Ok(Tornado::isSpentCall::abi_decode_returns(&result)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::b256;
+
+    use super::*;
+
+    fn job(status: JobStatus, tx_hash: Option<TxHash>, failed_reason: Option<&str>) -> JobResponse {
+        JobResponse {
+            status,
+            tx_hash,
+            confirmations: None,
+            failed_reason: failed_reason.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn pending_while_unconfirmed() {
+        for status in [
+            JobStatus::Queued,
+            JobStatus::Accepted,
+            JobStatus::Sent,
+            JobStatus::Mined,
+            JobStatus::Resubmitted,
+        ] {
+            assert_eq!(
+                decide_job_action(&job(status, None, None)),
+                JobAction::Pending
+            );
+        }
+    }
+
+    #[test]
+    fn pending_when_confirmed_without_tx_hash() {
+        assert_eq!(
+            decide_job_action(&job(JobStatus::Confirmed, None, None)),
+            JobAction::Pending
+        );
+    }
+
+    #[test]
+    fn checks_receipt_when_confirmed_with_tx_hash() {
+        let tx_hash = b256!("0x0000000000000000000000000000000000000000000000000000000000000001");
+        assert_eq!(
+            decide_job_action(&job(JobStatus::Confirmed, Some(tx_hash), None)),
+            JobAction::CheckReceipt(tx_hash)
+        );
+    }
+
+    #[test]
+    fn checks_nullifier_when_failed() {
+        assert_eq!(
+            decide_job_action(&job(JobStatus::Failed, None, Some("boom"))),
+            JobAction::CheckNullifierSpent {
+                failed_reason: "boom".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn failed_without_reason_defaults_to_unknown_error() {
+        assert_eq!(
+            decide_job_action(&job(JobStatus::Failed, None, None)),
+            JobAction::CheckNullifierSpent {
+                failed_reason: "unknown error".to_string()
+            }
+        );
+    }
 }
