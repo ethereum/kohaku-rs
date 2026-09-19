@@ -37,7 +37,7 @@ pub struct Pool {
 }
 
 /// Hardcoded list of known tornadocash assets.
-pub const ASSETS: &[Asset] = &[Asset::ETH, Asset::MATIC];
+pub const ASSETS: &[Asset] = &[Asset::ETH, Asset::MATIC, Asset::DAI];
 
 /// Hardcoded list of known tornadocash pools.
 pub const POOLS: &[Pool] = &[
@@ -57,8 +57,15 @@ impl Asset {
         symbol: "eth",
         decimals: 18,
     };
+
     pub const MATIC: Asset = Asset::Native {
         symbol: "matic",
+        decimals: 18,
+    };
+
+    pub const DAI: Asset = Asset::Erc20 {
+        address: address!("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
+        symbol: "dai",
         decimals: 18,
     };
 
@@ -145,6 +152,26 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_161_895,
+        paymaster_address: None,
+        adapter_address: None,
+    };
+
+    pub const ETHEREUM_DAI_100: Pool = Pool {
+        chain_id: 1,
+        address: address!("0xD4B88Df4D29F5CedD6857912842cff3b20C8Cfa3"),
+        asset: Asset::DAI,
+        amount_wei: 10_u128.pow(20),
+        deployed_block: 9_117_612,
+        paymaster_address: None,
+        adapter_address: None,
+    };
+
+    pub const ETHEREUM_DAI_1000: Pool = Pool {
+        chain_id: 1,
+        address: address!("0xFD8610d20aA15b7B2E3Be39B396a1bC3516c7144"),
+        asset: Asset::DAI,
+        amount_wei: 10_u128.pow(21),
+        deployed_block: 9_161_917,
         paymaster_address: None,
         adapter_address: None,
     };

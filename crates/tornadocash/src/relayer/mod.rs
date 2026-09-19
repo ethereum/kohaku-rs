@@ -22,10 +22,14 @@ use crate::{
     note::Note,
     pool::Pool,
     provider::tornado_provider::{TornadoProvider, TornadoProviderError},
-    relayer::client::{JobReceipt, JobStatus, RelayerClient, RelayerClientError, RelayerStatus},
+    relayer::{
+        client::{JobReceipt, JobStatus, RelayerClient, RelayerClientError},
+        status::RelayerStatus,
+    },
 };
 
 pub mod client;
+pub mod status;
 
 /// Tornadocash relayer provider.
 ///
