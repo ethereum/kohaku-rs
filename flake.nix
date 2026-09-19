@@ -34,10 +34,11 @@
         rustfmtNightly = pkgs.rust-bin.nightly.latest.rustfmt;
 
         alto = pkgs.callPackage ./nix/alto/package.nix { };
+        tornadocashRelayer = pkgs.callPackage ./nix/tornadocash-relayer/package.nix { };
       in
       {
         packages = {
-          inherit alto;
+          inherit alto tornadocashRelayer;
         };
 
         devShells = {
@@ -55,6 +56,8 @@
 
               foundry
               alto
+              tornadocashRelayer
+              redis
 
               just
               sops
@@ -69,6 +72,8 @@
 
               foundry
               alto
+              tornadocashRelayer
+              redis
             ];
           };
         };

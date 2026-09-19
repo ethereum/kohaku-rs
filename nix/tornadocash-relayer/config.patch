@@ -1,0 +1,43 @@
+--- a/src/config.js	2026-09-18 23:22:01.735250586 -0400
++++ b/src/config.js	2026-09-19 00:24:36.751371993 -0400
+@@ -2,8 +2,30 @@
+ 
+ const { jobType } = require('./constants')
+ const tornConfig = require('torn-token')
++
++// Instance table for a single pool on a local test chain, from LOCAL_POOL_* env vars.
++function localInstances(netId) {
++  const address = process.env.LOCAL_POOL_ADDRESS
++  if (!address) {
++    return undefined
++  }
++
++  const symbol = process.env.LOCAL_POOL_SYMBOL.toLowerCase()
++  return {
++    [`netId${netId}`]: {
++      [symbol]: {
++        instanceAddress: { [process.env.LOCAL_POOL_AMOUNT]: address },
++        symbol: symbol.toUpperCase(),
++        decimals: Number(process.env.LOCAL_POOL_DECIMALS),
++      },
++    },
++  }
++}
++
++const netId = Number(process.env.NET_ID) || 1
++
+ module.exports = {
+-  netId: Number(process.env.NET_ID) || 1,
++  netId,
+   redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+   httpRpcUrl: process.env.HTTP_RPC_URL,
+   wsRpcUrl: process.env.WS_RPC_URL,
+@@ -12,7 +34,7 @@
+   aggregatorAddress: process.env.AGGREGATOR,
+   minerMerkleTreeHeight: 20,
+   privateKey: process.env.PRIVATE_KEY,
+-  instances: tornConfig.instances,
++  instances: localInstances(netId) || tornConfig.instances,
+   torn: tornConfig,
+   port: process.env.APP_PORT || 8000,
+   tornadoServiceFee: Number(process.env.REGULAR_TORNADO_WITHDRAW_FEE),

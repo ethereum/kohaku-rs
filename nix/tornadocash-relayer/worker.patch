@@ -1,0 +1,31 @@
+--- a/src/worker.js	2026-09-18 23:22:02.006253937 -0400
++++ b/src/worker.js	2026-09-19 00:24:44.210470930 -0400
+@@ -93,6 +93,8 @@
+         BASE_FEE_RESERVE_PERCENTAGE: baseFeeReserve,
+       },
+     })
++    // Requires on-chain ENS (mainnet only); never touched by TORNADO_WITHDRAW jobs.
++    if (!process.env.LOCAL_PROXY_ADDRESS) {
+     swap = new web3.eth.Contract(swapABI, await resolver.resolve(torn.rewardSwap.address))
+     minerContract = new web3.eth.Contract(miningABI, await resolver.resolve(torn.miningV2.address))
+     redisSubscribe.subscribe('treeUpdate', fetchTree)
+@@ -103,6 +105,7 @@
+     }
+     controller = new Controller({ provingKeys })
+     await controller.init()
++    }
+     queue.process(processJob)
+     console.log('Worker started')
+   } catch (e) {
+@@ -204,7 +207,10 @@
+ 
+ async function getProxyContract() {
+   let proxyAddress
+-  if (netId === 5) {
++  if (process.env.LOCAL_PROXY_ADDRESS) {
++    // Bypasses ENS resolution below, which requires a mainnet-only Aggregator contract.
++    proxyAddress = process.env.LOCAL_PROXY_ADDRESS
++  } else if (netId === 5) {
+     proxyAddress = tornadoGoerliProxy
+   } else {
+     proxyAddress = await resolver.resolve(torn.tornadoRouter.address)
