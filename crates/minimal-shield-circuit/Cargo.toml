@@ -1,0 +1,46 @@
+[package]
+name = "kohaku-minimal-shield-circuit"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "convert-msp-artifacts"
+path = "bin/convert_artifacts.rs"
+required-features = ["convert"]
+
+[features]
+default = []
+parallel = ["ark-groth16/parallel", "ark-ff/parallel", "ark-serialize/parallel"]
+convert = []
+
+[dependencies]
+ark-bn254 = { workspace = true }
+ark-circom = { workspace = true }
+ark-ff = { workspace = true }
+ark-groth16 = { workspace = true }
+ark-relations = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+brotli = { workspace = true }
+hex = { workspace = true }
+num-bigint = "0.4"
+ruint = { workspace = true, features = ["ark-ff-06"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wasmer = { workspace = true, features = ["sys", "cranelift"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasmer = { workspace = true, features = ["js-default"] }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
+[lints]
+workspace = true

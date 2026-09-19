@@ -20,6 +20,7 @@ alloy = { workspace = true, features = [
     "signer-local",
 ] }
 anyhow = { workspace = true }
+kohaku-frametx-kit = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 kohaku-userop-kit = { workspace = true }
 tokio = { workspace = true, features = ["process", "rt-multi-thread"] }

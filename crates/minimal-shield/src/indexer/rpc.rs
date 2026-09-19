@@ -1,0 +1,118 @@
+use std::time::Duration;
+
+use alloy::{
+    primitives::B256,
+    providers::Provider,
+    rpc::types::Filter,
+    sol_types::SolEvent,
+};
+use ruint::aliases::U256;
+use tokio::time::sleep;
+use tracing::{info, warn};
+
+use crate::{
+    abis::ShieldedPool::{self, EpochRolled, LeafAppended, NoteSpent, RootPublished},
+    indexer::{
+        syncer::{SyncEvent, SyncerBackend, SyncerError},
+        verifier::{VerifierBackend, VerifierError},
+    },
+    pool::Pool,
+};
+
+#[derive(Clone)]
+pub struct RpcSyncer<P: Provider> {
+    provider: P,
+    batch_size: u64,
+    batch_delay: Duration,
+}
+
+impl<P: Provider> RpcSyncer<P> {
+    pub fn new(provider: P) -> Self {
+        Self {
+            provider,
+            batch_size: 32,
+            batch_delay: Duration::from_millis(200),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<P: Provider> SyncerBackend for RpcSyncer<P> {
+    async fn latest_block(&self, _pool: &Pool) -> Result<u64, SyncerError> {
+        self.provider
+            .get_block_number()
+            .await
+            .map_err(SyncerError::other)
+    }
+
+    async fn sync(&self, pool: &Pool, from_block: u64, to_block: u64) -> Result<Vec<SyncEvent>, SyncerError> {
+        let from_block = from_block.max(pool.deployed_block);
+        let mut all = Vec::new();
+        let mut current = from_block;
+        while current < to_block {
+            let end = to_block.min(current + self.batch_size - 1);
+            let filter = Filter::new()
+                .address(pool.address)
+                .from_block(current)
+                .to_block(end);
+            let logs = self.provider.get_logs(&filter).await.map_err(SyncerError::other)?;
+            sleep(self.batch_delay).await;
+            for log in &logs {
+                match decode(log) {
+                    Ok(evs) => all.extend(evs),
+                    Err(e) => warn!("skip log: {e}"),
+                }
+            }
+            info!("{end}/{to_block} ({} events)", all.len());
+            current = end + 1;
+        }
+        Ok(all)
+    }
+}
+
+#[async_trait::async_trait]
+impl<P: Provider> VerifierBackend for RpcSyncer<P> {
+    async fn verify(&self, pool: &Pool, root: U256) -> Result<(), VerifierError> {
+        let instance = ShieldedPool::new(pool.address, &self.provider);
+        let onchain: B256 = instance.currentRoot().call().await.map_err(VerifierError::other)?;
+        let onchain = U256::from_be_bytes(onchain.0);
+        if onchain == root {
+            Ok(())
+        } else {
+            Err(VerifierError::InvalidRoot { root })
+        }
+    }
+}
+
+fn decode(log: &alloy::rpc::types::Log) -> Result<Vec<SyncEvent>, alloy::sol_types::Error> {
+    let topic = log.topics().first().copied();
+    if topic == Some(LeafAppended::SIGNATURE_HASH) {
+        let ev = LeafAppended::decode_log(&log.inner)?.data;
+        return Ok(vec![SyncEvent::LeafAppended {
+            cm: u256(ev.cm),
+            epoch: ev.epoch,
+            index: ev.index,
+            new_root: u256(ev.newRoot),
+        }]);
+    }
+    if topic == Some(EpochRolled::SIGNATURE_HASH) {
+        let ev = EpochRolled::decode_log(&log.inner)?.data;
+        return Ok(vec![SyncEvent::EpochRolled {
+            closed: ev.closedEpoch,
+            new_epoch: ev.newEpoch,
+        }]);
+    }
+    if topic == Some(NoteSpent::SIGNATURE_HASH) {
+        let ev = NoteSpent::decode_log(&log.inner)?.data;
+        return Ok(vec![SyncEvent::NoteSpent { nf: u256(ev.nf) }]);
+    }
+    if topic == Some(RootPublished::SIGNATURE_HASH) {
+        let ev = RootPublished::decode_log(&log.inner)?.data;
+        return Ok(vec![SyncEvent::RootPublished { epoch: ev.epoch }]);
+    }
+    Ok(vec![])
+}
+
+fn u256(h: alloy::primitives::FixedBytes<32>) -> U256 {
+    U256::from_be_bytes(h.0)
+}

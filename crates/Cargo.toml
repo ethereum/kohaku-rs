@@ -1,8 +1,11 @@
 [workspace]
 members = [
     "fork-kit",
+    "frametx-kit",
     "kv-store",
     "merkle-tree",
+    "minimal-shield",
+    "minimal-shield-circuit",
     "tornadocash",
     "tornadocash-circuit",
     "userop-kit",
@@ -19,7 +22,12 @@ alloy = "2.4.1"
 alloy-sol-types = "1.7"
 anyhow = "1.0.104"
 ark-bn254 = "0.6.0"
+ark-circom = "0.6"
 ark-ff = "0.6.0"
+ark-groth16 = { version = "0.6", default-features = false }
+ark-relations = "0.6"
+ark-serialize = "0.6"
+ark-std = { version = "0.6", features = ["getrandom"] }
 async-trait = "0.1.92"
 blake-hash = "0.2.0"
 brotli = "9.0.0"
@@ -30,8 +38,11 @@ futures = "0.3"
 hex = "0.4.3"
 insta = "1.48.0"
 kohaku-fork-kit = { path = "fork-kit" }
+kohaku-frametx-kit = { path = "frametx-kit" }
 kohaku-kv-store = { path = "kv-store" }
 kohaku-merkle-tree = { path = "merkle-tree" }
+kohaku-minimal-shield = { path = "minimal-shield" }
+kohaku-minimal-shield-circuit = { path = "minimal-shield-circuit" }
 kohaku-tornadocash = { path = "tornadocash" }
 kohaku-tornadocash-circuit = { path = "tornadocash-circuit" }
 kohaku-userop-kit = { path = "userop-kit" }
@@ -50,4 +61,8 @@ thiserror = "2.0.20"
 tokio = "1.53.1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+wasmer = { version = "6.1", default-features = false }
 websnark-rs = "0.8.0"
+
+[patch.crates-io]
+ark-circom = { git = "https://github.com/Robert-MacWha/circom-compat", branch = "release/0.6.0" }

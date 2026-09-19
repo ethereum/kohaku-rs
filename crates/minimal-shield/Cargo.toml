@@ -1,0 +1,50 @@
+[package]
+name = "kohaku-minimal-shield"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "hegota"
+path = "bin/hegota.rs"
+
+[dependencies]
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "network",
+    "providers",
+    "transports",
+    "sol-types",
+    "reqwest",
+    "signers",
+    "signer-local",
+    "contract",
+] }
+alloy-sol-types = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+kohaku-frametx-kit = { workspace = true }
+kohaku-kv-store = { workspace = true }
+kohaku-merkle-tree = { workspace = true }
+kohaku-minimal-shield-circuit = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+ruint = { workspace = true, features = ["ark-ff-06"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+tracing = { workspace = true }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
+[dev-dependencies]
+kohaku-kv-store = { workspace = true }
+
+[lints]
+workspace = true
