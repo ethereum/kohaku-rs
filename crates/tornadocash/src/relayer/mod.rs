@@ -1,3 +1,12 @@
+///! Tornadocash Relayers
+///!
+///! Tornadocash relayers are services run by third parties that accept and submit withdrawal
+///! proofs on behalf of users. They allow users to withdraw from Tornadocash to a fresh
+///! address that has no ETH to pay for gas at the cost of a small fee. Relayers are run by
+///! independent parties, and the Tornadocash DAO does not endorse any particular relayers.
+///!
+///! See [tornado-relayer](https://github.com/tornado-dao/tornado-relayer/tree/mainnet-v5) for
+///! the reference implementation.
 use alloy::{
     network::TransactionBuilder,
     primitives::{Address, B256, TxHash},
@@ -18,7 +27,9 @@ use crate::{
 
 pub mod client;
 
-/// Tornadocash provider that uses a relayer to submit withdrawals.
+/// Tornadocash relayer provider.
+///
+/// Interacts with a Tornadocash relayer to create, submit, and monitor withdrawal proofs.
 pub struct RelayerProvider {
     relayer: RelayerClient,
     tornado: TornadoProvider,

@@ -10,6 +10,10 @@ use crate::{
     pool::{Asset, Pool},
 };
 
+/// Tornadocash relayer client.
+///
+/// Written against the [tornado-relayer v5](https://github.com/tornado-dao/tornado-relayer/tree/mainnet-v5)
+/// reference implementation.
 #[derive(Clone)]
 pub struct RelayerClient {
     pub url: String,
@@ -28,6 +32,7 @@ pub enum RelayerClientError {
     Provider(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
 }
 
+/// Relayer status response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelayerStatus {
@@ -52,12 +57,10 @@ pub struct Instance {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Health {
-    // Absent until `healthWatcher` has run its first check.
     pub status: Option<String>,
     pub error: Option<String>,
 }
 
-/// Identifies a withdrawal job submitted to the relayer.
 #[derive(Debug, Clone)]
 pub struct JobReceipt {
     pub id: JobId,
@@ -73,7 +76,9 @@ pub struct JobId(pub(super) String);
 struct WithdrawRequest {
     pub contract: Address,
     pub proof: Bytes,
-    /// (root, `nullifier_hash`, recipient, relayer, fee, refund).
+    /// (`root`, `nullifier_hash`, `recipient`, `relayer`, `fee`, `refund`).
+    ///
+    /// Uses B256 for `fee` and `refund` so they are serialized as 32-byte hex strings.
     pub args: (B256, B256, Address, Address, B256, B256),
 }
 
@@ -117,6 +122,10 @@ impl RelayerClient {
         }
     }
 
+    /// Retrieves the relayer's status.
+    ///
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L7>
+    /// for the reference implementation.
     pub async fn status(&self) -> Result<RelayerStatus, RelayerClientError> {
         let url = format!("{}/v1/status", self.url);
         info!("Fetching relayer status from {}", url);
@@ -131,6 +140,10 @@ impl RelayerClient {
         Ok(response)
     }
 
+    /// Submits a withdrawal job to the relayer.
+    ///
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/controller.js#L9>
+    /// for the reference implementation.
     pub async fn withdraw(
         &self,
         pool: &Pool,
@@ -169,6 +182,10 @@ impl RelayerClient {
         })
     }
 
+    /// Polls the relayer for a withdrawal job's status.
+    ///
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L32>
+    /// for the reference implementation.
     pub async fn job_status(
         &self,
         receipt: &JobReceipt,
@@ -209,7 +226,7 @@ impl RelayerStatus {
         return false;
     }
 
-    /// Calculates the fee for a transaction based on the current gas price, amount, and refund.
+    /// Calculates the fee for a transaction.
     ///
     /// Returns `None` if the relayer does not support the given pool.
     pub fn fee(&self, pool: &Pool, gas_price: u128, amount: U256, refund: U256) -> Option<U256> {
