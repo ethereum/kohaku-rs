@@ -46,10 +46,7 @@ pub async fn deploy_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
     Ok(Pool {
         chain_id: provider.get_chain_id().await?,
         address: *tornado.address(),
-        asset: Asset::Native {
-            symbol: "ETH",
-            decimals: 18,
-        },
+        asset: Asset::ETH,
         amount_wei: DENOMINATION_WEI,
         deployed_block: 0,
         paymaster_address: None,

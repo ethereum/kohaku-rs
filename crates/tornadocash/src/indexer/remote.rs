@@ -106,9 +106,10 @@ impl RemoteSyncer {
     async fn deposits(&self, pool: &Pool) -> Result<Vec<RemoteDeposit>, RemoteSyncerError> {
         let resp = self
             .client
-            .get(self.deposits_url(pool))
+            .get(deposits_url(&self.base_url, pool))
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
 
@@ -123,9 +124,10 @@ impl RemoteSyncer {
     async fn withdrawals(&self, pool: &Pool) -> Result<Vec<RemoteWithdrawal>, RemoteSyncerError> {
         let withdrawals = self
             .client
-            .get(self.withdrawals_url(pool))
+            .get(withdrawals_url(&self.base_url, pool))
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
 
@@ -135,30 +137,6 @@ impl RemoteSyncer {
             .map(serde_json::from_str::<RemoteWithdrawal>)
             .collect::<Result<_, _>>()?;
         Ok(withdrawals)
-    }
-
-    fn deposits_url(&self, pool: &Pool) -> Url {
-        format!(
-            "{}/{}_{}_{}_deposits.ndjson",
-            self.base_url,
-            pool.chain_id,
-            pool.symbol(),
-            pool.amount()
-        )
-        .parse()
-        .unwrap()
-    }
-
-    fn withdrawals_url(&self, pool: &Pool) -> Url {
-        format!(
-            "{}/{}_{}_{}_nullifiers.ndjson",
-            self.base_url,
-            pool.chain_id,
-            pool.symbol(),
-            pool.amount()
-        )
-        .parse()
-        .unwrap()
     }
 }
 
@@ -180,5 +158,51 @@ impl From<RemoteWithdrawal> for Withdrawal {
             relayer: Address::ZERO,
             fee: remote.fee,
         }
+    }
+}
+
+fn deposits_url(base: &str, pool: &Pool) -> Url {
+    format!(
+        "{}/{}_{}_{}_deposits.ndjson",
+        base,
+        pool.chain_id,
+        pool.symbol().to_uppercase(),
+        pool.amount()
+    )
+    .parse()
+    .unwrap()
+}
+
+fn withdrawals_url(base: &str, pool: &Pool) -> Url {
+    format!(
+        "{}/{}_{}_{}_nullifiers.ndjson",
+        base,
+        pool.chain_id,
+        pool.symbol().to_uppercase(),
+        pool.amount()
+    )
+    .parse()
+    .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deposits_url() {
+        let pool = Pool::ETHEREUM_ETHER_01;
+        let url = deposits_url("http://example.com", &pool);
+        assert_eq!(url.as_str(), "http://example.com/1_ETH_0.1_deposits.ndjson");
+    }
+
+    #[test]
+    fn test_withdrawals_url() {
+        let pool = Pool::ETHEREUM_ETHER_01;
+        let url = withdrawals_url("http://example.com", &pool);
+        assert_eq!(
+            url.as_str(),
+            "http://example.com/1_ETH_0.1_nullifiers.ndjson"
+        );
     }
 }
