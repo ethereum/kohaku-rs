@@ -66,7 +66,9 @@ impl Indexer {
     pub async fn sync(&self) -> Result<(), IndexerError> {
         let latest = self.syncer.latest_block(&self.pool).await?;
         self.sync_to(latest).await?;
-        self.verifier.verify(&self.pool, self.tree().root().await).await?;
+        self.verifier
+            .verify(&self.pool, self.tree().root().await?)
+            .await?;
         Ok(())
     }
 

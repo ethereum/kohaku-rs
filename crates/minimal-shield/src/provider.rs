@@ -1,7 +1,7 @@
 use alloy::{
-    primitives::{Address, B256, Bytes, U256 as AlloyU256},
-    signers::local::PrivateKeySigner,
-    sol_types::SolCall,
+    primitives::{Address, B256, Bytes, U256 as AlloyU256, keccak256},
+    signers::{SignerSync, local::PrivateKeySigner},
+    sol_types::{SolCall, SolValue},
 };
 use kohaku_frametx_kit::{
     APPROVE_EXECUTION_AND_PAYMENT, CLAIM_FRAME_GAS, CLAIM_FRAME_STATE_GAS, EXECUTE_FRAME_GAS,
@@ -27,12 +27,16 @@ use crate::{
 pub enum ProviderError {
     #[error("circuit: {0}")]
     Circuit(String),
+    #[error("signer: {0}")]
+    Signer(String),
     #[error("note is not in the synced tree")]
     MissingNote,
     #[error("recipient is not a FrameAccount; refuse non-empty calls")]
     CallsOnEoa,
-    #[error("factory address mismatch")]
-    AccountMismatch,
+    #[error("FrameAccount executeBatch requires the owner's signature")]
+    MissingOwnerSig,
+    #[error("owner signer does not match CREATE2 owner")]
+    OwnerMismatch,
     #[error(transparent)]
     Frame(#[from] kohaku_frametx_kit::FrameTxError),
     #[error(transparent)]
@@ -121,6 +125,8 @@ impl PoolProvider {
         recipient: Address,
         create: Option<CreateAccount>,
         calls: &[Call],
+        owner_signer: Option<&PrivateKeySigner>,
+        execute_nonce: u64,
         fee: U256,
         authorizer: &PrivateKeySigner,
         root_slot: u64,
@@ -217,7 +223,24 @@ impl PoolProvider {
                 data: c.data.clone(),
             })
             .collect();
-        let execute = Bytes::from(FrameAccount::executeBatchCall { calls: batch }.abi_encode());
+        let signature = if create.is_some() || !calls.is_empty() {
+            let signer = owner_signer.ok_or(ProviderError::MissingOwnerSig)?;
+            if let Some(c) = &create {
+                if signer.address() != c.owner {
+                    return Err(ProviderError::OwnerMismatch);
+                }
+            }
+            sign_execute_batch(chain_id, recipient, execute_nonce, &batch, signer)?
+        } else {
+            Bytes::new()
+        };
+        let execute = Bytes::from(
+            FrameAccount::executeBatchCall {
+                calls: batch,
+                signature,
+            }
+            .abi_encode(),
+        );
 
         let src = source_id(self.indexer.pool().address, epoch);
         let tuple = recent_root_tuple_bytes(src, root_slot, u256_to_b256(witness.root));
@@ -283,6 +306,40 @@ impl PoolProvider {
         tx.sign_secp256k1(0, authorizer)?;
         Ok(tx)
     }
+}
+
+fn sign_execute_batch(
+    chain_id: u64,
+    account: Address,
+    nonce: u64,
+    calls: &[AccountCall],
+    signer: &PrivateKeySigner,
+) -> Result<Bytes, ProviderError> {
+    let inner = keccak256(
+        (
+            AlloyU256::from(chain_id),
+            account,
+            AlloyU256::from(nonce),
+            calls,
+        )
+            .abi_encode(),
+    );
+    let mut wrapped = Vec::with_capacity(60);
+    wrapped.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
+    wrapped.extend_from_slice(inner.as_slice());
+    let digest = keccak256(wrapped);
+    let signed = signer
+        .sign_hash_sync(&digest)
+        .map_err(|e| ProviderError::Signer(e.to_string()))?;
+    let mut raw = Vec::with_capacity(65);
+    raw.extend_from_slice(&signed.r().to_be_bytes::<32>());
+    raw.extend_from_slice(&signed.s().to_be_bytes::<32>());
+    let mut v = u8::from(signed.v());
+    if v < 27 {
+        v += 27;
+    }
+    raw.push(v);
+    Ok(raw.into())
 }
 
 fn u256_to_b256(v: U256) -> B256 {

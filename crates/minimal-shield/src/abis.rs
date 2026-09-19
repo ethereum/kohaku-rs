@@ -42,7 +42,9 @@ sol! {
             uint256 value;
             bytes data;
         }
-        function executeBatch(Call[] calls) external;
+        function executeBatch(Call[] calls, bytes signature) external;
+        function executeDigest(Call[] calls) external view returns (bytes32);
+        function nonce() external view returns (uint256);
     }
 
     #[sol(rpc)]

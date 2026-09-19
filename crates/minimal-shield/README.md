@@ -8,7 +8,8 @@ Unshield is always the same **five-frame** pool-as-sender FrameTx:
 2. `VERIFY(pool, 256-byte proof)`
 3. `SENDER(pool, settle)`
 4. `SENDER(pool, ensureAndClaim)` — `factory == 0` skips CREATE2
-5. `SENDER(recipient, executeBatch)` — empty calls is a no-op
+5. `SENDER(recipient, executeBatch)` — empty calls is a no-op; FrameAccount
+   requires the owner's ECDSA over `(chainId, account, nonce, calls)`
 
 State for the `hegota` CLI lives in `.hegota-data/` (gitignored).
 

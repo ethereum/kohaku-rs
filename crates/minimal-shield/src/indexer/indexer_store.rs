@@ -13,21 +13,30 @@ pub trait IndexerStoreExt {
 #[async_trait::async_trait]
 impl IndexerStoreExt for Store {
     async fn latest_block(&self) -> u64 {
-        self.get(LATEST_BLOCK_KEY).await.map_or(0, |v| {
-            u64::from_be_bytes(v.try_into().expect("latest block is 8 bytes"))
-        })
+        self.get(LATEST_BLOCK_KEY)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.try_into().ok())
+            .map(u64::from_be_bytes)
+            .unwrap_or(0)
     }
 
     async fn epoch(&self) -> u64 {
-        self.get(EPOCH_KEY).await.map_or(0, |v| {
-            u64::from_be_bytes(v.try_into().expect("epoch is 8 bytes"))
-        })
+        self.get(EPOCH_KEY)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.try_into().ok())
+            .map(u64::from_be_bytes)
+            .unwrap_or(0)
     }
 
     async fn commit(&self, latest_block: u64, epoch: u64) {
         let lb = latest_block.to_be_bytes();
         let ep = epoch.to_be_bytes();
         self.put_batch(vec![(LATEST_BLOCK_KEY, lb.as_slice()), (EPOCH_KEY, ep.as_slice())])
-            .await;
+            .await
+            .expect("indexer commit");
     }
 }
