@@ -54,11 +54,11 @@ pub const POOLS: &[Pool] = &[
 
 impl Asset {
     pub const ETH: Asset = Asset::Native {
-        symbol: "ETH",
+        symbol: "eth",
         decimals: 18,
     };
     pub const MATIC: Asset = Asset::Native {
-        symbol: "MATIC",
+        symbol: "matic",
         decimals: 18,
     };
 
@@ -66,6 +66,13 @@ impl Asset {
     pub fn symbol(&self) -> String {
         match self {
             Asset::Native { symbol, .. } | Asset::Erc20 { symbol, .. } => symbol.to_string(),
+        }
+    }
+
+    #[must_use]
+    pub fn decimals(&self) -> u8 {
+        match self {
+            Asset::Native { decimals, .. } | Asset::Erc20 { decimals, .. } => *decimals,
         }
     }
 }
@@ -182,13 +189,13 @@ impl Pool {
         POOLS.iter().find(|pool| pool.address == address).copied()
     }
 
-    /// Pool ID, e.g. "ETH-0.1-1" for the 0.1 ETH pool on Ethereum mainnet.
+    /// Pool ID, e.g. "eth-0.1-1" for the 0.1 ETH pool on Ethereum mainnet.
     #[must_use]
     pub fn id(&self) -> String {
         format!("{}-{}-{}", self.symbol(), self.amount(), self.chain_id)
     }
 
-    /// Pool asset symbol, e.g. "ETH" or "MATIC"
+    /// Pool asset symbol, e.g. "eth" or "matic"
     #[must_use]
     pub fn symbol(&self) -> String {
         self.asset.symbol()
@@ -244,6 +251,6 @@ mod tests {
     #[test]
     fn pool_id() {
         let pool = Pool::ETHEREUM_ETHER_01;
-        assert_eq!(pool.id(), "ETH-0.1-1");
+        assert_eq!(pool.id(), "eth-0.1-1");
     }
 }

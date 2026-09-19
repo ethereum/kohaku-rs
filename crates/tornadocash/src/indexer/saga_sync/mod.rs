@@ -151,7 +151,7 @@ fn stream_key(pool: &Pool) -> String {
     format!(
         "tornado-cash-{}-{}-{}",
         pool.chain_id,
-        pool.symbol().to_lowercase(),
+        pool.symbol(),
         pool.amount()
     )
 }

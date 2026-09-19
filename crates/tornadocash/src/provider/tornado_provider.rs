@@ -91,7 +91,7 @@ impl TornadoProvider {
     /// Returns an error if the pool cannot be found, is not initialized, or if the withdrawal
     /// cannot be created.
     pub async fn withdraw(
-        &mut self,
+        &self,
         note: &Note,
         recipient: Address,
         relayer: Option<Address>,
@@ -118,7 +118,7 @@ impl TornadoProvider {
     /// # Errors
     /// Returns an error if the pool cannot be synced or the withdrawal call cannot be created.
     pub async fn withdraw_call(
-        &mut self,
+        &self,
         note: &Note,
         recipient: Address,
         relayer: Option<Address>,

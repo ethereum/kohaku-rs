@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use alloy::{
-    primitives::U256,
+    primitives::{Address, U256},
     providers::{DynProvider, Provider},
     sol,
 };
@@ -21,6 +21,11 @@ sol!(
     #[sol(rpc)]
     ETHTornado,
     "fixtures/eth_tornado.json"
+);
+sol!(
+    #[sol(rpc)]
+    TornadoProxyLight,
+    "fixtures/tornado_proxy_light.json"
 );
 
 const DENOMINATION_WEI: u128 = 10_u128.pow(17);
@@ -46,13 +51,19 @@ pub async fn deploy_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
     Ok(Pool {
         chain_id: provider.get_chain_id().await?,
         address: *tornado.address(),
-        asset: Asset::Native {
-            symbol: "ETH",
-            decimals: 18,
-        },
+        asset: Asset::ETH,
         amount_wei: DENOMINATION_WEI,
         deployed_block: 0,
         paymaster_address: None,
         adapter_address: None,
     })
+}
+
+/// Deploy a fresh `TornadoProxyLight` to `provider` and return its address.
+///
+/// # Errors
+/// Returns an error if the contract fails to deploy.
+pub async fn deploy_proxy(provider: DynProvider) -> Result<Address, anyhow::Error> {
+    let proxy = TornadoProxyLight::deploy(&provider).await?;
+    Ok(*proxy.address())
 }

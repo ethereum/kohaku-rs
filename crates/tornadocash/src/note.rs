@@ -137,7 +137,7 @@ mod tests {
     fn test_note_encoding_decoding() {
         let nullifier = [1u8; 31];
         let secret = [2u8; 31];
-        let symbol = "ETH".to_string();
+        let symbol = "eth".to_string();
         let amount = "1".to_string();
         let chain_id = 1;
         let note = Note::new(nullifier, secret, symbol.clone(), amount.clone(), chain_id);
