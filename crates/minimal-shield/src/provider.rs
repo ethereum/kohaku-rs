@@ -31,7 +31,7 @@ pub enum ProviderError {
     Signer(String),
     #[error("note is not in the synced tree")]
     MissingNote,
-    #[error("recipient is not a FrameAccount; refuse non-empty calls")]
+    #[error("non-empty executeBatch calls require the FrameAccount owner's signature")]
     CallsOnEoa,
     #[error("FrameAccount executeBatch requires the owner's signature")]
     MissingOwnerSig,
@@ -114,7 +114,10 @@ impl PoolProvider {
         }
     }
 
-    /// Always five frames. `create = None` and empty `calls` is the EOA demo.
+    /// Always five frames. `create = None` skips CREATE2: an EOA if `owner_signer`
+    /// is also `None`, or an **already-deployed** FrameAccount if `owner_signer`
+    /// is `Some` (required for any FrameAccount, including empty `calls`;
+    /// `execute_nonce` must be the live account nonce).
     ///
     /// # Errors
     /// Returns if the note is missing, calls target an EOA, or proving fails.
@@ -135,8 +138,11 @@ impl PoolProvider {
         max_priority_fee: AlloyU256,
         max_fee: AlloyU256,
     ) -> Result<FrameTx, ProviderError> {
-        if create.is_none() && !calls.is_empty() {
+        if owner_signer.is_none() && !calls.is_empty() {
             return Err(ProviderError::CallsOnEoa);
+        }
+        if create.is_some() && owner_signer.is_none() {
+            return Err(ProviderError::MissingOwnerSig);
         }
         self.indexer.sync().await?;
         let tree = self.indexer.tree();
@@ -223,8 +229,7 @@ impl PoolProvider {
                 data: c.data.clone(),
             })
             .collect();
-        let signature = if create.is_some() || !calls.is_empty() {
-            let signer = owner_signer.ok_or(ProviderError::MissingOwnerSig)?;
+        let signature = if let Some(signer) = owner_signer {
             if let Some(c) = &create {
                 if signer.address() != c.owner {
                     return Err(ProviderError::OwnerMismatch);
