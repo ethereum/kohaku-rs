@@ -143,11 +143,8 @@ impl RelayerClient {
     ///
     /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L32>
     /// for the reference implementation.
-    pub async fn job_status(
-        &self,
-        receipt: &JobReceipt,
-    ) -> Result<JobResponse, RelayerClientError> {
-        let url = format!("{}/v1/jobs/{}", self.url, receipt.id.0);
+    pub async fn job_status(&self, id: &JobId) -> Result<JobResponse, RelayerClientError> {
+        let url = format!("{}/v1/jobs/{}", self.url, id.0);
         let response: JobResponse = self
             .client
             .get(&url)

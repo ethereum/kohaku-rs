@@ -176,7 +176,7 @@ impl RelayerProvider {
         receipt: &JobReceipt,
         provider: &DynProvider,
     ) -> Result<PollOutcome, RelayerProviderError> {
-        let job = self.relayer.job_status(receipt).await?;
+        let job = self.relayer.job_status(&receipt.id).await?;
 
         if job.status == JobStatus::Failed {
             if is_nullifier_spent(provider, receipt.pool.address, receipt.nullifier_hash).await? {
