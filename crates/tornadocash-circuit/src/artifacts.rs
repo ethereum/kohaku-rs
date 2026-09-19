@@ -34,10 +34,12 @@ fn decompress(data: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
+
 mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "run with `cargo test --release -- --ignored`"]
     fn loads_embedded_artifacts() {
         let _ = circuit();
         let _ = proving_key();

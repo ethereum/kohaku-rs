@@ -7,6 +7,7 @@ mod merkle_tree;
 pub mod note;
 pub mod pool;
 pub mod provider;
+pub mod relayer;
 
 #[cfg(feature = "paymaster")]
 pub mod userop_provider;

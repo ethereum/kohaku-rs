@@ -21,7 +21,7 @@ async fn test_provider() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let mut tornado_provider =
+    let tornado_provider =
         TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
 
     info!("Depositing into pool");
