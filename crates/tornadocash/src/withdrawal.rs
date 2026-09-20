@@ -89,14 +89,14 @@ impl Withdrawal {
         let gas_price = self.provider.inner_provider().get_gas_price().await?;
 
         self.fee = Some(status.fee(
-            self.pool().await?,
+            &self.pool().await?,
             gas_price,
             self.refund.unwrap_or_default(),
         )?);
         self.relayer = Some(status.reward_account);
 
         let call = self.as_call(rng).await?;
-        relayer.withdraw(self.pool().await?, call).await
+        relayer.withdraw(&self.pool().await?, call).await
     }
 
     /// Converts the withdrawal into a raw [`withdrawCall`] struct.

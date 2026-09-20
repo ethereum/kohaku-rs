@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use alloy::primitives::{Address, address};
 use serde::{Deserialize, Serialize};
@@ -10,22 +10,22 @@ use crate::note::Note;
 ///
 /// Tornadocash assets are by convention represented by their symbol and decimal precision rather
 /// than their contract addresses.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Asset {
     Native {
-        symbol: &'static str,
+        symbol: Cow<'static, str>,
         decimals: u8,
     },
     Erc20 {
         address: Address,
-        symbol: &'static str,
+        symbol: Cow<'static, str>,
         decimals: u8,
     },
 }
 
 /// Represents a tornadocash pool. Pools are uniquely defined by their `chain_id`, `asset` symbol,
 /// and `amount`.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Pool {
     pub chain_id: u64,
     pub address: Address,
@@ -54,18 +54,18 @@ pub const POOLS: &[Pool] = &[
 
 impl Asset {
     pub const ETH: Asset = Asset::Native {
-        symbol: "eth",
+        symbol: Cow::Borrowed("eth"),
         decimals: 18,
     };
 
     pub const MATIC: Asset = Asset::Native {
-        symbol: "matic",
+        symbol: Cow::Borrowed("matic"),
         decimals: 18,
     };
 
     pub const DAI: Asset = Asset::Erc20 {
         address: address!("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
-        symbol: "dai",
+        symbol: Cow::Borrowed("dai"),
         decimals: 18,
     };
 
@@ -208,12 +208,12 @@ impl Pool {
             .find(|pool| {
                 pool.chain_id == chain_id && pool.symbol() == symbol && pool.amount() == amount
             })
-            .copied()
+            .cloned()
     }
 
     #[must_use]
     pub fn from_address(address: Address) -> Option<Self> {
-        POOLS.iter().find(|pool| pool.address == address).copied()
+        POOLS.iter().find(|pool| pool.address == address).cloned()
     }
 
     /// Pool ID, e.g. "eth-0.1-1" for the 0.1 ETH pool on Ethereum mainnet.

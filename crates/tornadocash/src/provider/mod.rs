@@ -1,3 +1,4 @@
+mod known_pools;
 pub(crate) mod pool_provider;
 
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use kohaku_kv_store::Store;
 use rand::{CryptoRng, RngExt};
 use ruint::aliases::U256;
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OnceCell};
 
 use crate::{
     deposit::Deposit,
@@ -24,7 +25,10 @@ use crate::{
 /// A provider for multiple tornadocash pools.
 ///
 /// The provider manages multiple `PoolProvider`s for requested pools, providing a unified
-/// interface.
+/// interface. Pools are tracked automatically: any pool ever passed to `deposit`, `withdraw`, or
+/// the other pool-scoped methods is remembered (persisted to `store`) so that a fresh
+/// `TornadoProvider` over the same store picks it back up without the caller needing to
+/// re-register it, and so `sync` finds it without being told which pools to look at.
 #[derive(Clone)]
 pub struct TornadoProvider {
     store: Store,
@@ -33,6 +37,7 @@ pub struct TornadoProvider {
     provider: DynProvider,
 
     pools: Arc<Mutex<Vec<PoolProvider>>>,
+    known_pools_loaded: Arc<OnceCell<()>>,
 }
 
 #[derive(Debug, Error)]
@@ -52,6 +57,7 @@ impl TornadoProvider {
             verifier,
             provider,
             pools: Arc::new(Mutex::new(Vec::new())),
+            known_pools_loaded: Arc::new(OnceCell::new()),
         }
     }
 
@@ -65,6 +71,8 @@ impl TornadoProvider {
     /// # Errors
     /// Returns an error if the pool cannot be synced.
     pub async fn sync(&self) -> Result<(), TornadoProviderError> {
+        self.ensure_known_pools_loaded().await;
+
         for provider in self.pools.lock().await.iter() {
             provider.sync().await?;
         }
@@ -73,7 +81,7 @@ impl TornadoProvider {
 
     /// Create a deposit for the given pool.
     pub async fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> Deposit {
-        self.provider(pool).await;
+        self.provider(&pool).await;
         Deposit::new(pool, rng.random(), rng.random())
     }
 
@@ -91,7 +99,7 @@ impl TornadoProvider {
     /// Returns an error if a contract call fails.
     pub async fn quote_wei_in_fee_token(
         &self,
-        pool: Pool,
+        pool: &Pool,
         wei_amount: U256,
     ) -> Result<U256, TornadoProviderError> {
         let provider = self.provider(pool).await;
@@ -113,7 +121,7 @@ impl TornadoProvider {
     /// Returns an error if the pool cannot be found or if a contract call fails.
     pub async fn is_nullifier_spent(
         &self,
-        pool: Pool,
+        pool: &Pool,
         nullifier_hash: B256,
     ) -> Result<bool, TornadoProviderError> {
         let provider = self.provider(pool).await;
@@ -129,7 +137,7 @@ impl TornadoProvider {
         note: &Note,
     ) -> Result<PoolProvider, TornadoProviderError> {
         let pool = self.pool_from_note(note).await?;
-        Ok(self.provider(pool).await)
+        Ok(self.provider(&pool).await)
     }
 
     /// Get the pool for a given note.
@@ -137,6 +145,8 @@ impl TornadoProvider {
     /// Searches both this provider's registered pools and the set of known pools for a pool
     /// matching the note's parameters.
     pub(crate) async fn pool_from_note(&self, note: &Note) -> Result<Pool, TornadoProviderError> {
+        self.ensure_known_pools_loaded().await;
+
         let pools = self.pools.lock().await;
 
         if let Some(pool) = pools.iter().map(PoolProvider::pool).find(|pool| {
@@ -157,22 +167,59 @@ impl TornadoProvider {
     }
 
     /// Get a reference to the provider for a given pool, creating it if it doesn't exist.
-    async fn provider(&self, pool: Pool) -> PoolProvider {
+    ///
+    /// Newly-seen pools are persisted to `store` so a future `TornadoProvider` over the same
+    /// store remembers them automatically.
+    async fn provider(&self, pool: &Pool) -> PoolProvider {
+        self.ensure_known_pools_loaded().await;
+
         let mut pools = self.pools.lock().await;
 
-        if let Some(p) = pools.iter().find(|p| p.pool() == pool) {
+        if let Some(p) = pools.iter().find(|p| &p.pool() == pool) {
             return p.clone();
         }
 
-        let indexer = Indexer::new(
-            pool,
-            self.store.scope(pool.id()),
-            self.syncer.clone(),
-            self.verifier.clone(),
-        );
-        let provider = PoolProvider::new(indexer, self.provider.clone());
-
+        let provider = self.build_pool_provider(pool.clone());
         pools.push(provider.clone());
+        drop(pools);
+
+        self.persist_known_pool(pool).await;
         provider
+    }
+
+    /// Loads the persisted set of known pools (once per `TornadoProvider`) and registers each
+    /// one, so `sync`/`provider` find pools that were used in a previous session without
+    /// needing to be touched again first.
+    async fn ensure_known_pools_loaded(&self) {
+        self.known_pools_loaded
+            .get_or_init(|| async {
+                let mut pools = self.pools.lock().await;
+                for pool in known_pools::load(&self.store).await {
+                    if pools.iter().any(|p| p.pool() == pool) {
+                        continue;
+                    }
+                    pools.push(self.build_pool_provider(pool));
+                }
+            })
+            .await;
+    }
+
+    /// Persists `pool` into the known-pools set if it isn't already there. Best-effort: a
+    /// storage failure is logged, not propagated, since it only degrades the
+    /// "remembered next time" convenience.
+    async fn persist_known_pool(&self, pool: &Pool) {
+        let mut known = known_pools::load(&self.store).await;
+        if known.iter().any(|p| p == pool) {
+            return;
+        }
+
+        known.push(pool.clone());
+        known_pools::save(&self.store, &known).await;
+    }
+
+    fn build_pool_provider(&self, pool: Pool) -> PoolProvider {
+        let scope = self.store.scope(pool.id());
+        let indexer = Indexer::new(pool, scope, self.syncer.clone(), self.verifier.clone());
+        PoolProvider::new(indexer, self.provider.clone())
     }
 }

@@ -88,7 +88,7 @@ impl Relayer {
     /// Returns an error if the request cannot be submitted or the relayer returns an error.
     pub async fn withdraw(
         &self,
-        pool: Pool,
+        pool: &Pool,
         call: Tornado::withdrawCall,
     ) -> Result<JobReceipt, RelayerError> {
         let receipt = self.client.withdraw(pool, call).await?;
@@ -113,7 +113,7 @@ impl Relayer {
         }
 
         if provider
-            .is_nullifier_spent(receipt.pool, receipt.nullifier_hash)
+            .is_nullifier_spent(&receipt.pool, receipt.nullifier_hash)
             .await?
         {
             return Ok(None);
@@ -134,7 +134,7 @@ impl Relayer {
             JobAction::Pending => Ok(PollOutcome::Pending),
             JobAction::CheckNullifierSpent { failed_reason } => {
                 let is_spent = provider
-                    .is_nullifier_spent(receipt.pool, receipt.nullifier_hash)
+                    .is_nullifier_spent(&receipt.pool, receipt.nullifier_hash)
                     .await?;
 
                 match is_spent {

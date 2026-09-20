@@ -39,7 +39,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
+    let deposit = tornado_provider.deposit(pool.clone(), &mut rand::rng()).await;
     let note = deposit.note();
     provider
         .send_transaction(deposit.into())

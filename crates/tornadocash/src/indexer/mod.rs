@@ -65,7 +65,7 @@ impl Indexer {
 
     #[must_use]
     pub fn pool(&self) -> Pool {
-        self.pool
+        self.pool.clone()
     }
 
     #[must_use]

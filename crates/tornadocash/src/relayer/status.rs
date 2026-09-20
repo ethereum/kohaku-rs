@@ -39,7 +39,7 @@ pub struct Health {
 
 impl RelayerStatus {
     /// Checks if the relayer supports the given pool.
-    pub fn supports(&self, pool: Pool) -> bool {
+    pub fn supports(&self, pool: &Pool) -> bool {
         if pool.chain_id != self.net_id {
             return false;
         }
@@ -65,9 +65,9 @@ impl RelayerStatus {
     ///
     /// # Errors
     /// Returns an error if the relayer does not support the given pool.
-    pub fn fee(&self, pool: Pool, gas_price: u128, refund: U256) -> Result<U256, RelayerError> {
+    pub fn fee(&self, pool: &Pool, gas_price: u128, refund: U256) -> Result<U256, RelayerError> {
         if !self.supports(pool) {
-            return Err(RelayerError::UnsupportedPool(pool));
+            return Err(RelayerError::UnsupportedPool(pool.clone()));
         }
 
         // Scale the fee percentage into a fixed-point integer.
@@ -84,7 +84,7 @@ impl RelayerStatus {
         }
 
         let Some(price) = self.eth_prices.get(&pool.symbol()) else {
-            return Err(RelayerError::UnsupportedPool(pool));
+            return Err(RelayerError::UnsupportedPool(pool.clone()));
         };
 
         // If the asset is non-native, the fee is:
@@ -119,19 +119,19 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(status.supports(pool));
+        assert!(status.supports(&pool));
 
         let mut different_net_id_pool = pool.clone();
         different_net_id_pool.chain_id = 2;
-        assert!(!status.supports(different_net_id_pool));
+        assert!(!status.supports(&different_net_id_pool));
 
         let mut different_address_pool = pool.clone();
         different_address_pool.address = address!("0x000000000000000000000000000000000000cafe");
-        assert!(!status.supports(different_address_pool));
+        assert!(!status.supports(&different_address_pool));
 
         let mut different_amount_pool = pool.clone();
         different_amount_pool.amount_wei = 2_000_000u64.into();
-        assert!(!status.supports(different_amount_pool));
+        assert!(!status.supports(&different_amount_pool));
     }
 
     #[test]
@@ -153,7 +153,7 @@ mod tests {
             ..Default::default()
         };
 
-        let fee = status.fee(pool, 1_000_000_000u128, U256::ZERO).unwrap();
+        let fee = status.fee(&pool, 1_000_000_000u128, U256::ZERO).unwrap();
 
         // 1% of 1 ETH + (1 gwei * 500,000 gas)
         assert_eq!(fee, U256::from(10_500_000_000_000_000u64));
@@ -179,7 +179,7 @@ mod tests {
         };
 
         let fee = status
-            .fee(pool, 1_000_000_000u128, U256::from(100u64))
+            .fee(&pool, 1_000_000_000u128, U256::from(100u64))
             .unwrap();
 
         // 1% of 100 DAI + ((1 gwei * 500,000 gas) + 100 refund) valued in DAI

@@ -71,12 +71,12 @@ impl WithdrawalPaymasterExt for Withdrawal {
     {
         let pool = self.pool().await?;
 
-        let paymaster = pool
-            .paymaster_address
-            .ok_or(TornadoPaymasterError::PoolMissingPaymasterAddress(pool))?;
-        let adapter = pool
-            .adapter_address
-            .ok_or(TornadoPaymasterError::PoolMissingPaymasterAddress(pool))?;
+        let paymaster = pool.paymaster_address.ok_or_else(|| {
+            TornadoPaymasterError::PoolMissingPaymasterAddress(pool.clone())
+        })?;
+        let adapter = pool.adapter_address.ok_or_else(|| {
+            TornadoPaymasterError::PoolMissingPaymasterAddress(pool.clone())
+        })?;
 
         let mut fee_estimate = U256::from(pool.amount_wei);
 
@@ -92,7 +92,7 @@ impl WithdrawalPaymasterExt for Withdrawal {
             builder = builder.with_gas_estimate(bundler).await?;
 
             let wei = max_gas(&builder);
-            let new_fee_estimate = self.provider().quote_wei_in_fee_token(pool, wei).await?;
+            let new_fee_estimate = self.provider().quote_wei_in_fee_token(&pool, wei).await?;
             if new_fee_estimate <= fee_estimate {
                 break;
             }

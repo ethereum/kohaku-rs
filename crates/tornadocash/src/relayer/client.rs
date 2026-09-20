@@ -99,7 +99,7 @@ impl RelayerClient {
     /// for the reference implementation.
     pub async fn withdraw(
         &self,
-        pool: Pool,
+        pool: &Pool,
         call: Tornado::withdrawCall,
     ) -> Result<JobReceipt, RelayerClientError> {
         let nullifier_hash = call._nullifierHash;
@@ -129,7 +129,7 @@ impl RelayerClient {
 
         Ok(JobReceipt {
             id: response.id,
-            pool: pool,
+            pool: pool.clone(),
             nullifier_hash,
         })
     }

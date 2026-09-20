@@ -88,7 +88,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing note_a");
-    let deposit_a = tornado_provider.deposit(pool, &mut rand::rng()).await;
+    let deposit_a = tornado_provider.deposit(pool.clone(), &mut rand::rng()).await;
     let note_a = deposit_a.note();
     let receipt_a = provider
         .send_transaction(deposit_a.into())
@@ -139,6 +139,68 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
         withdraw_a.is_err(),
         "note_a's commitment should have been replaced by the reorg"
     );
+
+    Ok(())
+}
+
+/// A `TornadoProvider` persists which pools it has seen, so a fresh instance over the same
+/// store picks a previously-deposited-into pool back up without needing to be told about it.
+#[tokio::test]
+#[ignore = "run with `cargo test --release -- --ignored`"]
+async fn test_known_pools_persist_across_restart() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()
+        .ok();
+
+    let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
+    let pool = deploy_pool(provider.clone()).await?;
+
+    let store = Store::create();
+    let syncer = RpcSyncer::new(provider.clone());
+
+    info!("Depositing via the first TornadoProvider instance");
+    let note = {
+        let tornado_provider = TornadoProvider::new(
+            store.clone(),
+            syncer.clone().into(),
+            syncer.clone().into(),
+            provider.clone(),
+        );
+
+        let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
+        let note = deposit.note();
+        provider
+            .send_transaction(deposit.into())
+            .await?
+            .get_receipt()
+            .await?;
+        tornado_provider.sync().await?;
+
+        note
+    };
+
+    info!("Syncing and withdrawing via a fresh TornadoProvider over the same store");
+    let tornado_provider = TornadoProvider::new(
+        store,
+        syncer.clone().into(),
+        syncer.into(),
+        provider.clone(),
+    );
+    tornado_provider.sync().await?;
+
+    let recipient: Address = PrivateKeySigner::random().address();
+    let receipt = provider
+        .send_transaction(
+            tornado_provider
+                .withdraw(note, recipient)
+                .into_transaction(&mut rand::rng())
+                .await?,
+        )
+        .await?
+        .get_receipt()
+        .await?;
+    info!("Withdraw tx receipt: {receipt:?}");
 
     Ok(())
 }

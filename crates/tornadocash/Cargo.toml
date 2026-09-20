@@ -28,7 +28,7 @@ async-trait = { workspace = true }
 brotli = { workspace = true }
 flate2 = { workspace = true, optional = true }
 hex = { workspace = true }
-postcard = { workspace = true }
+postcard = { workspace = true, features = ["alloc"] }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["rustls"] }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
