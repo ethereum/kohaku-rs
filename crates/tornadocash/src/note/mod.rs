@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::crypto::pedersen::pedersen_hash;
+pub use crate::note::secrets::{Nullifier, Secret};
+
+mod secrets;
 
 /// Tornadocash deposit note.
 ///
@@ -13,10 +16,8 @@ use crate::crypto::pedersen::pedersen_hash;
 /// are used to withdraw the funds from the same pool later.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
-    /// 31-byte little-endian nullifier (248 bits of entropy).
-    pub nullifier: [u8; 31],
-    /// 31-byte little-endian secret (248 bits of entropy).
-    pub secret: [u8; 31],
+    pub nullifier: Nullifier,
+    pub secret: Secret,
 
     pub symbol: String,
     pub amount: String,
@@ -36,17 +37,17 @@ pub enum NoteError {
 impl Note {
     #[must_use]
     pub fn new(
-        nullifier: [u8; 31],
-        secret: [u8; 31],
-        symbol: String,
-        amount: String,
+        nullifier: impl Into<Nullifier>,
+        secret: impl Into<Secret>,
+        symbol: impl Into<String>,
+        amount: impl Into<String>,
         chain_id: u64,
     ) -> Self {
         Self {
-            nullifier,
-            secret,
-            symbol,
-            amount,
+            nullifier: nullifier.into(),
+            secret: secret.into(),
+            symbol: symbol.into(),
+            amount: amount.into(),
             chain_id,
         }
     }
@@ -65,8 +66,8 @@ impl Note {
     #[must_use]
     pub fn preimage(&self) -> [u8; 62] {
         let mut buf = [0u8; 62];
-        buf[..31].copy_from_slice(&self.nullifier);
-        buf[31..].copy_from_slice(&self.secret);
+        buf[..31].copy_from_slice(self.nullifier.as_bytes());
+        buf[31..].copy_from_slice(self.secret.as_bytes());
         buf
     }
 
@@ -77,7 +78,7 @@ impl Note {
 
     #[must_use]
     pub fn nullifier_hash(&self) -> U256 {
-        pedersen_hash(&self.nullifier)
+        pedersen_hash(self.nullifier.as_bytes())
     }
 }
 
@@ -119,13 +120,7 @@ impl FromStr for Note {
         nullifier.copy_from_slice(&bytes[..31]);
         secret.copy_from_slice(&bytes[31..]);
 
-        Ok(Note {
-            nullifier,
-            secret,
-            symbol,
-            amount,
-            chain_id,
-        })
+        Ok(Note::new(nullifier, secret, symbol, amount, chain_id))
     }
 }
 
@@ -137,10 +132,10 @@ mod tests {
     fn test_note_encoding_decoding() {
         let nullifier = [1u8; 31];
         let secret = [2u8; 31];
-        let symbol = "eth".to_string();
-        let amount = "1".to_string();
+        let symbol = "eth";
+        let amount = "1";
         let chain_id = 1;
-        let note = Note::new(nullifier, secret, symbol.clone(), amount.clone(), chain_id);
+        let note = Note::new(nullifier, secret, symbol, amount, chain_id);
         let encoded = note.to_string();
 
         insta::assert_debug_snapshot!(encoded);

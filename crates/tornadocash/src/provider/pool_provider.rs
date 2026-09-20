@@ -18,7 +18,6 @@ use crate::{
     merkle_tree::TcMerkleTree,
     note::Note,
     pool::{Asset, Pool},
-    provider::call::Call,
 };
 
 /// A provider for a single tornadocash pool.
@@ -58,7 +57,7 @@ impl PoolProvider {
 
     /// Get the pool associated with this provider.
     #[must_use]
-    pub fn pool(&self) -> &Pool {
+    pub fn pool(&self) -> Pool {
         self.indexer.pool()
     }
 
@@ -67,63 +66,9 @@ impl PoolProvider {
         Ok(self.indexer.sync().await?)
     }
 
-    /// Create a deposit transaction and note for this pool.
-    #[tracing::instrument(skip_all)]
-    pub fn deposit(&self, rng: &mut impl CryptoRng) -> (Call, Note) {
-        let (deposit_call, note) = self.deposit_call(rng);
-        let calldata = deposit_call.abi_encode();
-        let value = match self.pool().asset {
-            Asset::Native { .. } => self.pool().amount_wei,
-            Asset::Erc20 { .. } => 0,
-        };
-
-        let tx_data = Call::new(self.pool().address, calldata.into(), U256::from(value));
-        (tx_data, note)
-    }
-
-    /// Create the deposit calldata and note for this pool.
-    #[tracing::instrument(skip_all)]
-    pub fn deposit_call(&self, rng: &mut impl CryptoRng) -> (Tornado::depositCall, Note) {
-        let note = Note::random(
-            &self.pool().symbol(),
-            &self.pool().amount(),
-            self.pool().chain_id,
-            rng,
-        );
-
-        let call = Tornado::depositCall {
-            _commitment: note.commitment().into(),
-        };
-
-        (call, note)
-    }
-
-    /// Create a withdrawal transaction for the given note to the recipient
-    /// address.
-    pub async fn withdraw(
-        &self,
-        note: &Note,
-        recipient: Address,
-        relayer: Option<Address>,
-        fee: Option<U256>,
-        refund: Option<U256>,
-        rng: &mut impl CryptoRng,
-    ) -> Result<Call, PoolProviderError> {
-        let call = self
-            .withdraw_call(note, recipient, relayer, fee, refund, rng)
-            .await?
-            .abi_encode();
-
-        Ok(Call::new(
-            self.pool().address,
-            call.into(),
-            refund.unwrap_or_default(),
-        ))
-    }
-
     /// Create the withdrawal calldata for the given note to the recipient address.
     #[tracing::instrument(skip_all)]
-    pub async fn withdraw_call(
+    pub async fn prove_withdrawal(
         &self,
         note: &Note,
         recipient: Address,
@@ -132,19 +77,7 @@ impl PoolProvider {
         refund: Option<U256>,
         mut rng: &mut impl CryptoRng,
     ) -> Result<Tornado::withdrawCall, PoolProviderError> {
-        if note.chain_id != self.pool().chain_id
-            || note.symbol != self.pool().symbol()
-            || note.amount != self.pool().amount()
-        {
-            return Err(PoolProviderError::DifferentPool(
-                note.chain_id,
-                note.symbol.clone(),
-                note.amount.clone(),
-                self.pool().chain_id,
-                self.pool().symbol(),
-                self.pool().amount(),
-            ));
-        }
+        self.matches_pool(note)?;
 
         let merkle_tree = self.indexer.tree();
         let root = merkle_tree.root().await?;
@@ -161,8 +94,8 @@ impl PoolProvider {
             relayer.into_word().into(),
             fee,
             refund,
-            U256::from_le_slice(&note.nullifier),
-            U256::from_le_slice(&note.secret),
+            note.nullifier.into(),
+            note.secret.into(),
             path_elements,
             path_indices,
         );
@@ -207,6 +140,26 @@ impl PoolProvider {
             .await?;
 
         Ok(Tornado::isSpentCall::abi_decode_returns(&result)?)
+    }
+
+    /// Checks if the given note matches this provider's pool.
+    #[must_use]
+    fn matches_pool(&self, note: &Note) -> Result<(), PoolProviderError> {
+        if note.chain_id != self.pool().chain_id
+            || note.symbol != self.pool().symbol()
+            || note.amount != self.pool().amount()
+        {
+            return Err(PoolProviderError::DifferentPool(
+                note.chain_id,
+                note.symbol.clone(),
+                note.amount.clone(),
+                self.pool().chain_id,
+                self.pool().symbol(),
+                self.pool().amount(),
+            ));
+        }
+
+        Ok(())
     }
 
     async fn quote_wei_in_token(

@@ -13,7 +13,7 @@ use kohaku_fork_kit::{
 };
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer, provider::TornadoProvider, userop_provider::TornadoPaymasterExt,
+    indexer::rpc::RpcSyncer, provider::TornadoProvider, userop_provider::WithdrawalPaymasterExt,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
@@ -71,15 +71,15 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
-    info!("Deposit call: {deposit_call:?}");
-    info!("Deposit note: {note:?}");
+    let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+    let note = deposit.note();
+    info!("Deposit call: {deposit:?}");
 
     info!("Syncing pool provider");
     tornado_provider.sync().await?;
 
     provider
-        .send_transaction(deposit_call.into())
+        .send_transaction(deposit.into())
         .await?
         .get_receipt()
         .await?;
@@ -101,23 +101,20 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let owner = PrivateKeySigner::random();
     let smart_account = Simple7702SmartAccount::new(provider.clone(), owner.address(), chain_id);
 
-    let userop = UserOperationBuilder::new_with_smart_account(&smart_account)
+    let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
         .with_call(&vec![Call {
             target: address!("0x000000000000000000000000000000000000dead"),
             ..Default::default()
-        }])
-        .with_tornadocash_paymaster(
-            &*alto,
-            &tornado_provider,
-            &note,
-            owner.address(),
-            &mut rand::rng(),
-        )
+        }]);
+
+    let builder = tornado_provider
+        .withdraw(note, owner.address())
         .await?
-        .build()
-        .sign(&owner)
+        .sponsor(&*alto, builder, &mut rand::rng())
         .await?;
+
+    let userop = builder.build().sign(&owner).await?;
 
     let userop_hash = alto.send_user_operation(&userop).await?;
     let userop_receipt = alto.wait_for_receipt(userop_hash).await?;

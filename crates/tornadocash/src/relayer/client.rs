@@ -20,8 +20,6 @@ pub enum RelayerClientError {
     RequestFailed(#[from] reqwest::Error),
     #[error("Relayer returned an error: {0}")]
     RelayerError(String),
-    #[error("Provider error: {0}")]
-    Provider(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +99,7 @@ impl RelayerClient {
     /// for the reference implementation.
     pub async fn withdraw(
         &self,
-        pool: &Pool,
+        pool: Pool,
         call: Tornado::withdrawCall,
     ) -> Result<JobReceipt, RelayerClientError> {
         let nullifier_hash = call._nullifierHash;
@@ -131,7 +129,7 @@ impl RelayerClient {
 
         Ok(JobReceipt {
             id: response.id,
-            pool: *pool,
+            pool: pool,
             nullifier_hash,
         })
     }

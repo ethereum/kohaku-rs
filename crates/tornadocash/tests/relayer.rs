@@ -39,9 +39,10 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
+    let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+    let note = deposit.note();
     provider
-        .send_transaction(deposit_call.into())
+        .send_transaction(deposit.into())
         .await?
         .get_receipt()
         .await?;
@@ -65,16 +66,12 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let relayer = Relayer::from_client(relayer_instance.clone());
 
-    let fee = relayer
-        .estimate_fee(&tornado_provider, &note, None)
-        .await
-        .expect("relayer should quote a fee for a supported pool");
-    info!("Relayer quoted fee: {fee}");
-
     info!("Building withdrawal, relaying via {relayer_signer:?}");
     let recipient = PrivateKeySigner::random().address();
-    let receipt = relayer
-        .withdraw(&tornado_provider, &note, recipient, None, &mut rand::rng())
+    let receipt = tornado_provider
+        .withdraw(note, recipient)
+        .await?
+        .relay(&relayer, &mut rand::rng())
         .await?;
     info!("Relayer accepted withdrawal job {receipt:?}");
 

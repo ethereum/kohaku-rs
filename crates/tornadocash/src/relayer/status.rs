@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
-use crate::pool::{Asset, Pool};
+use crate::{
+    pool::{Asset, Pool},
+    relayer::RelayerError,
+};
 
 /// Relayer status response.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -36,7 +39,7 @@ pub struct Health {
 
 impl RelayerStatus {
     /// Checks if the relayer supports the given pool.
-    pub fn supports(&self, pool: &Pool) -> bool {
+    pub fn supports(&self, pool: Pool) -> bool {
         if pool.chain_id != self.net_id {
             return false;
         }
@@ -60,31 +63,33 @@ impl RelayerStatus {
 
     /// Calculates the fee for a transaction.
     ///
-    /// Returns `None` if the relayer does not support the given pool.
-    pub fn fee(&self, pool: &Pool, gas_price: u128, amount: U256, refund: U256) -> Option<U256> {
+    /// # Errors
+    /// Returns an error if the relayer does not support the given pool.
+    pub fn fee(&self, pool: Pool, gas_price: u128, refund: U256) -> Result<U256, RelayerError> {
         if !self.supports(pool) {
-            return None;
+            return Err(RelayerError::UnsupportedPool(pool));
         }
 
         // Scale the fee percentage into a fixed-point integer.
         const FEE_PRECISION: u64 = 1_000_000;
 
         let fee_scaled = (self.tornado_service_fee / 100.0 * FEE_PRECISION as f64).round() as u64;
-        let fee_percent = (amount * U256::from(fee_scaled)) / U256::from(FEE_PRECISION);
+        let fee_percent =
+            (U256::from(pool.amount_wei) * U256::from(fee_scaled)) / U256::from(FEE_PRECISION);
         let expense = U256::from(gas_price) * U256::from(500_000);
 
         // If the asset is native, the fee is `expense + fee_percent`
         if matches!(pool.asset, Asset::Native { .. }) {
-            return Some(fee_percent + expense);
+            return Ok(fee_percent + expense);
         }
 
         let Some(price) = self.eth_prices.get(&pool.symbol()) else {
-            return None;
+            return Err(RelayerError::UnsupportedPool(pool));
         };
 
         // If the asset is non-native, the fee is:
         // `((expense + refund) * 10^decimals / price) + fee_percent`
-        Some(
+        Ok(
             (expense + refund) * U256::from(10).pow(U256::from(pool.asset.decimals())) / *price
                 + fee_percent,
         )
@@ -114,19 +119,19 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(status.supports(&pool));
+        assert!(status.supports(pool));
 
         let mut different_net_id_pool = pool.clone();
         different_net_id_pool.chain_id = 2;
-        assert!(!status.supports(&different_net_id_pool));
+        assert!(!status.supports(different_net_id_pool));
 
         let mut different_address_pool = pool.clone();
         different_address_pool.address = address!("0x000000000000000000000000000000000000cafe");
-        assert!(!status.supports(&different_address_pool));
+        assert!(!status.supports(different_address_pool));
 
         let mut different_amount_pool = pool.clone();
         different_amount_pool.amount_wei = 2_000_000u64.into();
-        assert!(!status.supports(&different_amount_pool));
+        assert!(!status.supports(different_amount_pool));
     }
 
     #[test]
@@ -148,15 +153,10 @@ mod tests {
             ..Default::default()
         };
 
-        let fee = status.fee(
-            &pool,
-            1_000_000_000u128,
-            U256::from(pool.amount_wei),
-            U256::ZERO,
-        );
+        let fee = status.fee(pool, 1_000_000_000u128, U256::ZERO).unwrap();
 
         // 1% of 1 ETH + (1 gwei * 500,000 gas)
-        assert_eq!(fee, Some(U256::from(10_500_000_000_000_000u64)));
+        assert_eq!(fee, U256::from(10_500_000_000_000_000u64));
     }
 
     #[test]
@@ -178,14 +178,11 @@ mod tests {
             ..Default::default()
         };
 
-        let fee = status.fee(
-            &pool,
-            1_000_000_000u128,
-            U256::from(pool.amount_wei),
-            U256::from(100u64),
-        );
+        let fee = status
+            .fee(pool, 1_000_000_000u128, U256::from(100u64))
+            .unwrap();
 
         // 1% of 100 DAI + ((1 gwei * 500,000 gas) + 100 refund) valued in DAI
-        assert_eq!(fee, Some(U256::from(1_000_500_000_000_000_100u64)));
+        assert_eq!(fee, U256::from(1_000_500_000_000_000_100u64));
     }
 }

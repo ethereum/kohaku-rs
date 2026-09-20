@@ -66,8 +66,8 @@ impl Indexer {
     }
 
     #[must_use]
-    pub fn pool(&self) -> &Pool {
-        &self.pool
+    pub fn pool(&self) -> Pool {
+        self.pool
     }
 
     #[must_use]

@@ -9,35 +9,29 @@ use kohaku_userop_kit::{
 };
 
 use crate::{
-    abis::tornado::Tornado,
-    note::Note,
-    pool::Pool,
-    provider::{TornadoProvider, TornadoProviderError},
+    abis::tornado::Tornado, pool::Pool, provider::TornadoProviderError, withdrawal::Withdrawal,
 };
 
 const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 
-/// Extension trait for `UserOperationBuilder` that adds support for tornadocash paymasters.
+/// Extension trait for [`Withdrawal`] that adds support for tornadocash paymasters.
 ///
 /// Tornadocash paymasters use a shielded note to pay for a `UserOp`'s gas. The leftover note value
-/// is sent to the provided recipient address.
-pub trait TornadoPaymasterExt: Sized {
-    fn with_tornadocash_paymaster<R>(
+/// is sent to the withdrawal's recipient address.
+pub trait WithdrawalPaymasterExt: Sized {
+    fn sponsor<S, R>(
         self,
         bundler: &dyn Bundler,
-        provider: &TornadoProvider,
-        note: &Note,
-        recipient: Address,
+        builder: UserOperationBuilder<S>,
         rng: &mut R,
-    ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
+    ) -> impl std::future::Future<Output = Result<UserOperationBuilder<S>, TornadoPaymasterError>>
     where
+        S: Send + Sync,
         R: rand::CryptoRng;
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum TornadoPaymasterError {
-    #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
-    UnknownPool(String, String, u64),
     #[error("Pool missing paymaster address: {0}")]
     PoolMissingPaymasterAddress(Pool),
     #[error("Bundler error: {0}")]
@@ -63,21 +57,19 @@ sol!(
     }
 );
 
-impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
+impl WithdrawalPaymasterExt for Withdrawal {
     #[tracing::instrument(skip_all)]
-    async fn with_tornadocash_paymaster<R>(
+    async fn sponsor<S, R>(
         self,
         bundler: &dyn Bundler,
-        provider: &TornadoProvider,
-        note: &Note,
-        recipient: Address,
+        mut builder: UserOperationBuilder<S>,
         rng: &mut R,
-    ) -> Result<Self, TornadoPaymasterError>
+    ) -> Result<UserOperationBuilder<S>, TornadoPaymasterError>
     where
+        S: Send + Sync,
         R: rand::CryptoRng,
     {
-        let mut builder = self;
-        let pool = provider.pool_from_note(note).await?;
+        let pool = self.pool();
 
         let paymaster = pool
             .paymaster_address
@@ -89,21 +81,18 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
         let mut fee_estimate = U256::from(pool.amount_wei);
 
         loop {
-            builder = build_with_fee(
-                builder,
-                paymaster,
-                adapter,
-                fee_estimate,
-                note,
-                recipient,
-                provider,
-                rng,
-            )
-            .await?;
+            let withdraw_call = self
+                .clone()
+                .with_relayer(paymaster)
+                .with_fee(fee_estimate)
+                .into_call(rng)
+                .await?;
+            let paymaster_data = encode_paymaster_data(adapter, withdraw_call);
+            builder = builder.with_paymaster_and_data(paymaster, paymaster_data);
             builder = builder.with_gas_estimate(bundler).await?;
 
             let wei = max_gas(&builder);
-            let new_fee_estimate = provider.quote_wei_in_fee_token(pool, wei).await?;
+            let new_fee_estimate = self.provider().quote_wei_in_fee_token(pool, wei).await?;
             if new_fee_estimate <= fee_estimate {
                 break;
             }
@@ -114,30 +103,6 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
 
         Ok(builder)
     }
-}
-
-/// Builds the tornadocash paymaster data with the specified fee.
-#[allow(clippy::too_many_arguments)]
-async fn build_with_fee<S, R>(
-    builder: UserOperationBuilder<S>,
-    paymaster: Address,
-    adapter: Address,
-    fee: U256,
-    note: &Note,
-    recipient: Address,
-    tornado_provider: &TornadoProvider,
-    rng: &mut R,
-) -> Result<UserOperationBuilder<S>, TornadoPaymasterError>
-where
-    R: rand::CryptoRng,
-{
-    let withdraw_call = tornado_provider
-        .withdraw_call(note, recipient, Some(paymaster), Some(fee), None, rng)
-        .await?;
-    let paymaster_data = encode_paymaster_data(adapter, withdraw_call);
-    let builder = builder.with_paymaster_and_data(paymaster, paymaster_data);
-
-    Ok(builder)
 }
 
 /// Encodes the paymaster data for a tornadocash withdrawal call.

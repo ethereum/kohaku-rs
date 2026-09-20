@@ -7,15 +7,10 @@
 //!
 //! See [tornado-relayer](https://github.com/tornado-dao/tornado-relayer/tree/mainnet-v5) for
 //! the reference implementation.
-use alloy::{
-    primitives::{Address, TxHash},
-    providers::Provider,
-};
-use rand::CryptoRng;
-use ruint::aliases::U256;
+use alloy::{primitives::TxHash, providers::Provider};
 
 use crate::{
-    note::Note,
+    abis::tornado::Tornado,
     pool::Pool,
     provider::{TornadoProvider, TornadoProviderError},
     relayer::{
@@ -36,7 +31,7 @@ pub struct Relayer {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum RelayerProviderError {
+pub enum RelayerError {
     #[error("Relayer does not support pool: {0}")]
     UnsupportedPool(Pool),
     #[error(transparent)]
@@ -83,50 +78,21 @@ impl Relayer {
         }
     }
 
-    /// Quotes the relayer's current fee for withdrawing `note`.
-    ///
-    /// # Errors
-    /// Returns an error if the pool cannot be found, the relayer cannot be reached, or does not
-    /// support the pool.
-    pub async fn estimate_fee(
-        &self,
-        provider: &TornadoProvider,
-        note: &Note,
-        refund: Option<U256>,
-    ) -> Result<U256, RelayerProviderError> {
-        let pool = provider.pool_from_note(note).await?;
-        let (_, fee) = self.quote(provider, &pool, refund).await?;
-        Ok(fee)
+    pub async fn status(&self) -> Result<RelayerStatus, RelayerError> {
+        Ok(self.client.status().await?)
     }
 
-    /// Builds a withdrawal proof for `note` and submits it to the relayer.
+    /// Submits a withdrawal request to the relayer.
     ///
     /// # Errors
-    /// Returns an error if the pool cannot be resolved, the relayer does not support it, the
-    /// withdrawal proof cannot be built, or the relayer rejects the submission.
+    /// Returns an error if the request cannot be submitted or the relayer returns an error.
     pub async fn withdraw(
         &self,
-        provider: &TornadoProvider,
-        note: &Note,
-        recipient: Address,
-        refund: Option<U256>,
-        rng: &mut impl CryptoRng,
-    ) -> Result<JobReceipt, RelayerProviderError> {
-        let pool = provider.pool_from_note(note).await?;
-        let (status, fee) = self.quote(provider, &pool, refund).await?;
-
-        let call = provider
-            .withdraw_call(
-                note,
-                recipient,
-                Some(status.reward_account),
-                Some(fee),
-                refund,
-                rng,
-            )
-            .await?;
-
-        Ok(self.client.withdraw(&pool, call).await?)
+        pool: Pool,
+        call: Tornado::withdrawCall,
+    ) -> Result<JobReceipt, RelayerError> {
+        let receipt = self.client.withdraw(pool, call).await?;
+        Ok(receipt)
     }
 
     /// Polls the relayer until `receipt`'s withdrawal is confirmed on-chain.
@@ -137,7 +103,7 @@ impl Relayer {
         &self,
         provider: &TornadoProvider,
         receipt: &JobReceipt,
-    ) -> Result<Option<TxHash>, RelayerProviderError> {
+    ) -> Result<Option<TxHash>, RelayerError> {
         let start = std::time::Instant::now();
         while start.elapsed() < self.timeout {
             if let PollOutcome::Done(tx_hash) = self.poll_job(provider, receipt).await? {
@@ -153,26 +119,7 @@ impl Relayer {
             return Ok(None);
         }
 
-        Err(RelayerProviderError::Timeout)
-    }
-
-    /// Fetches the relayer's status and quotes a fee for `pool`.
-    async fn quote(
-        &self,
-        provider: &TornadoProvider,
-        pool: &Pool,
-        refund: Option<U256>,
-    ) -> Result<(RelayerStatus, U256), RelayerProviderError> {
-        let gas_price = provider.inner_provider().get_gas_price().await?;
-        let amount = U256::from(pool.amount_wei);
-        let refund = refund.unwrap_or_default();
-
-        let status = self.client.status().await?;
-        let fee = status
-            .fee(pool, gas_price, amount, refund)
-            .ok_or(RelayerProviderError::UnsupportedPool(*pool))?;
-
-        Ok((status, fee))
+        Err(RelayerError::Timeout)
     }
 
     /// Polls the relayer for the status of `receipt`'s withdrawal job.
@@ -180,7 +127,7 @@ impl Relayer {
         &self,
         provider: &TornadoProvider,
         receipt: &JobReceipt,
-    ) -> Result<PollOutcome, RelayerProviderError> {
+    ) -> Result<PollOutcome, RelayerError> {
         let job = self.client.job_status(&receipt.id).await?;
 
         match decide_job_action(&job) {
@@ -192,9 +139,9 @@ impl Relayer {
 
                 match is_spent {
                     true => Ok(PollOutcome::Done(None)),
-                    false => Err(RelayerProviderError::Relayer(
-                        RelayerClientError::RelayerError(failed_reason),
-                    )),
+                    false => Err(RelayerError::Relayer(RelayerClientError::RelayerError(
+                        failed_reason,
+                    ))),
                 }
             }
             JobAction::CheckReceipt(tx_hash) => {
