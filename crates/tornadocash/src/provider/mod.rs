@@ -1,3 +1,226 @@
 pub mod call;
-pub mod pool_provider;
-pub mod tornado_provider;
+mod pool_provider;
+
+use std::sync::Arc;
+
+use alloy::{
+    primitives::{Address, B256},
+    providers::DynProvider,
+};
+use kohaku_kv_store::Store;
+use rand::CryptoRng;
+use ruint::aliases::U256;
+use thiserror::Error;
+use tokio::sync::Mutex;
+
+use crate::{
+    abis::tornado::Tornado,
+    indexer::{Indexer, syncer::Syncer, verifier::Verifier},
+    note::Note,
+    pool::Pool,
+    provider::{
+        call::Call,
+        pool_provider::{PoolProvider, PoolProviderError},
+    },
+};
+
+/// A provider for multiple tornadocash pools.
+///
+/// The provider manages multiple `PoolProvider`s for requested pools, providing a unified
+/// interface.
+#[derive(Clone)]
+pub struct TornadoProvider {
+    store: Store,
+    syncer: Syncer,
+    verifier: Verifier,
+    provider: DynProvider,
+
+    pools: Arc<Mutex<Vec<PoolProvider>>>,
+}
+
+#[derive(Debug, Error)]
+pub enum TornadoProviderError {
+    #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
+    UnknownPool(String, String, u64),
+    #[error(transparent)]
+    Pool(#[from] PoolProviderError),
+}
+
+impl TornadoProvider {
+    #[must_use]
+    pub fn new(store: Store, syncer: Syncer, verifier: Verifier, provider: DynProvider) -> Self {
+        Self {
+            store,
+            syncer,
+            verifier,
+            provider,
+            pools: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Sync all pools managed by this provider.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be synced.
+    pub async fn sync(&self) -> Result<(), TornadoProviderError> {
+        for provider in self.pools.lock().await.iter() {
+            provider.sync().await?;
+        }
+        Ok(())
+    }
+
+    /// Create a deposit transaction and note for a given pool.
+    pub async fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> (Call, Note) {
+        let provider = self.provider(pool).await;
+        provider.deposit(rng)
+    }
+
+    /// Create deposit calldata and note for a given pool.
+    pub async fn deposit_call(
+        &self,
+        pool: Pool,
+        rng: &mut impl CryptoRng,
+    ) -> (Tornado::depositCall, Note) {
+        let provider = self.provider(pool).await;
+        provider.deposit_call(rng)
+    }
+
+    /// Create a withdrawal transaction for the given note to the recipient address.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be found, is not initialized, or if the withdrawal
+    /// cannot be created.
+    pub async fn withdraw(
+        &self,
+        note: &Note,
+        recipient: Address,
+        relayer: Option<Address>,
+        fee: Option<U256>,
+        refund: Option<U256>,
+        rng: &mut impl CryptoRng,
+    ) -> Result<Call, TornadoProviderError> {
+        let provider = self.provider_from_note(note).await?;
+        provider.sync().await?;
+
+        Ok(provider
+            .withdraw(note, recipient, relayer, fee, refund, rng)
+            .await?)
+    }
+
+    /// Create withdrawal calldata.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be synced or the withdrawal call cannot be created.
+    pub async fn withdraw_call(
+        &self,
+        note: &Note,
+        recipient: Address,
+        relayer: Option<Address>,
+        fee: Option<U256>,
+        refund: Option<U256>,
+        rng: &mut impl CryptoRng,
+    ) -> Result<Tornado::withdrawCall, TornadoProviderError> {
+        let provider = self.provider_from_note(note).await?;
+        provider.sync().await?;
+
+        Ok(provider
+            .withdraw_call(note, recipient, relayer, fee, refund, rng)
+            .await?)
+    }
+
+    /// Quote the amount of fee token from a given wei amount.
+    ///
+    /// # Errors
+    /// Returns an error if a contract call fails.
+    pub async fn quote_wei_in_fee_token(
+        &self,
+        pool: Pool,
+        wei_amount: U256,
+    ) -> Result<U256, TornadoProviderError> {
+        let provider = self.provider(pool).await;
+        Ok(provider.quote_wei_in_fee_token(wei_amount).await?)
+    }
+
+    /// Check if a note has been spent.
+    ///
+    /// # Errors
+    /// Returns an error if the pool for this note cannot be found or if a contract call fails.
+    pub async fn is_spent(&self, note: &Note) -> Result<bool, TornadoProviderError> {
+        let provider = self.provider_from_note(note).await?;
+        Ok(provider.is_spent(note.nullifier_hash().into()).await?)
+    }
+
+    /// Checks if a nullifier hash has been spent in a given pool.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be found or if a contract call fails.
+    pub async fn is_nullifier_spent(
+        &self,
+        pool: Pool,
+        nullifier_hash: B256,
+    ) -> Result<bool, TornadoProviderError> {
+        let provider = self.provider(pool).await;
+        Ok(provider.is_spent(nullifier_hash).await?)
+    }
+
+    /// Returns the underlying alloy DynProvider
+    pub(crate) fn inner_provider(&self) -> DynProvider {
+        self.provider.clone()
+    }
+
+    /// Gets the pool provider for a given note, creating it if it doesn't exist.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be created.
+    pub(crate) async fn provider_from_note(
+        &self,
+        note: &Note,
+    ) -> Result<PoolProvider, TornadoProviderError> {
+        let pool = self.pool_from_note(note).await?;
+        Ok(self.provider(pool).await)
+    }
+
+    /// Get the pool for a given note.
+    ///
+    /// Searches both this provider's registered pools and the set of known pools for a pool
+    /// matching the note's parameters.
+    pub(crate) async fn pool_from_note(&self, note: &Note) -> Result<Pool, TornadoProviderError> {
+        let pools = self.pools.lock().await;
+
+        if let Some(pool) = pools.iter().map(PoolProvider::pool).find(|pool| {
+            pool.chain_id == note.chain_id
+                && pool.symbol() == note.symbol
+                && pool.amount() == note.amount
+        }) {
+            return Ok(*pool);
+        }
+
+        Pool::from_raw(&note.amount, &note.symbol, note.chain_id).ok_or_else(|| {
+            TornadoProviderError::UnknownPool(
+                note.amount.clone(),
+                note.symbol.clone(),
+                note.chain_id,
+            )
+        })
+    }
+
+    /// Get a reference to the provider for a given pool, creating it if it doesn't exist.
+    async fn provider(&self, pool: Pool) -> PoolProvider {
+        let mut pools = self.pools.lock().await;
+
+        if let Some(p) = pools.iter().find(|p| *p.pool() == pool) {
+            return p.clone();
+        }
+
+        let indexer = Indexer::new(
+            pool,
+            self.store.scope(pool.id()),
+            self.syncer.clone(),
+            self.verifier.clone(),
+        );
+        let provider = PoolProvider::new(indexer, self.provider.clone());
+
+        pools.push(provider.clone());
+        provider
+    }
+}

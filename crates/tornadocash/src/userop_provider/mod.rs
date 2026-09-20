@@ -1,6 +1,5 @@
 use alloy::{
     primitives::{Address, Bytes, U256},
-    providers::DynProvider,
     sol,
     sol_types::SolValue,
 };
@@ -13,11 +12,8 @@ use crate::{
     abis::tornado::Tornado,
     note::Note,
     pool::Pool,
-    provider::tornado_provider::{TornadoProvider, TornadoProviderError},
+    provider::{TornadoProvider, TornadoProviderError},
 };
-
-mod quote;
-use quote::QuoteError;
 
 const FEE_BUFFER_BPS: u128 = 100; // 1% buffer
 
@@ -29,8 +25,7 @@ pub trait TornadoPaymasterExt: Sized {
     fn with_tornadocash_paymaster<R>(
         self,
         bundler: &dyn Bundler,
-        provider: &DynProvider,
-        tornado_provider: &mut TornadoProvider,
+        provider: &TornadoProvider,
         note: &Note,
         recipient: Address,
         rng: &mut R,
@@ -49,8 +44,6 @@ pub enum TornadoPaymasterError {
     Bundler(#[from] kohaku_userop_kit::bundler::BundlerError),
     #[error(transparent)]
     TornadoProvider(#[from] TornadoProviderError),
-    #[error(transparent)]
-    Quote(#[from] QuoteError),
 }
 
 sol!(
@@ -75,8 +68,7 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
     async fn with_tornadocash_paymaster<R>(
         self,
         bundler: &dyn Bundler,
-        provider: &DynProvider,
-        tornado_provider: &mut TornadoProvider,
+        provider: &TornadoProvider,
         note: &Note,
         recipient: Address,
         rng: &mut R,
@@ -85,7 +77,7 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
         R: rand::CryptoRng,
     {
         let mut builder = self;
-        let pool = tornado_provider.pool_from_note(note).await?;
+        let pool = provider.pool_from_note(note).await?;
 
         let paymaster = pool
             .paymaster_address
@@ -104,14 +96,14 @@ impl<S: Sized + Send + Sync> TornadoPaymasterExt for UserOperationBuilder<S> {
                 fee_estimate,
                 note,
                 recipient,
-                tornado_provider,
+                provider,
                 rng,
             )
             .await?;
             builder = builder.with_gas_estimate(bundler).await?;
 
             let wei = max_gas(&builder);
-            let new_fee_estimate = quote::quote_wei_in_fee_token(provider, &pool, wei).await?;
+            let new_fee_estimate = provider.quote_wei_in_fee_token(pool, wei).await?;
             if new_fee_estimate <= fee_estimate {
                 break;
             }
@@ -133,7 +125,7 @@ async fn build_with_fee<S, R>(
     fee: U256,
     note: &Note,
     recipient: Address,
-    tornado_provider: &mut TornadoProvider,
+    tornado_provider: &TornadoProvider,
     rng: &mut R,
 ) -> Result<UserOperationBuilder<S>, TornadoPaymasterError>
 where

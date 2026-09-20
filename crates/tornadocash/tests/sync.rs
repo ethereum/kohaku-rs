@@ -1,7 +1,7 @@
 use alloy::providers::{Provider, ProviderBuilder};
 use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_kv_store::Store;
-use kohaku_tornadocash::{indexer::rpc::RpcSyncer, provider::pool_provider::PoolProvider};
+use kohaku_tornadocash::{indexer::rpc::RpcSyncer, provider::TornadoProvider};
 use tracing::info;
 
 #[tokio::test]
@@ -18,12 +18,16 @@ async fn test_sync() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let pool_provider =
-        PoolProvider::new(pool, store, syncer.clone().into(), syncer.clone().into());
+    let tornado_provider = TornadoProvider::new(
+        store,
+        syncer.clone().into(),
+        syncer.clone().into(),
+        provider.clone(),
+    );
 
     // Populate many arbitrary deposits
     for _ in 0..50 {
-        let (deposit_call, _) = pool_provider.deposit(&mut rand::rng());
+        let (deposit_call, _) = tornado_provider.deposit(pool, &mut rand::rng()).await;
         provider
             .send_transaction(deposit_call.into())
             .await?
@@ -31,8 +35,8 @@ async fn test_sync() -> Result<(), anyhow::Error> {
             .await?;
     }
 
-    info!("Syncing pool provider");
-    pool_provider.sync().await?;
+    info!("Syncing provider");
+    tornado_provider.sync().await?;
 
     Ok(())
 }

@@ -146,10 +146,7 @@ impl RelayerBuilder {
             "relayer-worker",
         ));
 
-        let relayer = RelayerClient::new(
-            &format!("http://127.0.0.1:{port}"),
-            u32::try_from(self.pool.chain_id)?,
-        );
+        let relayer = RelayerClient::new(&format!("http://127.0.0.1:{port}"));
 
         if timeout(READY_TIMEOUT, wait_ready(&relayer)).await.is_err() {
             let _ = redis.start_kill();

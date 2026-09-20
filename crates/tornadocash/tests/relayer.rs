@@ -1,6 +1,5 @@
 use alloy::{
     node_bindings::Anvil,
-    primitives::U256,
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
@@ -9,9 +8,7 @@ use kohaku_fork_kit::{
     relayer::RelayerBuilder,
 };
 use kohaku_kv_store::Store;
-use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider, relayer::RelayerProvider,
-};
+use kohaku_tornadocash::{indexer::rpc::RpcSyncer, provider::TornadoProvider, relayer::Relayer};
 use tracing::info;
 
 #[tokio::test]
@@ -34,8 +31,12 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let tornado_provider =
-        TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
+    let tornado_provider = TornadoProvider::new(
+        store,
+        syncer.clone().into(),
+        syncer.clone().into(),
+        provider.clone(),
+    );
 
     info!("Depositing into pool");
     let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
@@ -49,7 +50,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     info!("Starting local tornado-relayer");
     let relayer_signer = PrivateKeySigner::random();
     let reward_account = PrivateKeySigner::random().address();
-    let relayer = RelayerBuilder::new(
+    let relayer_instance = RelayerBuilder::new(
         anvil.endpoint(),
         anvil.ws_endpoint(),
         pool,
@@ -62,23 +63,24 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     .spawn()
     .await?;
 
-    let mut relayer_provider =
-        RelayerProvider::new(relayer.clone(), tornado_provider, provider.clone());
+    let relayer = Relayer::from_client(relayer_instance.clone());
 
-    let fee = relayer_provider
-        .estimate_fee(&note, U256::ZERO)
+    let fee = relayer
+        .estimate_fee(&tornado_provider, &note, None)
         .await
         .expect("relayer should quote a fee for a supported pool");
     info!("Relayer quoted fee: {fee}");
 
     info!("Building withdrawal, relaying via {relayer_signer:?}");
     let recipient = PrivateKeySigner::random().address();
-    let receipt = relayer_provider
-        .withdraw(&note, recipient, U256::ZERO, &mut rand::rng())
+    let receipt = relayer
+        .withdraw(&tornado_provider, &note, recipient, None, &mut rand::rng())
         .await?;
     info!("Relayer accepted withdrawal job {receipt:?}");
 
-    let tx_hash = relayer_provider.await_confirmation(&receipt).await?;
+    let tx_hash = relayer
+        .await_confirmation(&tornado_provider, &receipt)
+        .await?;
     assert!(
         tx_hash.is_some(),
         "relayer should have confirmed the withdrawal on-chain"

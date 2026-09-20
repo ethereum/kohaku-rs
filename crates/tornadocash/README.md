@@ -18,7 +18,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     pool::Pool,
-    provider::tornado_provider::TornadoProvider,
+    provider::TornadoProvider,
 };
 
 #[tokio::main]
@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Store::create(),
         syncer.clone().into(),
         syncer.into(),
+        provider.clone(),
     );
 
     tornado_provider.sync().await?;
@@ -49,7 +50,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     pool::Pool,
-    provider::tornado_provider::TornadoProvider,
+    provider::TornadoProvider,
 };
 
 #[tokio::main]
@@ -64,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #         Store::create(),
 #         syncer.clone().into(),
 #         syncer.into(),
+#         provider.clone(),
 #     );
 # 
 #     tornado_provider.sync().await?;
@@ -85,8 +87,8 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     pool::Pool,
-    provider::tornado_provider::TornadoProvider,
-    relayer::{RelayerProvider, client::RelayerClient},
+    provider::TornadoProvider,
+    relayer::Relayer,
 };
 
 #[tokio::main]
@@ -100,19 +102,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #         Store::create(),
 #         syncer.clone().into(),
 #         syncer.into(),
+#         provider.clone(),
 #     );
 # 
 #     tornado_provider.sync().await?;
 # 
     let relayer_url = "https://mainnet.relayer.com";
-
-    let relayer_client = RelayerClient::new(relayer_url, 11155111);
-    let mut relayer_provider = RelayerProvider::new(relayer_client, tornado_provider, provider);
+    let relayer = Relayer::new(relayer_url);
 
     let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
     let recipient = "0xrecipient".parse()?;
-    let receipt = relayer_provider.withdraw(&note, recipient, U256::ZERO, &mut rand::rng()).await?;
-    let tx_hash = relayer_provider.await_confirmation(&receipt).await?;
+    let receipt = relayer.withdraw(&tornado_provider, &note, recipient, None, &mut rand::rng()).await?;
+    let tx_hash = relayer.await_confirmation(&tornado_provider, &receipt).await?;
 
     Ok(())
 }
@@ -127,7 +128,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     pool::Pool,
-    provider::tornado_provider::TornadoProvider,
+    provider::TornadoProvider,
     userop_provider::TornadoPaymasterExt,
 };
 use kohaku_userop_kit::{
@@ -143,10 +144,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #         .erased();
 # 
 #     let syncer = RpcSyncer::new(provider.clone());
-#     let mut tornado_provider = TornadoProvider::new(
+#     let tornado_provider = TornadoProvider::new(
 #         Store::create(),
 #         syncer.clone().into(),
 #         syncer.into(),
+#         provider.clone(),
 #     );
 
     let owner = PrivateKeySigner::random();
@@ -159,8 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .with_tornadocash_paymaster(
             &bundler,
-            &provider,
-            &mut tornado_provider,
+            &tornado_provider,
             &note,
             owner.address(),
             &mut rand::rng(),

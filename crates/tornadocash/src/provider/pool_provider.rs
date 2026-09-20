@@ -1,10 +1,12 @@
 use std::array::from_fn;
 
 use alloy::{
-    primitives::{Address, Bytes},
+    network::TransactionBuilder,
+    primitives::{Address, B256, Bytes},
+    providers::{DynProvider, Provider},
+    rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
-use kohaku_kv_store::Store;
 use kohaku_tornadocash_circuit::{CircuitInputs, prove};
 use rand::CryptoRng;
 use ruint::aliases::U256;
@@ -12,7 +14,7 @@ use websnark_rs::proof::Proof;
 
 use crate::{
     abis::tornado::Tornado,
-    indexer::{Indexer, IndexerError, syncer::Syncer, verifier::Verifier},
+    indexer::{Indexer, IndexerError},
     merkle_tree::TcMerkleTree,
     note::Note,
     pool::{Asset, Pool},
@@ -26,6 +28,7 @@ use crate::{
 #[derive(Clone)]
 pub struct PoolProvider {
     indexer: Indexer,
+    provider: DynProvider,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -40,19 +43,17 @@ pub enum PoolProviderError {
     Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
     #[error("Proof generation error: {0}")]
     Proof(#[from] websnark_rs::proof::ProofError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
+    #[error("Sol error: {0}")]
+    Sol(#[from] alloy::sol_types::Error),
 }
 
 impl PoolProvider {
     /// Creates a new pool provider for the given pool.
     #[must_use]
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "consistent with other parameters"
-    )]
-    pub fn new(pool: Pool, store: Store, syncer: Syncer, verifier: Verifier) -> Self {
-        let indexer_store = store.scope("indexer");
-        let indexer = Indexer::new(pool, indexer_store, syncer, verifier);
-        Self { indexer }
+    pub fn new(indexer: Indexer, provider: DynProvider) -> Self {
+        Self { indexer, provider }
     }
 
     /// Get the pool associated with this provider.
@@ -62,9 +63,6 @@ impl PoolProvider {
     }
 
     /// Sync the provider to the latest block and verify the tree state.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer or verifier fails.
     pub async fn sync(&self) -> Result<(), PoolProviderError> {
         Ok(self.indexer.sync().await?)
     }
@@ -102,9 +100,6 @@ impl PoolProvider {
 
     /// Create a withdrawal transaction for the given note to the recipient
     /// address.
-    ///
-    /// # Errors
-    /// Returns an error if the withdrawal call cannot be created.
     pub async fn withdraw(
         &self,
         note: &Note,
@@ -127,9 +122,6 @@ impl PoolProvider {
     }
 
     /// Create the withdrawal calldata for the given note to the recipient address.
-    ///
-    /// # Errors
-    /// Returns an error if the note is invalid or the merkle proof cannot be generated.
     #[tracing::instrument(skip_all)]
     pub async fn withdraw_call(
         &self,
@@ -188,6 +180,54 @@ impl PoolProvider {
         };
 
         Ok(call)
+    }
+
+    /// Quote the amount of fee token from a given wei amount.
+    pub async fn quote_wei_in_fee_token(
+        &self,
+        wei_amount: U256,
+    ) -> Result<U256, PoolProviderError> {
+        match self.pool().asset {
+            Asset::Native { .. } => Ok(wei_amount),
+            Asset::Erc20 { address, .. } => self.quote_wei_in_token(address, wei_amount).await,
+        }
+    }
+
+    /// Returns if the given nullifier hash has been spent.
+    pub async fn is_spent(&self, nullifier_hash: B256) -> Result<bool, PoolProviderError> {
+        let call = Tornado::isSpentCall::new((nullifier_hash,)).abi_encode();
+
+        let result = self
+            .provider
+            .call(
+                TransactionRequest::default()
+                    .with_to(self.pool().address)
+                    .input(call.into()),
+            )
+            .await?;
+
+        Ok(Tornado::isSpentCall::abi_decode_returns(&result)?)
+    }
+
+    async fn quote_wei_in_token(
+        &self,
+        token_address: Address,
+        wei_amount: U256,
+    ) -> Result<U256, PoolProviderError> {
+        let call = Tornado::quoteWeiInTokenCall::new((token_address, wei_amount)).abi_encode();
+
+        let result = self
+            .provider
+            .call(
+                TransactionRequest::default()
+                    .with_to(self.pool().address)
+                    .input(call.into()),
+            )
+            .await?;
+
+        let result = Tornado::quoteWeiInTokenCall::abi_decode_returns(&result)?;
+
+        Ok(result)
     }
 }
 

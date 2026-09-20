@@ -13,8 +13,7 @@ use kohaku_fork_kit::{
 };
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer, provider::tornado_provider::TornadoProvider,
-    userop_provider::TornadoPaymasterExt,
+    indexer::rpc::RpcSyncer, provider::TornadoProvider, userop_provider::TornadoPaymasterExt,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
@@ -64,8 +63,12 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());
-    let mut tornado_provider =
-        TornadoProvider::new(store, syncer.clone().into(), syncer.clone().into());
+    let tornado_provider = TornadoProvider::new(
+        store,
+        syncer.clone().into(),
+        syncer.clone().into(),
+        provider.clone(),
+    );
 
     info!("Depositing into pool");
     let (deposit_call, note) = tornado_provider.deposit(pool, &mut rand::rng()).await;
@@ -106,8 +109,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         }])
         .with_tornadocash_paymaster(
             &*alto,
-            &provider,
-            &mut tornado_provider,
+            &tornado_provider,
             &note,
             owner.address(),
             &mut rand::rng(),
