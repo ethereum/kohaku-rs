@@ -71,7 +71,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+    let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
     let note = deposit.note();
     info!("Deposit call: {deposit:?}");
 
@@ -110,7 +110,6 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let builder = tornado_provider
         .withdraw(note, owner.address())
-        .await?
         .sponsor(&*alto, builder, &mut rand::rng())
         .await?;
 

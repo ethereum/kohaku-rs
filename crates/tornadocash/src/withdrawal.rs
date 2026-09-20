@@ -18,7 +18,6 @@ use crate::{
 #[derive(Clone)]
 pub struct Withdrawal {
     provider: TornadoProvider,
-    pool: Pool,
     note: Note,
     recipient: Address,
     relayer: Option<Address>,
@@ -27,10 +26,9 @@ pub struct Withdrawal {
 }
 
 impl Withdrawal {
-    pub fn new(provider: TornadoProvider, pool: Pool, note: Note, recipient: Address) -> Self {
+    pub fn new(provider: TornadoProvider, note: Note, recipient: Address) -> Self {
         Self {
             provider,
-            pool,
             note,
             recipient,
             relayer: None,
@@ -56,8 +54,8 @@ impl Withdrawal {
 
     /// Returns the pool this withdrawal is for.
     #[must_use]
-    pub(crate) fn pool(&self) -> Pool {
-        self.pool
+    pub(crate) async fn pool(&self) -> Result<Pool, TornadoProviderError> {
+        self.provider.pool_from_note(&self.note).await
     }
 
     /// Returns the provider this withdrawal was created from.
@@ -74,17 +72,9 @@ impl Withdrawal {
         let call = self.as_call(rng).await?;
 
         Ok(TransactionRequest::default()
-            .with_to(self.pool.address)
+            .with_to(self.pool().await?.address)
             .with_input(call.abi_encode())
             .with_value(self.refund.unwrap_or_default()))
-    }
-
-    /// Converts the withdrawal into a raw [`withdrawCall`] struct.
-    pub async fn into_call(
-        self,
-        rng: &mut impl CryptoRng,
-    ) -> Result<withdrawCall, TornadoProviderError> {
-        self.as_call(rng).await
     }
 
     /// Submits the withdrawal to this relayer.
@@ -98,11 +88,23 @@ impl Withdrawal {
         let status = relayer.status().await?;
         let gas_price = self.provider.inner_provider().get_gas_price().await?;
 
-        self.fee = Some(status.fee(self.pool, gas_price, self.refund.unwrap_or_default())?);
+        self.fee = Some(status.fee(
+            self.pool().await?,
+            gas_price,
+            self.refund.unwrap_or_default(),
+        )?);
         self.relayer = Some(status.reward_account);
 
         let call = self.as_call(rng).await?;
-        relayer.withdraw(self.pool, call).await
+        relayer.withdraw(self.pool().await?, call).await
+    }
+
+    /// Converts the withdrawal into a raw [`withdrawCall`] struct.
+    pub(crate) async fn into_call(
+        self,
+        rng: &mut impl CryptoRng,
+    ) -> Result<withdrawCall, TornadoProviderError> {
+        self.as_call(rng).await
     }
 
     async fn as_call(

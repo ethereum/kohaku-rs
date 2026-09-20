@@ -72,7 +72,8 @@ impl TornadoProvider {
     }
 
     /// Create a deposit for the given pool.
-    pub fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> Deposit {
+    pub async fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> Deposit {
+        self.provider(pool).await;
         Deposit::new(pool, rng.random(), rng.random())
     }
 
@@ -80,13 +81,8 @@ impl TornadoProvider {
     ///
     /// # Errors
     /// Returns an error if the note's pool cannot be found.
-    pub async fn withdraw(
-        &self,
-        note: Note,
-        recipient: Address,
-    ) -> Result<Withdrawal, TornadoProviderError> {
-        let pool = self.pool_from_note(&note).await?;
-        Ok(Withdrawal::new(self.clone(), pool, note, recipient))
+    pub fn withdraw(&self, note: Note, recipient: Address) -> Withdrawal {
+        Withdrawal::new(self.clone(), note, recipient)
     }
 
     /// Quote the amount of fee token from a given wei amount.

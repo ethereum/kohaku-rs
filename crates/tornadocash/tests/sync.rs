@@ -27,7 +27,7 @@ async fn test_sync() -> Result<(), anyhow::Error> {
 
     // Populate many arbitrary deposits
     for _ in 0..50 {
-        let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+        let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
         provider
             .send_transaction(deposit.into())
             .await?

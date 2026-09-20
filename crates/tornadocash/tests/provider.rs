@@ -29,7 +29,7 @@ async fn test_provider() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+    let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
     let note = deposit.note();
     info!("Deposit: {deposit:?}");
 
@@ -47,7 +47,7 @@ async fn test_provider() -> Result<(), anyhow::Error> {
 
     info!("Withdrawing from pool");
     let recipient: Address = PrivateKeySigner::random().address();
-    let withdrawal = tornado_provider.withdraw(note, recipient).await?;
+    let withdrawal = tornado_provider.withdraw(note, recipient);
     info!("Withdraw call: {withdrawal:?}");
 
     let receipt = provider
@@ -88,7 +88,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing note_a");
-    let deposit_a = tornado_provider.deposit(pool, &mut rand::rng());
+    let deposit_a = tornado_provider.deposit(pool, &mut rand::rng()).await;
     let note_a = deposit_a.note();
     let receipt_a = provider
         .send_transaction(deposit_a.into())
@@ -111,7 +111,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
         .await?;
 
     info!("Depositing note_b in its place");
-    let deposit_b = tornado_provider.deposit(pool, &mut rand::rng());
+    let deposit_b = tornado_provider.deposit(pool, &mut rand::rng()).await;
     let note_b = deposit_b.note();
     provider
         .send_transaction(deposit_b.into())
@@ -124,14 +124,17 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
 
     info!("Withdrawing note_b");
     let recipient: Address = PrivateKeySigner::random().address();
-    let withdraw_call = tornado_provider.withdraw(note_b, recipient).await?;
+    let withdraw_call = tornado_provider.withdraw(note_b, recipient);
     provider
         .send_transaction(withdraw_call.into_transaction(&mut rand::rng()).await?)
         .await?
         .get_receipt()
         .await?;
 
-    let withdraw_a = tornado_provider.withdraw(note_a, recipient).await;
+    let withdraw_a = tornado_provider
+        .withdraw(note_a, recipient)
+        .into_transaction(&mut rand::rng())
+        .await;
     assert!(
         withdraw_a.is_err(),
         "note_a's commitment should have been replaced by the reorg"

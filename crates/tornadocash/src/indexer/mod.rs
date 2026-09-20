@@ -42,8 +42,6 @@ pub enum IndexerError {
     Syncer(#[from] SyncerError),
     #[error("Verifier error: {0}")]
     Verifier(#[from] VerifierError),
-    #[error("Unknown pool: amount={0}, symbol={1}, chain_id={2}")]
-    UnknownPool(String, String, u64),
     #[error("Merkle tree error: {0}")]
     MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
     #[error("Store error: {0}")]

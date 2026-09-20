@@ -39,7 +39,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     );
 
     info!("Depositing into pool");
-    let deposit = tornado_provider.deposit(pool, &mut rand::rng());
+    let deposit = tornado_provider.deposit(pool, &mut rand::rng()).await;
     let note = deposit.note();
     provider
         .send_transaction(deposit.into())
@@ -70,7 +70,6 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     let recipient = PrivateKeySigner::random().address();
     let receipt = tornado_provider
         .withdraw(note, recipient)
-        .await?
         .relay(&relayer, &mut rand::rng())
         .await?;
     info!("Relayer accepted withdrawal job {receipt:?}");

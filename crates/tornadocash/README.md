@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tornado_provider.sync().await?;
 
-    let deposit = tornado_provider.deposit(Pool::SEPOLIA_ETHER_01, &mut rand::rng());
+    let deposit = tornado_provider.deposit(Pool::SEPOLIA_ETHER_01, &mut rand::rng()).await;
     let note = deposit.note();
     Ok(())
 }
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # 
     let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
     let recipient = "0xrecipient".parse()?;
-    let withdrawal = tornado_provider.withdraw(note, recipient).await?;
+    let withdrawal = tornado_provider.withdraw(note, recipient);
     
     Ok(())
 }
@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
     let recipient = "0xrecipient".parse()?;
-    let receipt = tornado_provider.withdraw(note, recipient).await?.relay(&relayer, &mut rand::rng()).await?;
+    let receipt = tornado_provider.withdraw(note, recipient).relay(&relayer, &mut rand::rng()).await?;
     let tx_hash = relayer.await_confirmation(&tornado_provider, &receipt).await?;
 
     Ok(())
@@ -161,7 +161,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account).await?;
     let builder = tornado_provider
         .withdraw(note, owner.address())
-        .await?
         .sponsor(&bundler, builder, &mut rand::rng())
         .await?;
 

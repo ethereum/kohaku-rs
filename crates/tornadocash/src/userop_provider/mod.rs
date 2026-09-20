@@ -69,7 +69,7 @@ impl WithdrawalPaymasterExt for Withdrawal {
         S: Send + Sync,
         R: rand::CryptoRng,
     {
-        let pool = self.pool();
+        let pool = self.pool().await?;
 
         let paymaster = pool
             .paymaster_address
