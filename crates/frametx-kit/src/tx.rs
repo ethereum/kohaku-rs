@@ -5,8 +5,8 @@ use alloy::{
 
 use crate::{
     gas::{
-        FRAME_TX_INTRINSIC, PER_FRAME_GAS, SIG_SCHEME_SECP256K1, SIGNATURE_GAS_SECP256K1,
-        TX_VALUE_COST,
+        EIP7825_TX_GAS_CAP, ETHEX_MEMPOOL_MAX_BYTES, FRAME_TX_INTRINSIC, PER_FRAME_GAS,
+        SIG_SCHEME_SECP256K1, SIGNATURE_GAS_SECP256K1, TX_VALUE_COST,
     },
     rlp::{rlp_addr, rlp_data, rlp_hash, rlp_int, rlp_list, rlp_opt_addr, rlp_u64},
 };
@@ -64,6 +64,10 @@ pub enum FrameTxError {
     SigIndex(usize),
     #[error("signer error: {0}")]
     Signer(#[from] alloy::signers::Error),
+    #[error("declared execution {used} exceeds EIP-7825 cap {cap}")]
+    ExecutionCap { used: u64, cap: u64 },
+    #[error("encoded transaction {got} bytes exceeds ethrex mempool limit {cap}")]
+    MempoolSize { got: usize, cap: usize },
 }
 
 impl Frame {
@@ -104,11 +108,7 @@ impl FrameTx {
     fn envelope(&self, elide_sigs: bool) -> Vec<u8> {
         let keys: Vec<Vec<u8>> = self.nonce_keys.iter().copied().map(rlp_int).collect();
         let frames: Vec<Vec<u8>> = self.frames.iter().map(Frame::rlp).collect();
-        let sigs: Vec<Vec<u8>> = self
-            .signatures
-            .iter()
-            .map(|s| s.rlp(elide_sigs))
-            .collect();
+        let sigs: Vec<Vec<u8>> = self.signatures.iter().map(|s| s.rlp(elide_sigs)).collect();
         let fees = rlp_list(&[
             rlp_int(self.max_priority_fee),
             rlp_int(self.max_fee),
@@ -214,10 +214,7 @@ impl FrameTx {
     }
 
     fn calldata_gas(encoded: &[u8]) -> u64 {
-        encoded
-            .iter()
-            .map(|b| if *b == 0 { 4 } else { 16 })
-            .sum()
+        encoded.iter().map(|b| if *b == 0 { 4 } else { 16 }).sum()
     }
 
     fn floor_tokens(encoded: &[u8]) -> u64 {
@@ -268,6 +265,43 @@ impl FrameTx {
         self.mandatory_gas() + 16 * tokens
     }
 
+    /// Declared execution against EIP-7825. Does not add `limits.state`.
+    #[must_use]
+    pub fn execution_cap_usage(&self) -> u64 {
+        let data_cost: u64 = self
+            .data_fields()
+            .iter()
+            .map(|f| Self::calldata_gas(f.as_ref()))
+            .sum();
+        let exec_side = self.mandatory_gas()
+            + data_cost
+            + self.frames.iter().map(|f| f.execution_gas).sum::<u64>();
+        exec_side.max(self.calldata_floor_gas())
+    }
+
+    /// Remaining EIP-7825 execution capacity and the whole-tx 128 KiB mempool limit.
+    ///
+    /// # Errors
+    /// Returns if declared execution exceeds `2^24` or the encoded transaction
+    /// exceeds the pinned ethrex mempool size.
+    pub fn check_resource_limits(&self) -> Result<(), FrameTxError> {
+        let used = self.execution_cap_usage();
+        if used > EIP7825_TX_GAS_CAP {
+            return Err(FrameTxError::ExecutionCap {
+                used,
+                cap: EIP7825_TX_GAS_CAP,
+            });
+        }
+        let encoded = self.raw().len();
+        if encoded > ETHEX_MEMPOOL_MAX_BYTES {
+            return Err(FrameTxError::MempoolSize {
+                got: encoded,
+                cap: ETHEX_MEMPOOL_MAX_BYTES,
+            });
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn total_gas_limit(&self) -> u64 {
         self.standard_gas_limit()
@@ -289,7 +323,9 @@ mod tests {
             chain_id: 1,
             nonce_keys: vec![U256::ZERO],
             nonce_seq: 7,
-            sender: Address::from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAB, 0xCD]),
+            sender: Address::from_slice(&[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAB, 0xCD,
+            ]),
             frames: vec![
                 Frame {
                     mode: 1,
@@ -330,7 +366,19 @@ mod tests {
     #[test]
     fn envelope_has_eight_fields() {
         let encoded = sample().encode();
-        assert_eq!(encoded[0], 0xf8, "long list prefix expected for this sample");
+        assert_eq!(
+            encoded[0], 0xf8,
+            "long list prefix expected for this sample"
+        );
+    }
+
+    #[test]
+    fn execution_cap_ignores_state() {
+        let mut tx = sample();
+        let base = tx.execution_cap_usage();
+        tx.frames[0].state_gas = 10_000_000;
+        assert_eq!(tx.execution_cap_usage(), base);
+        assert!(tx.check_resource_limits().is_ok());
     }
 
     #[test]

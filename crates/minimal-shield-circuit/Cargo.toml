@@ -27,7 +27,7 @@ ark-std = { workspace = true }
 brotli = { workspace = true }
 hex = { workspace = true }
 num-bigint = "0.4"
-ruint = { workspace = true, features = ["ark-ff-06"] }
+ruint = { workspace = true, features = ["ark-ff-06", "serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

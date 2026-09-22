@@ -4,7 +4,6 @@ use alloy::{
     sol_types::{SolCall, SolValue},
 };
 use kohaku_frametx_kit::{
-    ACTION_FRAME_MAX_CALLDATA, ACTION_FRAME_MAX_GAS, ACTION_FRAME_MAX_STATE_GAS,
     APPROVE_EXECUTION_AND_PAYMENT, CLAIM_FRAME_GAS, CLAIM_FRAME_STATE_GAS, FRAME_MODE_DEFAULT,
     FRAME_MODE_SENDER, FRAME_MODE_VERIFY, Frame, FrameSig, FrameTx, RECENT_ROOT_ADDRESS,
     RECENT_ROOT_FRAME_GAS, SETTLE_FRAME_GAS, SETTLE_FRAME_STATE_GAS, SHIELD_VERIFY_GAS,
@@ -39,10 +38,6 @@ pub enum ProviderError {
     OwnerMismatch,
     #[error("note value {value} cannot cover fee {fee}")]
     FeeExceedsValue { value: U256, fee: U256 },
-    #[error("leftover-frame calldata {got} exceeds dispatcher cap {cap}")]
-    TailTooLarge { got: usize, cap: usize },
-    #[error("leftover-frame gas {got} exceeds dispatcher cap {cap}")]
-    TailGas { got: u64, cap: u64 },
     #[error("DEFAULT tail target must be nonzero")]
     ZeroTailTarget,
     #[error(transparent)]
@@ -161,8 +156,9 @@ impl PoolProvider {
     /// `fee` of `None` uses [`FrameTx::max_cost`] (dispatcher `fee >= TXPARAM(0x06)`).
     ///
     /// # Errors
-    /// Returns if the note is missing, the tail is over cap, the note cannot cover
-    /// the fee, or proving fails.
+    /// Returns if the note is missing, the assembled tx exceeds EIP-7825
+    /// execution or the 128 KiB mempool limit, the note cannot cover the fee,
+    /// or proving fails.
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub async fn unshield(
         &self,
@@ -253,6 +249,7 @@ impl PoolProvider {
                 max_fee,
             );
             tx.sign_secp256k1(0, authorizer)?;
+            tx.check_resource_limits()?;
             let cost = alloy_to_ruint(tx.max_cost());
             if chosen_fee >= cost {
                 break;
@@ -289,6 +286,7 @@ impl PoolProvider {
             max_fee,
         );
         tx.sign_secp256k1(0, authorizer)?;
+        tx.check_resource_limits()?;
         Ok(UnshieldResult {
             tx,
             public_amount: witness.public_amount,
@@ -354,24 +352,6 @@ impl PoolProvider {
 fn validate_tail(tail: &TailCall) -> Result<(), ProviderError> {
     if tail.target.is_zero() {
         return Err(ProviderError::ZeroTailTarget);
-    }
-    if tail.data.len() > ACTION_FRAME_MAX_CALLDATA {
-        return Err(ProviderError::TailTooLarge {
-            got: tail.data.len(),
-            cap: ACTION_FRAME_MAX_CALLDATA,
-        });
-    }
-    if tail.execution_gas > ACTION_FRAME_MAX_GAS {
-        return Err(ProviderError::TailGas {
-            got: tail.execution_gas,
-            cap: ACTION_FRAME_MAX_GAS,
-        });
-    }
-    if tail.state_gas > ACTION_FRAME_MAX_STATE_GAS {
-        return Err(ProviderError::TailGas {
-            got: tail.state_gas,
-            cap: ACTION_FRAME_MAX_STATE_GAS,
-        });
     }
     Ok(())
 }
