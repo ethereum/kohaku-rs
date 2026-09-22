@@ -19,7 +19,6 @@ sol! {
             address authorizer;
         }
         function settle(Spend s) external;
-        function ensureAndClaim(address factory, address owner, bytes32 salt, address who) external;
         function publishEpochRoot(uint64 epoch) external;
         function claimWithdrawal(address who) external;
         function currentRoot() external view returns (bytes32);
@@ -51,5 +50,59 @@ sol! {
     contract FrameAccountFactory {
         function getAddress(address owner, bytes32 salt) external view returns (address);
         function createAccount(address owner, bytes32 salt) external returns (address);
+    }
+
+    #[sol(rpc)]
+    contract UnshieldHook {
+        struct Call {
+            address target;
+            uint256 value;
+            bytes data;
+        }
+        function complete(address factory, address owner, bytes32 salt, Call[] calls, bytes signature)
+            external;
+    }
+
+    #[sol(rpc)]
+    contract Multicall3 {
+        struct Call3 {
+            address target;
+            bool allowFailure;
+            bytes callData;
+        }
+        struct Result {
+            bool success;
+            bytes returnData;
+        }
+        function aggregate3(Call3[] calls) external payable returns (Result[] returnData);
+    }
+
+    #[sol(rpc)]
+    contract SimpleAccountFactory {
+        function getAddress(address owner, uint256 salt) external view returns (address);
+        function createAccount(address owner, uint256 salt) external returns (address);
+        function accountImplementation() external view returns (address);
+    }
+
+    #[sol(rpc)]
+    contract SimpleAccount {
+        function execute(address dest, uint256 value, bytes func) external;
+    }
+
+    #[sol(rpc)]
+    contract EntryPoint4337 {
+        struct PackedUserOperation {
+            address sender;
+            uint256 nonce;
+            bytes initCode;
+            bytes callData;
+            bytes32 accountGasLimits;
+            uint256 preVerificationGas;
+            bytes32 gasFees;
+            bytes paymasterAndData;
+            bytes signature;
+        }
+        function handleOps(PackedUserOperation[] ops, address beneficiary) external;
+        function getNonce(address sender, uint192 key) external view returns (uint256);
     }
 }

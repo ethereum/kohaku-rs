@@ -70,7 +70,14 @@ impl FrameTxClient {
             method,
             params,
         };
-        let resp: Value = self.http.post(self.rpc.clone()).json(&body).send().await?.json().await?;
+        let resp: Value = self
+            .http
+            .post(self.rpc.clone())
+            .json(&body)
+            .send()
+            .await?
+            .json()
+            .await?;
         if let Some(err) = resp.get("error") {
             return Err(ClientError::Rpc(err.to_string()));
         }
@@ -88,7 +95,10 @@ impl FrameTxClient {
     /// Returns if the RPC call fails.
     pub async fn tx_count(&self, addr: Address) -> Result<u64, ClientError> {
         let v = self
-            .rpc("eth_getTransactionCount", json!([format!("{addr:#x}"), "latest"]))
+            .rpc(
+                "eth_getTransactionCount",
+                json!([format!("{addr:#x}"), "latest"]),
+            )
             .await?;
         parse_hex_u64(&v).ok_or_else(|| ClientError::Rpc("bad nonce".into()))
     }
@@ -96,7 +106,9 @@ impl FrameTxClient {
     /// # Errors
     /// Returns if the RPC call fails.
     pub async fn fees(&self) -> Result<(U256, U256), ClientError> {
-        let blk = self.rpc("eth_getBlockByNumber", json!(["latest", false])).await?;
+        let blk = self
+            .rpc("eth_getBlockByNumber", json!(["latest", false]))
+            .await?;
         let base = blk
             .get("baseFeePerGas")
             .and_then(parse_hex_u256)
@@ -108,10 +120,56 @@ impl FrameTxClient {
     /// # Errors
     /// Returns if the RPC call fails.
     pub async fn slot_number(&self) -> Result<u64, ClientError> {
-        let blk = self.rpc("eth_getBlockByNumber", json!(["latest", false])).await?;
+        let blk = self
+            .rpc("eth_getBlockByNumber", json!(["latest", false]))
+            .await?;
         blk.get("slotNumber")
             .and_then(parse_hex_u64)
             .ok_or_else(|| ClientError::Rpc("latest block has no EIP-7843 slotNumber".into()))
+    }
+
+    /// EIP-7843 `slotNumber` of the block with `block_hash`.
+    ///
+    /// # Errors
+    /// Returns if the RPC call fails or the block has no slot.
+    pub async fn slot_number_of(&self, block_hash: B256) -> Result<u64, ClientError> {
+        let blk = self
+            .rpc(
+                "eth_getBlockByHash",
+                json!([format!("{block_hash:#x}"), false]),
+            )
+            .await?;
+        blk.get("slotNumber")
+            .and_then(parse_hex_u64)
+            .ok_or_else(|| {
+                ClientError::Rpc(format!("block {block_hash:#x} has no EIP-7843 slotNumber"))
+            })
+    }
+
+    /// Poll `eth_getTransactionReceipt` until it is present.
+    ///
+    /// # Errors
+    /// Returns if the RPC fails or the wait exceeds `attempts`.
+    pub async fn wait_receipt(&self, hash: B256, attempts: u32) -> Result<Value, ClientError> {
+        for _ in 0..attempts {
+            let v = self
+                .rpc("eth_getTransactionReceipt", json!([format!("{hash:#x}")]))
+                .await?;
+            if !v.is_null() {
+                return Ok(v);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        Err(ClientError::Rpc(format!("timed out waiting for {hash:#x}")))
+    }
+
+    /// Latest block number.
+    ///
+    /// # Errors
+    /// Returns if the RPC call fails.
+    pub async fn block_number(&self) -> Result<u64, ClientError> {
+        let v = self.rpc("eth_blockNumber", json!([])).await?;
+        parse_hex_u64(&v).ok_or_else(|| ClientError::Rpc("bad block number".into()))
     }
 
     /// # Errors
@@ -123,7 +181,14 @@ impl FrameTxClient {
             method: "ethrex_simulateFrameTransaction",
             params: json!([format!("0x{}", hex::encode(raw))]),
         };
-        let resp: Value = self.http.post(self.rpc.clone()).json(&body).send().await?.json().await?;
+        let resp: Value = self
+            .http
+            .post(self.rpc.clone())
+            .json(&body)
+            .send()
+            .await?
+            .json()
+            .await?;
         if let Some(err) = resp.get("error") {
             if err.get("code").and_then(Value::as_i64) == Some(-32601) {
                 return Ok(None);
@@ -131,17 +196,25 @@ impl FrameTxClient {
             return Err(ClientError::Rpc(err.to_string()));
         }
         let result = resp.get("result").cloned().unwrap_or(Value::Null);
-        Ok(Some(serde_json::from_value(result).map_err(|e| ClientError::Rpc(e.to_string()))?))
+        Ok(Some(
+            serde_json::from_value(result).map_err(|e| ClientError::Rpc(e.to_string()))?,
+        ))
     }
 
     /// # Errors
     /// Returns if send fails.
     pub async fn send_raw(&self, raw: &Bytes) -> Result<B256, ClientError> {
         let v = self
-            .rpc("eth_sendRawTransaction", json!([format!("0x{}", hex::encode(raw))]))
+            .rpc(
+                "eth_sendRawTransaction",
+                json!([format!("0x{}", hex::encode(raw))]),
+            )
             .await?;
-        let s = v.as_str().ok_or_else(|| ClientError::Rpc("bad tx hash".into()))?;
-        let bytes = hex::decode(s.trim_start_matches("0x")).map_err(|e| ClientError::Rpc(e.to_string()))?;
+        let s = v
+            .as_str()
+            .ok_or_else(|| ClientError::Rpc("bad tx hash".into()))?;
+        let bytes =
+            hex::decode(s.trim_start_matches("0x")).map_err(|e| ClientError::Rpc(e.to_string()))?;
         if bytes.len() != 32 {
             return Err(ClientError::Rpc("tx hash not 32 bytes".into()));
         }
@@ -169,7 +242,9 @@ impl FrameTxClient {
         if let Some(status) = &sim.execution_status {
             if status != "success" {
                 return Err(ClientError::SenderRevert(
-                    sim.execution_error.clone().unwrap_or_else(|| status.clone()),
+                    sim.execution_error
+                        .clone()
+                        .unwrap_or_else(|| status.clone()),
                 ));
             }
         }

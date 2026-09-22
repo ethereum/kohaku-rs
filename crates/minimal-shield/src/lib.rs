@@ -11,4 +11,6 @@ pub mod spend;
 
 pub use note::Note;
 pub use pool::Pool;
-pub use provider::{Call, CreateAccount, PoolProvider, ProviderError};
+pub use provider::{
+    Call, CreateAccount, PoolProvider, ProviderError, TailCall, UnshieldResult, WildCall,
+};
