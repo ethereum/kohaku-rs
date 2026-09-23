@@ -12,7 +12,6 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Deposit {
-    #[expect(unused)]
     provider: TornadoProvider,
     pool: Pool,
     nullifier: Nullifier,
