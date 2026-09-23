@@ -1,4 +1,5 @@
 use kohaku_kv_store::{Store, backend::StoreError};
+use ruint::aliases::U256;
 use thiserror::Error;
 use tracing::info;
 
@@ -73,6 +74,18 @@ impl Indexer {
         &self.tree
     }
 
+    /// Returns the leaf index of a given commitment if it exists.
+    #[must_use]
+    pub async fn commitment(&self, commitment: U256) -> Result<Option<u32>, IndexerError> {
+        Ok(self.store.get_commitment(commitment).await?)
+    }
+
+    /// Returns `Some` if the given nullifier hash exists.
+    #[must_use]
+    pub async fn nullifier_hash(&self, nullifier_hash: U256) -> Result<Option<()>, IndexerError> {
+        Ok(self.store.get_nullifier_hash(nullifier_hash).await?)
+    }
+
     /// Syncs the indexer to the latest block.
     ///
     /// # Errors
@@ -106,23 +119,26 @@ impl Indexer {
         info!("Synced {} events", events.len());
 
         let mut leaves = Vec::new();
+        let mut nullifier_hashes = Vec::new();
         for event in events {
             match event {
                 SyncEvent::Deposit(d) => {
                     leaves.push((d.leafIndex, d.commitment.into()));
                 }
-                SyncEvent::Withdrawal(_) => {}
+                SyncEvent::Withdrawal(w) => nullifier_hashes.push(w.nullifierHash.into()),
             }
         }
 
         if !leaves.is_empty() {
             let start = leaves[0].0 as usize;
-            let leaves: Vec<_> = leaves.into_iter().map(|(_, val)| val).collect();
+            let leaf_values: Vec<_> = leaves.iter().map(|(_, val)| *val).collect();
 
-            self.tree.splice(start, &leaves).await?;
+            self.tree.splice(start, &leaf_values).await?;
         }
 
-        self.store.commit(to_block).await?;
+        self.store
+            .commit(to_block, &leaves, &nullifier_hashes)
+            .await?;
         Ok(())
     }
 }
