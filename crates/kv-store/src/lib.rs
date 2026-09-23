@@ -2,9 +2,13 @@
 
 use std::sync::Arc;
 
-use crate::backend::{KvStoreBackend, StoreError};
+use crate::{
+    backend::{KvStoreBackend, StoreError},
+    batch::Batch,
+};
 
 pub mod backend;
+pub mod batch;
 pub mod file;
 pub mod memory;
 
@@ -49,6 +53,10 @@ impl Store {
             backend: self.backend.clone(),
             prefix,
         }
+    }
+
+    pub fn batch(&self) -> Batch<'_> {
+        Batch::new(self)
     }
 
     /// Gets the value associated with the given key.
@@ -122,10 +130,7 @@ impl Store {
     ///
     /// The batch operation must be atomic, meaning either all keys are deleted or none are deleted.
     /// Rollbacks should automatically occur if any part of the batch operation fails.
-    pub async fn delete_batch<K>(
-        &self,
-        keys: impl IntoIterator<Item = K>,
-    ) -> Result<(), StoreError>
+    pub async fn delete_batch<K>(&self, keys: impl IntoIterator<Item = K>) -> Result<(), StoreError>
     where
         K: AsRef<[u8]>,
     {
