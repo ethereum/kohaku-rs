@@ -82,7 +82,7 @@ impl TornadoProvider {
     /// Create a deposit for the given pool.
     pub async fn deposit(&self, pool: Pool, rng: &mut impl CryptoRng) -> Deposit {
         self.provider(&pool).await;
-        Deposit::new(pool, rng.random(), rng.random())
+        Deposit::new(self.clone(), pool, rng.random(), rng.random())
     }
 
     /// Create a withdrawal for the given note.
