@@ -4,6 +4,10 @@ use ruint::aliases::U256;
 
 pub const DEPTH: usize = 20;
 
+/// Circom public signal count: `nf1, nf2, out_cm1, out_cm2, root, domain,
+/// public_amount, fee, recipient, authorizer`.
+pub const NUM_PUBLIC_SIGNALS: usize = 10;
+
 /// Private and public signals for `circuits/spend.circom`.
 #[derive(Debug, Clone)]
 pub struct CircuitInputs {

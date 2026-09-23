@@ -12,9 +12,18 @@ use kohaku_minimal_shield_circuit::matrices::SerializableNpIndex;
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let zkey = PathBuf::from(args.next().expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"));
-    let wasm = PathBuf::from(args.next().expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"));
-    let out = PathBuf::from(args.next().expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"));
+    let zkey = PathBuf::from(
+        args.next()
+            .expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"),
+    );
+    let wasm = PathBuf::from(
+        args.next()
+            .expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"),
+    );
+    let out = PathBuf::from(
+        args.next()
+            .expect("usage: convert-msp-artifacts <zkey> <wasm> <out-dir>"),
+    );
     fs::create_dir_all(&out).unwrap();
 
     let zkey_bytes = fs::read(&zkey).expect("read zkey");

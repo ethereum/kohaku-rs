@@ -3,11 +3,13 @@ use std::sync::OnceLock;
 use ruint::aliases::U256;
 use serde::Deserialize;
 
-pub const P: U256 =
-    ruint::uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
+pub const P: U256 = ruint::uint!(
+    21888242871839275222246405745257275088548364400416034343698204186575808495617_U256
+);
 pub const TAG_PK: u64 = 1;
 pub const TAG_LEAF: u64 = 2;
 pub const TAG_NULL: u64 = 3;
+pub const TAG_OCCURRENCE_NULL: u64 = 4;
 pub const SINK_INNER_0: u64 = 1;
 pub const SINK_INNER_1: u64 = 2;
 
@@ -149,5 +151,33 @@ mod tests {
             let out = parse_fe(v["out"].as_str().unwrap());
             assert_eq!(p2(a, b), out);
         }
+    }
+
+    #[test]
+    fn occurrence_nullifier_pool_chain() {
+        let raw: serde_json::Value =
+            serde_json::from_str(include_str!("poseidon_bn254_vectors.json")).unwrap();
+        let c = &raw["pool_chain"];
+        let spend_key = parse_fe(c["spend_key"].as_str().unwrap());
+        let rho = parse_fe(c["rho"].as_str().unwrap());
+        let value = parse_fe(c["value"].as_str().unwrap());
+        let domain = parse_fe(c["domain"].as_str().unwrap());
+        let index = parse_fe(c["index"].as_str().unwrap());
+
+        let owner_pk = tagged(TAG_PK, spend_key, U256::ZERO);
+        assert_eq!(owner_pk, parse_fe(c["owner_pk"].as_str().unwrap()));
+        let inner = p2(owner_pk, rho);
+        assert_eq!(inner, parse_fe(c["inner"].as_str().unwrap()));
+        let cm = tagged(TAG_LEAF, inner, value);
+        assert_eq!(cm, parse_fe(c["cm"].as_str().unwrap()));
+        let nf = tagged(TAG_OCCURRENCE_NULL, p2(domain, spend_key), p2(cm, index));
+        assert_eq!(nf, parse_fe(c["nf"].as_str().unwrap()));
+        let dummy_cm = tagged(TAG_LEAF, inner, U256::ZERO);
+        let nf2 = tagged(
+            TAG_OCCURRENCE_NULL,
+            p2(domain, spend_key),
+            p2(dummy_cm, index),
+        );
+        assert_eq!(nf2, parse_fe(c["nf2"].as_str().unwrap()));
     }
 }

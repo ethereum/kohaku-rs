@@ -3,7 +3,7 @@ use kohaku_minimal_shield_circuit::{CircuitInputs, DEPTH};
 use ruint::aliases::U256;
 
 use crate::{
-    crypto::{SINK_INNER_0, SINK_INNER_1, TAG_LEAF, tagged},
+    crypto::{tagged, SINK_INNER_0, SINK_INNER_1, TAG_LEAF},
     note::Note,
 };
 
@@ -48,8 +48,14 @@ impl SpendWitness {
             root: self.root,
             domain: self.domain,
             in_spend_key: [
-                self.inputs[0].note.as_ref().map_or(U256::ZERO, |n| n.spend_key),
-                self.inputs[1].note.as_ref().map_or(U256::ZERO, |n| n.spend_key),
+                self.inputs[0]
+                    .note
+                    .as_ref()
+                    .map_or(U256::ZERO, |n| n.spend_key),
+                self.inputs[1]
+                    .note
+                    .as_ref()
+                    .map_or(U256::ZERO, |n| n.spend_key),
             ],
             in_rho: [
                 self.inputs[0].note.as_ref().map_or(U256::ZERO, |n| n.rho),
@@ -73,8 +79,12 @@ impl SpendWitness {
     #[must_use]
     pub fn nullifiers(&self) -> [U256; 2] {
         [
-            self.inputs[0].note.as_ref().map_or(U256::ZERO, Note::nullifier),
-            self.inputs[1].note.as_ref().map_or(U256::ZERO, Note::nullifier),
+            self.inputs[0].note.as_ref().map_or(U256::ZERO, |n| {
+                n.nullifier(self.domain, index_from_bits(&self.inputs[0].bits))
+            }),
+            self.inputs[1].note.as_ref().map_or(U256::ZERO, |n| {
+                n.nullifier(self.domain, index_from_bits(&self.inputs[1].bits))
+            }),
         ]
     }
 
@@ -85,6 +95,17 @@ impl SpendWitness {
             tagged(TAG_LEAF, self.out_inner[1], self.out_value[1]),
         ]
     }
+}
+
+#[must_use]
+fn index_from_bits(bits: &[U256; DEPTH]) -> U256 {
+    bits.iter().enumerate().fold(U256::ZERO, |acc, (i, bit)| {
+        if bit.is_zero() {
+            acc
+        } else {
+            acc + (U256::from(1u64) << i)
+        }
+    })
 }
 
 #[must_use]

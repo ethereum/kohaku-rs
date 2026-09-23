@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use alloy::primitives::{Address, B256, Bytes, U256};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::tx::FrameTx;
+
+const RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug)]
 pub struct FrameTxClient {
@@ -25,7 +29,7 @@ pub enum ClientError {
     SenderRevert(String),
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimulateResult {
     pub valid: Option<bool>,
@@ -36,12 +40,17 @@ pub struct SimulateResult {
     pub violation: Option<Value>,
     pub gas_used: Option<String>,
     pub frames: Option<Vec<SimulateFrame>>,
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimulateFrame {
     pub gas_used: Option<String>,
+    pub succeeded: Option<bool>,
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,7 +66,10 @@ impl FrameTxClient {
     pub fn new(rpc: Url) -> Self {
         Self {
             rpc,
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(RPC_TIMEOUT)
+                .build()
+                .expect("reqwest client"),
         }
     }
 
@@ -89,6 +101,30 @@ impl FrameTxClient {
     pub async fn chain_id(&self) -> Result<u64, ClientError> {
         let v = self.rpc("eth_chainId", json!([])).await?;
         parse_hex_u64(&v).ok_or_else(|| ClientError::Rpc("bad chain id".into()))
+    }
+
+    /// # Errors
+    /// Returns if the RPC call fails or the slot is not 32 bytes.
+    pub async fn storage_at(&self, addr: Address, slot: B256) -> Result<B256, ClientError> {
+        let v = self
+            .rpc(
+                "eth_getStorageAt",
+                json!([format!("{addr:#x}"), format!("{slot:#x}"), "latest"]),
+            )
+            .await?;
+        let s = v
+            .as_str()
+            .ok_or_else(|| ClientError::Rpc("bad storage value".into()))?;
+        let bytes =
+            hex::decode(s.trim_start_matches("0x")).map_err(|e| ClientError::Rpc(e.to_string()))?;
+        if bytes.len() > 32 {
+            return Err(ClientError::Rpc(
+                "storage value longer than 32 bytes".into(),
+            ));
+        }
+        let mut out = [0u8; 32];
+        out[32 - bytes.len()..].copy_from_slice(&bytes);
+        Ok(B256::from(out))
     }
 
     /// # Errors
@@ -232,21 +268,32 @@ impl FrameTxClient {
             return Err(ClientError::SimulateUnavailable);
         };
         if sim.valid != Some(true) {
-            return Err(ClientError::InvalidSim(
+            let dump = serde_json::to_string(&sim).unwrap_or_else(|_| {
                 sim.violation
                     .as_ref()
                     .map(ToString::to_string)
-                    .unwrap_or_else(|| "invalid".into()),
-            ));
+                    .unwrap_or_default()
+            });
+            let violation = sim
+                .violation
+                .as_ref()
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| sim.violation.as_ref().map(ToString::to_string))
+                .unwrap_or_else(|| "invalid".into());
+            return Err(ClientError::InvalidSim(format!(
+                "{violation}; execution_status={:?} execution_error={:?} prefix_shape={:?} frames={:?} dump={dump}",
+                sim.execution_status, sim.execution_error, sim.prefix_shape, sim.frames
+            )));
         }
-        if let Some(status) = &sim.execution_status {
-            if status != "success" {
-                return Err(ClientError::SenderRevert(
-                    sim.execution_error
-                        .clone()
-                        .unwrap_or_else(|| status.clone()),
-                ));
-            }
+        if let Some(status) = &sim.execution_status
+            && status != "success"
+        {
+            let dump = serde_json::to_string(&sim).unwrap_or_default();
+            return Err(ClientError::SenderRevert(format!(
+                "{}; execution_error={:?} frames={:?} dump={dump}",
+                status, sim.execution_error, sim.frames
+            )));
         }
         Ok(sim)
     }

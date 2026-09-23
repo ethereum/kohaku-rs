@@ -26,6 +26,27 @@ pub fn recent_root_tuple_bytes(source: B256, slot: u64, root: B256) -> Bytes {
     Bytes::copy_from_slice(&recent_root_tuple(source, slot, root))
 }
 
+/// Storage slot of an EIP-8272 entry, matching ethrex `RecentRootReference::storage_key`.
+#[must_use]
+pub fn recent_root_storage_key(source: B256, slot: u64) -> B256 {
+    let mut buf = [0u8; 72];
+    buf[..32].copy_from_slice(keccak256(b"RECENT_ROOT_STORAGE").as_slice());
+    buf[32..64].copy_from_slice(source.as_slice());
+    buf[64..].copy_from_slice(&(slot % RECENT_ROOT_WINDOW).to_be_bytes());
+    keccak256(buf)
+}
+
+/// Committed value at that slot, matching ethrex `RecentRootReference::entry_hash`.
+#[must_use]
+pub fn recent_root_entry_hash(source: B256, slot: u64, root: B256) -> B256 {
+    let mut buf = [0u8; 104];
+    buf[..32].copy_from_slice(keccak256(b"RECENT_ROOT_ENTRY").as_slice());
+    buf[32..64].copy_from_slice(source.as_slice());
+    buf[64..72].copy_from_slice(&slot.to_be_bytes());
+    buf[72..].copy_from_slice(root.as_slice());
+    keccak256(buf)
+}
+
 /// Why a publication `slot` would be refused at `latest_slot`, or `None` if usable.
 ///
 /// EIP-8272 judges against the earliest block that could carry the tx, so

@@ -24,7 +24,7 @@ sol! {
         function currentRoot() external view returns (bytes32);
         function currentEpoch() external view returns (uint64);
         function nextIndex() external view returns (uint32);
-        function domain() external view returns (bytes32);
+        function domain(uint64 epoch) external view returns (bytes32);
         function sourceId(uint64 epoch) external view returns (bytes32);
         function withdrawalCredit(address who) external view returns (uint256);
 
@@ -32,6 +32,16 @@ sol! {
         event NoteSpent(bytes32 indexed nf);
         event EpochRolled(uint64 indexed closedEpoch, bytes32 finalRoot, uint64 indexed newEpoch);
         event RootPublished(uint64 indexed epoch, bytes32 indexed source, bytes32 root);
+    }
+
+    #[sol(rpc)]
+    contract Groth16Verifier {
+        function verifyProof(
+            uint256[2] _pA,
+            uint256[2][2] _pB,
+            uint256[2] _pC,
+            uint256[10] _pubSignals
+        ) external view returns (bool);
     }
 
     #[sol(rpc)]
@@ -50,17 +60,6 @@ sol! {
     contract FrameAccountFactory {
         function getAddress(address owner, bytes32 salt) external view returns (address);
         function createAccount(address owner, bytes32 salt) external returns (address);
-    }
-
-    #[sol(rpc)]
-    contract UnshieldHook {
-        struct Call {
-            address target;
-            uint256 value;
-            bytes data;
-        }
-        function complete(address factory, address owner, bytes32 salt, Call[] calls, bytes signature)
-            external;
     }
 
     #[sol(rpc)]

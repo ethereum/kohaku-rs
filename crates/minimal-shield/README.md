@@ -12,11 +12,17 @@ Unshield is a **three- or four-frame** pool-as-sender FrameTx (`generic-tail-v1`
 
 EOA withdraw: leftover `claimWithdrawal(recipient)` targeting the pool.
 
-4337 dummy transfer: leftover `Multicall3.aggregate3([claimWithdrawal(account),
-handleOps([userOp], account)])`. The UserOp deploys a fresh SimpleAccount via
-`initCode` and `execute`s an ETH transfer. UserOp `gasFees` are zero so
-EntryPoint does not re-charge the unshielded ETH; the FrameTx fee still prepays
-`max_cost`.
+FrameAccount transfer: leftover `Multicall3.aggregate3([createAccount(owner, salt),
+claimWithdrawal(account), executeBatch(calls, sig)])`. That order is fixed:
+deploy, then claim, then execute. Deploy before claim so Hegotá `CREATE2` does
+not hit a balance-only account. The leftover `DEFAULT` target is Multicall3;
+the last inner call is `FrameAccount.executeBatch`, which sends ETH to `--to`.
+The proof `recipient` is the precomputed account. Salt is
+always `keccak256(abi.encodePacked("FRAMEACCT1", owner))` — one owner, one
+account per factory. The account is CREATE2'd if missing. Tail gas is estimated before the proof
+(15% pad, with first-deploy floors) so `max_cost` cannot undershoot and the
+proof-bound fee stays tied to that pin. `unshield-for-gas` sets public amount
+to 0 and spends the note on the fee, then runs `executeBatch` on the account.
 
 State for the `hegota` CLI lives in `.hegota-data/` (gitignored).
 
@@ -25,7 +31,14 @@ HEGOTA_RPC_URL=... HEGOTA_DEPLOYER_PK=... ALLOW_TESTBED_SETUP=1 \
   MSP_ROOT=../minimal-shielded-pool FRAME_ACCT_ROOT=../frame-privacy-acct \
   MSP_CIRCUIT_ARTIFACTS=... \
   just hegota-deploy
+just hegota-deploy-accounts
 just hegota-shield --value 500000000000000000
 just hegota-unshield --recipient 0x...
-just hegota-unshield-4337 --to 0x... --amount 10000000000000000
+just hegota-unshield-with-tail --owner-pk 0x... --to 0x...
+just hegota-unshield-for-gas --owner-pk 0x... --to 0x...
 ```
+
+`hegota deploy-accounts` forge-creates `FrameAccountFactory` only (reuses the
+existing Multicall3) and measures CREATE2 gas. Do not rerun full `hegota deploy`
+against a live pool. `--owner-pk` is required. `--amount` defaults to 0.001 ETH.
+`--to` defaults to the deployer so the inner transfer is not a new EOA.

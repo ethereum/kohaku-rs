@@ -74,7 +74,9 @@ impl Indexer {
 
     async fn sync_to(&self, to_block: u64) -> Result<(), IndexerError> {
         let latest = self.store.latest_block().await;
-        let from = latest.saturating_sub(REORG_MARGIN).max(self.pool.deployed_block);
+        let from = latest
+            .saturating_sub(REORG_MARGIN)
+            .max(self.pool.deployed_block);
         if from >= to_block {
             info!("already synced to {latest}");
             return Ok(());
@@ -87,7 +89,12 @@ impl Indexer {
                 SyncEvent::EpochRolled { new_epoch, .. } => {
                     epoch = new_epoch;
                 }
-                SyncEvent::LeafAppended { cm, index, epoch: ev_epoch, .. } => {
+                SyncEvent::LeafAppended {
+                    cm,
+                    index,
+                    epoch: ev_epoch,
+                    ..
+                } => {
                     epoch = ev_epoch;
                     tree.insert(index as usize, cm).await?;
                 }

@@ -50,7 +50,11 @@ impl Syncer {
         self.0.latest_block(pool).await
     }
 
-    pub async fn sync(&self, pool: &Pool, range: Range<u64>) -> Result<Vec<SyncEvent>, SyncerError> {
+    pub async fn sync(
+        &self,
+        pool: &Pool,
+        range: Range<u64>,
+    ) -> Result<Vec<SyncEvent>, SyncerError> {
         self.0.sync(pool, range.start, range.end).await
     }
 }

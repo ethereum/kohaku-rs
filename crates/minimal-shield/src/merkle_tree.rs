@@ -1,4 +1,4 @@
-use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
+use kohaku_merkle_tree::{hasher::Hasher, MerkleTree};
 use ruint::aliases::U256;
 
 use crate::crypto::p2;

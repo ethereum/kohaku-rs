@@ -69,3 +69,31 @@ pub fn load_default() -> Result<Artifacts, ArtifactError> {
     let dir = std::env::var("MSP_CIRCUIT_ARTIFACTS").unwrap_or_else(|_| "artifacts".into());
     load_from_dir(dir)
 }
+
+impl Artifacts {
+    /// `vk.alpha` as snarkjs Solidity `alphax` / `alphay`.
+    #[must_use]
+    pub fn alpha_g1(&self) -> (ruint::aliases::U256, ruint::aliases::U256) {
+        use ark_ff::PrimeField;
+        (
+            self.proving_key.vk.alpha_g1.x.into_bigint().into(),
+            self.proving_key.vk.alpha_g1.y.into_bigint().into(),
+        )
+    }
+
+    /// `IC0` (constant term of `vk_x`) as snarkjs Solidity `IC0x` / `IC0y`.
+    #[must_use]
+    pub fn ic0(&self) -> (ruint::aliases::U256, ruint::aliases::U256) {
+        use ark_ff::PrimeField;
+        let p = &self.proving_key.vk.gamma_abc_g1[0];
+        (p.x.into_bigint().into(), p.y.into_bigint().into())
+    }
+
+    /// `beta2.x` in snarkjs Solidity order (`betax1 = c1`, `betax2 = c0`).
+    #[must_use]
+    pub fn beta_g2_x_snarkjs(&self) -> (ruint::aliases::U256, ruint::aliases::U256) {
+        use ark_ff::PrimeField;
+        let x = &self.proving_key.vk.beta_g2.x;
+        (x.c1.into_bigint().into(), x.c0.into_bigint().into())
+    }
+}

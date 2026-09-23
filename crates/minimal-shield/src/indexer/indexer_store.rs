@@ -35,8 +35,11 @@ impl IndexerStoreExt for Store {
     async fn commit(&self, latest_block: u64, epoch: u64) {
         let lb = latest_block.to_be_bytes();
         let ep = epoch.to_be_bytes();
-        self.put_batch(vec![(LATEST_BLOCK_KEY, lb.as_slice()), (EPOCH_KEY, ep.as_slice())])
-            .await
-            .expect("indexer commit");
+        self.put_batch(vec![
+            (LATEST_BLOCK_KEY, lb.as_slice()),
+            (EPOCH_KEY, ep.as_slice()),
+        ])
+        .await
+        .expect("indexer commit");
     }
 }

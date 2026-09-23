@@ -3815,7 +3815,6 @@ dependencies = [
  "kohaku-kv-store",
  "kohaku-merkle-tree",
  "kohaku-minimal-shield-circuit",
- "kohaku-userop-kit",
  "rand 0.10.2",
  "reqwest",
  "ruint",

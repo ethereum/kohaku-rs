@@ -1,11 +1,6 @@
 use std::time::Duration;
 
-use alloy::{
-    primitives::B256,
-    providers::Provider,
-    rpc::types::Filter,
-    sol_types::SolEvent,
-};
+use alloy::{primitives::B256, providers::Provider, rpc::types::Filter, sol_types::SolEvent};
 use ruint::aliases::U256;
 use tokio::time::sleep;
 use tracing::{info, warn};
@@ -45,7 +40,12 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
             .map_err(SyncerError::other)
     }
 
-    async fn sync(&self, pool: &Pool, from_block: u64, to_block: u64) -> Result<Vec<SyncEvent>, SyncerError> {
+    async fn sync(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Vec<SyncEvent>, SyncerError> {
         let from_block = from_block.max(pool.deployed_block);
         let mut all = Vec::new();
         let mut current = from_block;
@@ -55,7 +55,11 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
                 .address(pool.address)
                 .from_block(current)
                 .to_block(end);
-            let logs = self.provider.get_logs(&filter).await.map_err(SyncerError::other)?;
+            let logs = self
+                .provider
+                .get_logs(&filter)
+                .await
+                .map_err(SyncerError::other)?;
             sleep(self.batch_delay).await;
             for log in &logs {
                 match decode(log) {
@@ -74,7 +78,11 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
 impl<P: Provider> VerifierBackend for RpcSyncer<P> {
     async fn verify(&self, pool: &Pool, root: U256) -> Result<(), VerifierError> {
         let instance = ShieldedPool::new(pool.address, &self.provider);
-        let onchain: B256 = instance.currentRoot().call().await.map_err(VerifierError::other)?;
+        let onchain: B256 = instance
+            .currentRoot()
+            .call()
+            .await
+            .map_err(VerifierError::other)?;
         let onchain = U256::from_be_bytes(onchain.0);
         if onchain == root {
             Ok(())

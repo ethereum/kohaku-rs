@@ -12,7 +12,7 @@ path = "bin/hegota.rs"
 required-features = ["hegota"]
 
 [features]
-hegota = ["dep:kohaku-fork-kit", "dep:kohaku-userop-kit"]
+hegota = ["dep:kohaku-fork-kit"]
 
 [dependencies]
 alloy = { workspace = true, features = [
@@ -36,7 +36,6 @@ kohaku-frametx-kit = { workspace = true }
 kohaku-kv-store = { workspace = true }
 kohaku-merkle-tree = { workspace = true }
 kohaku-minimal-shield-circuit = { workspace = true }
-kohaku-userop-kit = { workspace = true, optional = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 ruint = { workspace = true, features = ["ark-ff-06", "serde"] }

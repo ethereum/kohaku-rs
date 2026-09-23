@@ -12,5 +12,5 @@ pub mod spend;
 pub use note::Note;
 pub use pool::Pool;
 pub use provider::{
-    Call, CreateAccount, PoolProvider, ProviderError, TailCall, UnshieldResult, WildCall,
+    frame_account_salt, Call, PoolProvider, ProviderError, TailCall, UnshieldResult,
 };
