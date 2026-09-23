@@ -54,13 +54,13 @@ impl Withdrawal {
 
     /// Returns the pool this withdrawal is for.
     #[must_use]
-    pub(crate) async fn pool(&self) -> Result<Pool, TornadoProviderError> {
+    pub async fn pool(&self) -> Result<Pool, TornadoProviderError> {
         self.provider.pool_from_note(&self.note).await
     }
 
     /// Returns the provider this withdrawal was created from.
     #[must_use]
-    pub(crate) fn provider(&self) -> &TornadoProvider {
+    pub fn provider(&self) -> &TornadoProvider {
         &self.provider
     }
 
