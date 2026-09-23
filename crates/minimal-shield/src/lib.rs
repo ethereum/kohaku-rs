@@ -14,3 +14,4 @@ pub use pool::Pool;
 pub use provider::{
     frame_account_salt, Call, PoolProvider, ProviderError, TailCall, UnshieldResult,
 };
+pub use spend::{plan_unshield, PlannedMerge, SelectError, UnshieldPlan};

@@ -24,7 +24,7 @@ use crate::{
     },
     indexer::Indexer,
     note::Note,
-    spend::{sink_outputs, SpendInput, SpendWitness},
+    spend::{change_outputs, sink_outputs, SpendInput, SpendWitness},
 };
 
 #[derive(Debug, Error)]
@@ -43,6 +43,16 @@ pub enum ProviderError {
     Account(String),
     #[error("DEFAULT tail target must be nonzero")]
     ZeroTailTarget,
+    #[error("an internal transfer tail cannot target the pool; call it through Multicall3")]
+    PoolTailOnMerge,
+    #[error("publishing a changed root needs Multicall3")]
+    MissingMulticall,
+    #[error("join-split takes one or two input notes")]
+    BadInputCount,
+    #[error("a withdrawal needs a recipient and a merge needs the zero address")]
+    SettlementShape,
+    #[error("a change note template is required")]
+    MissingChange,
     #[error(transparent)]
     Frame(#[from] kohaku_frametx_kit::FrameTxError),
     #[error(transparent)]
@@ -59,6 +69,8 @@ pub struct UnshieldResult {
     pub circuit_publics: [U256; NUM_PUBLIC_SIGNALS],
     /// Precomputed FrameAccount, set by the account-tail spends.
     pub account: Option<Address>,
+    /// Wallet-owned change note when the inputs were not fully withdrawn.
+    pub change: Option<Note>,
 }
 
 #[derive(Clone)]
@@ -453,6 +465,8 @@ impl PoolProvider {
                     &witness, root_slot, epoch, &rust_nfs, &rust_outs, recipient, authorizer,
                 ),
                 tail.as_ref(),
+                Address::ZERO,
+                None,
                 authorizer.address(),
                 max_priority_fee,
                 max_fee,
@@ -528,6 +542,8 @@ impl PoolProvider {
                 &witness, root_slot, epoch, &nfs, &outs, recipient, authorizer,
             ),
             tail.as_ref(),
+            Address::ZERO,
+            None,
             authorizer.address(),
             max_priority_fee,
             max_fee,
@@ -540,6 +556,220 @@ impl PoolProvider {
             fee: witness.fee,
             circuit_publics: publics,
             account,
+            change: None,
+        })
+    }
+
+    /// Spend one or two notes. `public_amount` is withdrawn to `recipient`.
+    /// Any remainder after the fee is the `change_template` note (its value is
+    /// replaced). A zero `public_amount` is a merge: `recipient` must be zero
+    /// and the template receives `sum - fee`. A new output note publishes the
+    /// post-settlement root through `multicall3`, because the single DEFAULT
+    /// tail cannot target the pool when `public_amount` is zero. A spend that
+    /// only nullifies notes leaves `tail` unchanged.
+    ///
+    /// # Errors
+    /// Returns when the inputs, settlement shape, or fee are invalid, a note
+    /// is missing from the tree, or proving fails.
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+    pub async fn join_split(
+        &self,
+        inputs: &[Note],
+        change_template: Option<&Note>,
+        public_amount: U256,
+        recipient: Address,
+        tail: Option<TailCall>,
+        multicall3: Address,
+        authorizer: &PrivateKeySigner,
+        root_slot: u64,
+        epoch: u64,
+        chain_id: u64,
+        max_priority_fee: AlloyU256,
+        max_fee: AlloyU256,
+    ) -> Result<UnshieldResult, ProviderError> {
+        if inputs.is_empty() || inputs.len() > 2 {
+            return Err(ProviderError::BadInputCount);
+        }
+        if public_amount.is_zero() != recipient.is_zero() {
+            return Err(ProviderError::SettlementShape);
+        }
+        if let Some(t) = &tail {
+            validate_tail(t)?;
+            if public_amount.is_zero() && t.target == self.indexer.pool().address {
+                return Err(ProviderError::PoolTailOnMerge);
+            }
+        }
+        self.indexer.sync().await?;
+        let tree = self.indexer.tree();
+        let mut prepared = Vec::with_capacity(inputs.len());
+        let mut root = U256::ZERO;
+        for note in inputs {
+            let proof = tree
+                .leaf_proof(note.commitment())
+                .await
+                .map_err(|_| ProviderError::MissingNote)?;
+            root = proof.root;
+            let mut siblings = [U256::ZERO; 20];
+            let mut bits = [U256::ZERO; 20];
+            siblings.copy_from_slice(&proof.siblings);
+            for (i, b) in proof.path.iter().enumerate() {
+                bits[i] = U256::from(*b);
+            }
+            prepared.push(SpendInput {
+                note: Some(note.clone()),
+                siblings,
+                bits,
+            });
+        }
+        if prepared.len() == 1 {
+            let mut rng = rand::rng();
+            let dummy = Note::random(U256::ZERO, inputs[0].chain_id, inputs[0].pool, &mut rng);
+            prepared.push(SpendInput::dummy(dummy));
+        }
+        let sum = inputs.iter().try_fold(U256::ZERO, |acc, n| {
+            acc.checked_add(n.value)
+                .ok_or(ProviderError::FeeExceedsValue {
+                    value: acc,
+                    fee: n.value,
+                })
+        })?;
+
+        let sinks = sink_outputs();
+        let mut chosen_fee = U256::ZERO;
+        let domain = inputs[0].domain(epoch);
+        for _ in 0..2 {
+            if sum < public_amount + chosen_fee {
+                return Err(ProviderError::FeeExceedsValue {
+                    value: sum,
+                    fee: chosen_fee,
+                });
+            }
+            let change_value = sum - public_amount - chosen_fee;
+            let (out_inner, out_value) = if change_value.is_zero() {
+                ([sinks[0].0, sinks[1].0], [U256::ZERO, U256::ZERO])
+            } else {
+                let template = change_template.ok_or(ProviderError::MissingChange)?;
+                let mut change = template.clone();
+                change.value = change_value;
+                change_outputs(Some(&change))
+            };
+            let witness = SpendWitness {
+                inputs: [prepared[0].clone(), prepared[1].clone()],
+                out_inner,
+                out_value,
+                public_amount,
+                fee: chosen_fee,
+                recipient,
+                authorizer: authorizer.address(),
+                root,
+                domain,
+            };
+            let rust_nfs = witness.nullifiers();
+            let mut keys = [alloy_u256(rust_nfs[0]), alloy_u256(rust_nfs[1])];
+            keys.sort();
+            let src = source_id(self.indexer.pool().address, epoch);
+            let tuple = recent_root_tuple_bytes(src, root_slot, u256_to_b256(witness.root));
+            if !change_value.is_zero() && multicall3.is_zero() {
+                return Err(ProviderError::MissingMulticall);
+            }
+            let mut tx = assemble_spend(
+                self.indexer.pool().address,
+                chain_id,
+                &keys,
+                &tuple,
+                Bytes::from(vec![1u8; 256]),
+                &spend_struct(
+                    &witness,
+                    root_slot,
+                    epoch,
+                    &rust_nfs,
+                    &witness.output_commitments(),
+                    recipient,
+                    authorizer,
+                ),
+                tail.as_ref(),
+                multicall3,
+                (!change_value.is_zero()).then_some(epoch),
+                authorizer.address(),
+                max_priority_fee,
+                max_fee,
+            );
+            tx.sign_secp256k1(0, authorizer)?;
+            tx.check_resource_limits()?;
+            let cost = alloy_to_ruint(tx.max_cost());
+            let padded = cost + cost / U256::from(4);
+            if chosen_fee >= padded {
+                break;
+            }
+            chosen_fee = padded;
+        }
+        if sum < public_amount + chosen_fee {
+            return Err(ProviderError::FeeExceedsValue {
+                value: sum,
+                fee: chosen_fee,
+            });
+        }
+        let change_value = sum - public_amount - chosen_fee;
+        let change = if change_value.is_zero() {
+            None
+        } else {
+            let template = change_template.ok_or(ProviderError::MissingChange)?;
+            let mut note = template.clone();
+            note.value = change_value;
+            Some(note)
+        };
+        let (out_inner, out_value) = change_outputs(change.as_ref());
+        let mut witness = SpendWitness {
+            inputs: [prepared[0].clone(), prepared[1].clone()],
+            out_inner,
+            out_value,
+            public_amount,
+            fee: chosen_fee,
+            recipient,
+            authorizer: authorizer.address(),
+            root,
+            domain,
+        };
+        let (circuit_proof, publics) =
+            prove(&witness.circuit_inputs()).map_err(|e| ProviderError::Circuit(e.to_string()))?;
+        witness.root = publics[4];
+        witness.domain = publics[5];
+        witness.public_amount = publics[6];
+        witness.fee = publics[7];
+        let nfs = [publics[0], publics[1]];
+        let outs = [publics[2], publics[3]];
+        let mut keys = [alloy_u256(nfs[0]), alloy_u256(nfs[1])];
+        keys.sort();
+        let src = source_id(self.indexer.pool().address, epoch);
+        let tuple = recent_root_tuple_bytes(src, root_slot, u256_to_b256(witness.root));
+        if change.is_some() && multicall3.is_zero() {
+            return Err(ProviderError::MissingMulticall);
+        }
+        let mut tx = assemble_spend(
+            self.indexer.pool().address,
+            chain_id,
+            &keys,
+            &tuple,
+            Bytes::copy_from_slice(&circuit_proof.to_frame_bytes()),
+            &spend_struct(
+                &witness, root_slot, epoch, &nfs, &outs, recipient, authorizer,
+            ),
+            tail.as_ref(),
+            multicall3,
+            change.as_ref().map(|_| epoch),
+            authorizer.address(),
+            max_priority_fee,
+            max_fee,
+        );
+        tx.sign_secp256k1(0, authorizer)?;
+        tx.check_resource_limits()?;
+        Ok(UnshieldResult {
+            tx,
+            public_amount: witness.public_amount,
+            fee: witness.fee,
+            circuit_publics: publics,
+            account: None,
+            change,
         })
     }
 
@@ -556,6 +786,37 @@ impl PoolProvider {
     ) -> Result<Bytes, ProviderError> {
         let batch = account_calls(calls);
         sign_account_batch(chain_id, account, nonce, &batch, signer)
+    }
+
+    /// Build the Multicall3 tail that deploys (if needed), claims, and runs
+    /// `calls` on the owner's FrameAccount. The owner signature stays inside
+    /// `executeBatch` because the pool, not the account, is the frame sender.
+    ///
+    /// # Errors
+    /// Returns when the factory is missing or the account cannot be read.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn prepare_account_tail<P: Provider + Sync>(
+        &self,
+        rpc: &P,
+        owner: &PrivateKeySigner,
+        calls: &[Call],
+        multicall3: Address,
+        create2_exec: u64,
+        create2_state: u64,
+        chain_id: u64,
+        include_claim: bool,
+    ) -> Result<(Address, TailCall), ProviderError> {
+        self.account_tail(
+            rpc,
+            owner,
+            calls,
+            multicall3,
+            create2_exec,
+            create2_state,
+            chain_id,
+            include_claim,
+        )
+        .await
     }
 
     async fn account_tail<P: Provider + Sync>(
@@ -724,6 +985,59 @@ async fn target_is_empty(rpc: &impl Provider, target: Address) -> Result<bool, P
     Ok(nonce == 0)
 }
 
+/// Extra DEFAULT-tail budget for Multicall3 calling `publishEpochRoot`.
+const PUBLISH_VIA_MULTICALL_EXEC: u64 = 350_000;
+const PUBLISH_VIA_MULTICALL_STATE: u64 = SETTLE_FRAME_STATE_GAS;
+
+/// Fold `publishEpochRoot` into the single DEFAULT tail via Multicall3.
+///
+/// A spend cannot add a second `SENDER`, and a zero-withdrawal tail cannot
+/// target the pool. Multicall3 is the caller that reaches the pool. A later
+/// pool can drop that restriction and target the pool directly.
+fn publish_tail(
+    tail: Option<&TailCall>,
+    pool: Address,
+    multicall3: Address,
+    epoch: u64,
+) -> TailCall {
+    let publish = Call3 {
+        target: pool,
+        allowFailure: false,
+        callData: Bytes::from(ShieldedPool::publishEpochRootCall { epoch }.abi_encode()),
+    };
+    let (mut legs, execution_gas, state_gas) = match tail {
+        Some(existing) => {
+            let legs = if existing.target == multicall3 {
+                Multicall3::aggregate3Call::abi_decode(existing.data.as_ref()).map_or_else(
+                    |_| {
+                        vec![Call3 {
+                            target: existing.target,
+                            allowFailure: false,
+                            callData: existing.data.clone(),
+                        }]
+                    },
+                    |decoded| decoded.calls,
+                )
+            } else {
+                vec![Call3 {
+                    target: existing.target,
+                    allowFailure: false,
+                    callData: existing.data.clone(),
+                }]
+            };
+            (legs, existing.execution_gas, existing.state_gas)
+        }
+        None => (Vec::new(), 0, 0),
+    };
+    legs.push(publish);
+    TailCall {
+        target: multicall3,
+        data: Bytes::from(Multicall3::aggregate3Call { calls: legs }.abi_encode()),
+        execution_gas: execution_gas.saturating_add(PUBLISH_VIA_MULTICALL_EXEC),
+        state_gas: state_gas.saturating_add(PUBLISH_VIA_MULTICALL_STATE),
+    }
+}
+
 fn validate_tail(tail: &TailCall) -> Result<(), ProviderError> {
     if tail.target.is_zero() {
         return Err(ProviderError::ZeroTailTarget);
@@ -765,10 +1079,21 @@ fn assemble_spend(
     proof: Bytes,
     spend: &SolSpend,
     tail: Option<&TailCall>,
+    multicall3: Address,
+    // `publish_epoch` is set when settlement inserts a non-sink note.
+    // Nullifiers alone leave `currentRoot` unchanged, so the tail stays as given.
+    publish_epoch: Option<u64>,
     authorizer: Address,
     max_priority_fee: AlloyU256,
     max_fee: AlloyU256,
 ) -> FrameTx {
+    let published;
+    let tail = if let Some(epoch) = publish_epoch {
+        published = publish_tail(tail, pool, multicall3, epoch);
+        Some(&published)
+    } else {
+        tail
+    };
     let settle = Bytes::from(ShieldedPool::settleCall { s: spend.clone() }.abi_encode());
     let mut frames = vec![
         Frame {
@@ -970,5 +1295,41 @@ mod tests {
         let at = |sel: &[u8]| data.windows(4).position(|w| w == sel).unwrap();
         assert!(at(create) < at(claim) && at(claim) < at(exec));
         assert_eq!(tail.target, multicall);
+    }
+
+    #[test]
+    fn publish_tail_calls_the_pool_through_multicall() {
+        use super::publish_tail;
+        use crate::abis::{Multicall3, ShieldedPool};
+        use alloy::sol_types::SolCall;
+
+        let pool = address!("0xac01c30f28b32dd31d3c2854012e673e74f6b100");
+        let multicall = address!("0x6f273b85aa6384dd1e097f46eeae90cc026ce51b");
+        let bare = publish_tail(None, pool, multicall, 4);
+        assert_eq!(bare.target, multicall);
+        assert_ne!(bare.target, pool);
+        let decoded = Multicall3::aggregate3Call::abi_decode(bare.data.as_ref()).unwrap();
+        assert_eq!(decoded.calls.len(), 1);
+        assert_eq!(decoded.calls[0].target, pool);
+
+        let claim = super::TailCall {
+            target: pool,
+            data: Bytes::from(
+                ShieldedPool::claimWithdrawalCall {
+                    who: Address::repeat_byte(1),
+                }
+                .abi_encode(),
+            ),
+            execution_gas: 10,
+            state_gas: 20,
+        };
+        let wrapped = publish_tail(Some(&claim), pool, multicall, 4);
+        assert_eq!(wrapped.target, multicall);
+        let decoded = Multicall3::aggregate3Call::abi_decode(wrapped.data.as_ref()).unwrap();
+        assert_eq!(decoded.calls.len(), 2);
+        assert_eq!(decoded.calls[0].target, pool);
+        assert_eq!(decoded.calls[1].target, pool);
+        assert!(wrapped.execution_gas > claim.execution_gas);
+        assert!(wrapped.state_gas > claim.state_gas);
     }
 }

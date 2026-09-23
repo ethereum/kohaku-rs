@@ -27,6 +27,9 @@ pub const FRAME_MODE_DEFAULT: u8 = 0;
 pub const FRAME_MODE_VERIFY: u8 = 1;
 pub const FRAME_MODE_SENDER: u8 = 2;
 pub const APPROVE_EXECUTION_AND_PAYMENT: u8 = 0x03;
+/// Consecutive `SENDER` frames except the last carry this flag. Batch members
+/// must not set approval-scope bits.
+pub const ATOMIC_BATCH_FLAG: u8 = 0x04;
 pub const SIG_SCHEME_SECP256K1: u8 = 1;
 
 /// EIP-8037 cost-per-state-byte used by Hegotá / MSP `gas_profile.py`.

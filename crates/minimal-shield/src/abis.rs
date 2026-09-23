@@ -53,7 +53,10 @@ sol! {
         }
         function executeBatch(Call[] calls, bytes signature) external;
         function executeDigest(Call[] calls) external view returns (bytes32);
+        function approveSender() external;
         function nonce() external view returns (uint256);
+        function owner() external view returns (address);
+        function factory() external view returns (address);
     }
 
     #[sol(rpc)]
