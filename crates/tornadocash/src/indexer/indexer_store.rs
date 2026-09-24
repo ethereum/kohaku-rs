@@ -1,5 +1,5 @@
+use alloy::primitives::{B256, U256};
 use kohaku_kv_store::{Store, backend::StoreError};
-use ruint::aliases::U256;
 
 const LATEST_BLOCK_KEY: &[u8] = b"latest_block";
 const COMMITMENT_PREFIX: &[u8] = b"commitment";
@@ -11,14 +11,14 @@ pub trait IndexerStoreExt {
     async fn latest_block(&self) -> Result<u64, StoreError>;
     /// Returns the `leaf_index` of the given `commitment` if it exists in the store.
     async fn get_commitment(&self, commitment: U256) -> Result<Option<u32>, StoreError>;
-    /// Returns `Some` if the given `nullifier_hash` exists in the store.
-    async fn get_nullifier_hash(&self, nullifier_hash: U256) -> Result<Option<()>, StoreError>;
+    /// Returns `true` if the given `nullifier_hash` exists in the store.w
+    async fn get_nullifier_hash(&self, nullifier_hash: B256) -> Result<bool, StoreError>;
     /// Commits the given `latest_block`, `commitments`, and `nullifier_hashes` to the store.
     async fn commit(
         &self,
         latest_block: u64,
         commitments: &[(u32, U256)],
-        nullifier_hashes: &[U256],
+        nullifier_hashes: &[B256],
     ) -> Result<(), StoreError>;
 }
 
@@ -39,16 +39,16 @@ impl IndexerStoreExt for Store {
             .map(|v| u32::from_be_bytes(v.try_into().expect("commitment is 4 bytes"))))
     }
 
-    async fn get_nullifier_hash(&self, nullifier_hash: U256) -> Result<Option<()>, StoreError> {
+    async fn get_nullifier_hash(&self, nullifier_hash: B256) -> Result<bool, StoreError> {
         let key = nullifier_hash_key(nullifier_hash);
-        Ok(self.get(&key).await?.map(|_| ()))
+        Ok(self.get(&key).await?.is_some())
     }
 
     async fn commit(
         &self,
         latest_block: u64,
         commitments: &[(u32, U256)],
-        nullifier_hashes: &[U256],
+        nullifier_hashes: &[B256],
     ) -> Result<(), StoreError> {
         let mut batch = self.batch();
         batch.put(LATEST_BLOCK_KEY, latest_block.to_be_bytes());
@@ -71,8 +71,8 @@ fn commitment_key(commitment: U256) -> Vec<u8> {
     key
 }
 
-fn nullifier_hash_key(nullifier_hash: U256) -> Vec<u8> {
+fn nullifier_hash_key(nullifier_hash: B256) -> Vec<u8> {
     let mut key = NULLIFIER_HASH_PREFIX.to_vec();
-    key.extend_from_slice(&nullifier_hash.to_be_bytes_vec());
+    key.extend_from_slice(&nullifier_hash.to_vec());
     key
 }
