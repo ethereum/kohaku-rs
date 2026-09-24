@@ -18,7 +18,7 @@ async fn test_provider() -> Result<(), anyhow::Error> {
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = deploy_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone(), None).await?;
 
     let syncer = RpcSyncer::new(provider.clone());
     let tornado_provider = TornadoProvider::new(
@@ -77,7 +77,7 @@ async fn test_pool_provider_reorg_recovery() -> Result<(), anyhow::Error> {
         .with_simple_nonce_management()
         .connect_anvil_with_wallet()
         .erased();
-    let pool = deploy_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone(), None).await?;
 
     let syncer = RpcSyncer::new(provider.clone());
     let tornado_provider = TornadoProvider::new(
@@ -154,7 +154,7 @@ async fn test_known_pools_persist_across_restart() -> Result<(), anyhow::Error> 
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = deploy_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone(), None).await?;
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());

@@ -26,7 +26,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
         .connect_http(anvil.endpoint_url())
         .erased();
 
-    let pool = deploy_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone(), None).await?;
     let proxy_address = deploy_proxy(provider.clone()).await?;
 
     let store = Store::create();
