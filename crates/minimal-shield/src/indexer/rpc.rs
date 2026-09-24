@@ -26,7 +26,7 @@ impl<P: Provider> RpcSyncer<P> {
     pub fn new(provider: P) -> Self {
         Self {
             provider,
-            batch_size: 32,
+            batch_size: logs_block_range(),
             batch_delay: Duration::from_millis(200),
             progress: None,
         }
@@ -112,6 +112,20 @@ impl<P: Provider> RpcSyncer<P> {
         }
         self.report(span, span);
         Ok(all)
+    }
+}
+
+fn logs_block_range() -> u64 {
+    const DEFAULT: u64 = 256;
+    match std::env::var("RPC_LOGS_BLOCKRANGE") {
+        Ok(raw) => match raw.parse::<u64>() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                warn!("RPC_LOGS_BLOCKRANGE={raw} is not a positive integer; using {DEFAULT}");
+                DEFAULT
+            }
+        },
+        Err(_) => DEFAULT,
     }
 }
 

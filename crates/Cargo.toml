@@ -6,6 +6,7 @@ members = [
     "merkle-tree",
     "minimal-shield",
     "minimal-shield-circuit",
+    "tor-rpc",
     "tornadocash",
     "tornadocash-circuit",
     "userop-kit",
@@ -43,6 +44,7 @@ kohaku-kv-store = { path = "kv-store" }
 kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-minimal-shield = { path = "minimal-shield" }
 kohaku-minimal-shield-circuit = { path = "minimal-shield-circuit" }
+kohaku-tor-rpc = { path = "tor-rpc" }
 kohaku-tornadocash = { path = "tornadocash" }
 kohaku-tornadocash-circuit = { path = "tornadocash-circuit" }
 kohaku-userop-kit = { path = "userop-kit" }

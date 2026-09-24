@@ -1,3 +1,4 @@
 .envrc
 .direnv
 crates/minimal-shield/.hegota-data/
+.DS_Store
