@@ -5,7 +5,8 @@ const LATEST_BLOCK_KEY: &[u8] = b"latest_block";
 const COMMITMENT_PREFIX: &[u8] = b"commitment";
 const NULLIFIER_HASH_PREFIX: &[u8] = b"nullifier";
 
-#[async_trait::async_trait]
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait IndexerStoreExt {
     async fn latest_block(&self) -> Result<u64, StoreError>;
     /// Returns the `leaf_index` of the given `commitment` if it exists in the store.
@@ -21,7 +22,8 @@ pub trait IndexerStoreExt {
     ) -> Result<(), StoreError>;
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl IndexerStoreExt for Store {
     async fn latest_block(&self) -> Result<u64, StoreError> {
         Ok(self.get(LATEST_BLOCK_KEY).await?.map_or(0, |v| {

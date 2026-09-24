@@ -39,13 +39,16 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 kohaku-userop-kit = { workspace = true, optional = true }
 websnark-rs = { workspace = true }
-tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt"] }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 blake-hash = { workspace = true }
 kohaku-merkle-tree = { workspace = true }
 kohaku-kv-store = { workspace = true }
 kohaku-tornadocash-circuit = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 alloy = { workspace = true, features = [
@@ -57,7 +60,7 @@ anyhow = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "process"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
