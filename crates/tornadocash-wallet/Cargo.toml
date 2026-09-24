@@ -1,0 +1,29 @@
+[package]
+name = "kohaku-tornadocash-wallet"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+kohaku-kv-store = { workspace = true }
+kohaku-tornadocash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+alloy = { workspace = true, features = [
+    "providers",
+    "transports",
+    "network",
+    "signers",
+    "signer-local",
+    "provider-anvil-node",
+] }
+anyhow = { workspace = true }
+kohaku-fork-kit = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true
