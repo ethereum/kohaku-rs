@@ -66,6 +66,11 @@ impl TornadoProvider {
         self.provider.clone()
     }
 
+    /// Registers `pool` with this provider, so that [`sync`](Self::sync) visits it.
+    pub async fn register(&self, pool: &Pool) {
+        self.provider(pool).await;
+    }
+
     /// Sync all pools managed by this provider.
     ///
     /// # Errors
@@ -113,6 +118,19 @@ impl TornadoProvider {
     pub async fn is_spent(&self, note: &Note) -> Result<bool, TornadoProviderError> {
         let provider = self.provider_from_note(note).await?;
         Ok(provider.is_spent(note.nullifier_hash().into()).await?)
+    }
+
+    /// Returns the leaf index of `commitment` in `pool`'s tree, if it has been deposited.
+    ///
+    /// # Errors
+    /// Returns an error if the indexer's store cannot be read.
+    pub async fn commitment(
+        &self,
+        pool: &Pool,
+        commitment: U256,
+    ) -> Result<Option<u32>, TornadoProviderError> {
+        let provider = self.provider(pool).await;
+        Ok(provider.commitment(commitment).await?)
     }
 
     /// Checks if a nullifier hash has been spent in a given pool.

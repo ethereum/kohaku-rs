@@ -131,6 +131,11 @@ impl PoolProvider {
         Ok(self.indexer.is_spent(nullifier_hash).await?)
     }
 
+    /// Returns the leaf index of the given commitment, if it has been deposited.
+    pub async fn commitment(&self, commitment: U256) -> Result<Option<u32>, PoolProviderError> {
+        Ok(self.indexer.commitment(commitment).await?)
+    }
+
     /// Checks if the given note matches this provider's pool.
     #[must_use]
     fn matches_pool(&self, note: &Note) -> Result<(), PoolProviderError> {
