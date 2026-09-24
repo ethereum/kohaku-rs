@@ -14,7 +14,7 @@ async fn test_sync() -> Result<(), anyhow::Error> {
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = deploy_pool(provider.clone()).await?;
+    let pool = deploy_pool(provider.clone(), None).await?;
 
     let store = Store::create();
     let syncer = RpcSyncer::new(provider.clone());

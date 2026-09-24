@@ -44,7 +44,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let entrypoint = deploy_entry_point(&provider).await?;
     deploy_simple_account(&provider).await?;
 
-    let mut pool = deploy_pool(provider.clone()).await?;
+    let mut pool = deploy_pool(provider.clone(), None).await?;
 
     let placeholder_factory = address!("0x0000000000000000000000000000000000000011");
     let placeholder_weth = address!("0x0000000000000000000000000000000000000022");

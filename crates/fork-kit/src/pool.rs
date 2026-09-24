@@ -31,23 +31,28 @@ mod sol {
     );
 }
 
-const DENOMINATION_WEI: u128 = 10_u128.pow(17);
+const DEFAULT_DENOMINATION_WEI: u128 = 10_u128.pow(17);
 const MERKLE_TREE_HEIGHT: u32 = 20;
 
-/// Deploys fresh tornadocash pool contracts.
+/// Deploys a fresh tornadocash pool contract.
 ///
-/// Returns the deployed [`Pool`].
+/// Returns the deployed [`Pool`] with a denomination `denomination_wei` if provided.
 ///
 /// # Errors
 /// Returns an error if any contract fails to deploy.
-pub async fn deploy_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
+pub async fn deploy_pool(
+    provider: DynProvider,
+    denomination_wei: Option<u128>,
+) -> Result<Pool, anyhow::Error> {
+    let denomination_wei = denomination_wei.unwrap_or(DEFAULT_DENOMINATION_WEI);
+
     let hasher = sol::Hasher::deploy(&provider).await?;
     let verifier = sol::Verifier::deploy(&provider).await?;
     let tornado = sol::ETHTornado::deploy(
         &provider,
         *verifier.address(),
         *hasher.address(),
-        U256::from(DENOMINATION_WEI),
+        U256::from(denomination_wei),
         MERKLE_TREE_HEIGHT,
     )
     .await?;
@@ -56,7 +61,7 @@ pub async fn deploy_pool(provider: DynProvider) -> Result<Pool, anyhow::Error> {
         chain_id: provider.get_chain_id().await?,
         address: *tornado.address(),
         asset: Asset::ETH,
-        amount_wei: DENOMINATION_WEI,
+        amount_wei: denomination_wei,
         deployed_block: 0,
         paymaster_address: None,
         adapter_address: None,
