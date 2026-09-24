@@ -577,6 +577,9 @@ impl PoolProvider {
         inputs: &[Note],
         change_template: Option<&Note>,
         public_amount: U256,
+        // When set, `public_amount` is ignored and the withdrawal is `sum - fee`,
+        // so a fee smaller than the caller's guess does not require a change note.
+        sweep: bool,
         recipient: Address,
         tail: Option<TailCall>,
         multicall3: Address,
@@ -636,15 +639,25 @@ impl PoolProvider {
 
         let sinks = sink_outputs();
         let mut chosen_fee = U256::ZERO;
+        let mut settled = public_amount;
         let domain = inputs[0].domain(epoch);
         for _ in 0..2 {
-            if sum < public_amount + chosen_fee {
+            if sweep {
+                if sum <= chosen_fee {
+                    return Err(ProviderError::FeeExceedsValue {
+                        value: sum,
+                        fee: chosen_fee,
+                    });
+                }
+                settled = sum - chosen_fee;
+            }
+            if sum < settled + chosen_fee {
                 return Err(ProviderError::FeeExceedsValue {
                     value: sum,
                     fee: chosen_fee,
                 });
             }
-            let change_value = sum - public_amount - chosen_fee;
+            let change_value = sum - settled - chosen_fee;
             let (out_inner, out_value) = if change_value.is_zero() {
                 ([sinks[0].0, sinks[1].0], [U256::ZERO, U256::ZERO])
             } else {
@@ -657,7 +670,7 @@ impl PoolProvider {
                 inputs: [prepared[0].clone(), prepared[1].clone()],
                 out_inner,
                 out_value,
-                public_amount,
+                public_amount: settled,
                 fee: chosen_fee,
                 recipient,
                 authorizer: authorizer.address(),
@@ -703,13 +716,22 @@ impl PoolProvider {
             }
             chosen_fee = padded;
         }
-        if sum < public_amount + chosen_fee {
+        if sweep {
+            if sum <= chosen_fee {
+                return Err(ProviderError::FeeExceedsValue {
+                    value: sum,
+                    fee: chosen_fee,
+                });
+            }
+            settled = sum - chosen_fee;
+        }
+        if sum < settled + chosen_fee {
             return Err(ProviderError::FeeExceedsValue {
                 value: sum,
                 fee: chosen_fee,
             });
         }
-        let change_value = sum - public_amount - chosen_fee;
+        let change_value = sum - settled - chosen_fee;
         let change = if change_value.is_zero() {
             None
         } else {
@@ -723,7 +745,7 @@ impl PoolProvider {
             inputs: [prepared[0].clone(), prepared[1].clone()],
             out_inner,
             out_value,
-            public_amount,
+            public_amount: settled,
             fee: chosen_fee,
             recipient,
             authorizer: authorizer.address(),

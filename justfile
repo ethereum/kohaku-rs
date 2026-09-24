@@ -19,10 +19,10 @@ hegota-publish:
     cd crates && cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- publish
 
 hegota-unshield *args:
-    cd crates && MSP_CIRCUIT_ARTIFACTS="${MSP_CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield {{args}}
+    cd crates && CIRCUIT_ARTIFACTS="${CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield {{args}}
 
 hegota-unshield-with-tail *args:
-    cd crates && MSP_CIRCUIT_ARTIFACTS="${MSP_CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield-with-tail {{args}}
+    cd crates && CIRCUIT_ARTIFACTS="${CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield-with-tail {{args}}
 
 hegota-unshield-for-gas *args:
-    cd crates && MSP_CIRCUIT_ARTIFACTS="${MSP_CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield-for-gas {{args}}
+    cd crates && CIRCUIT_ARTIFACTS="${CIRCUIT_ARTIFACTS:-minimal-shield/.hegota-data/circuit}" cargo run -p kohaku-minimal-shield --features hegota --bin hegota -- unshield-for-gas {{args}}

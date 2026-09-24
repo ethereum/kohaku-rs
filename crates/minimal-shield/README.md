@@ -29,7 +29,7 @@ State for the `hegota` CLI lives in `.hegota-data/` (gitignored).
 ```
 HEGOTA_RPC_URL=... HEGOTA_DEPLOYER_PK=... ALLOW_TESTBED_SETUP=1 \
   MSP_ROOT=../minimal-shielded-pool FRAME_ACCT_ROOT=../frame-privacy-acct \
-  MSP_CIRCUIT_ARTIFACTS=... \
+  CIRCUIT_ARTIFACTS=... \
   just hegota-deploy
 just hegota-deploy-accounts
 just hegota-shield --value 500000000000000000

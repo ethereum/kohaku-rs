@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use alloy::{primitives::B256, providers::Provider, rpc::types::Filter, sol_types::SolEvent};
 use ruint::aliases::U256;
@@ -19,6 +19,7 @@ pub struct RpcSyncer<P: Provider> {
     provider: P,
     batch_size: u64,
     batch_delay: Duration,
+    progress: Option<Arc<dyn Fn(u64, u64) + Send + Sync>>,
 }
 
 impl<P: Provider> RpcSyncer<P> {
@@ -27,7 +28,15 @@ impl<P: Provider> RpcSyncer<P> {
             provider,
             batch_size: 32,
             batch_delay: Duration::from_millis(200),
+            progress: None,
         }
+    }
+
+    /// `progress(done, total)` is the blocks walked in this sync.
+    #[must_use]
+    pub fn with_progress(mut self, progress: impl Fn(u64, u64) + Send + Sync + 'static) -> Self {
+        self.progress = Some(Arc::new(progress));
+        self
     }
 }
 
@@ -47,6 +56,8 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
         to_block: u64,
     ) -> Result<Vec<SyncEvent>, SyncerError> {
         let from_block = from_block.max(pool.deployed_block);
+        let span = to_block.saturating_sub(from_block).max(1);
+        self.report(0, span);
         let mut all = Vec::new();
         let mut current = from_block;
         while current < to_block {
@@ -69,8 +80,18 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
             }
             info!("{end}/{to_block} ({} events)", all.len());
             current = end + 1;
+            self.report(current.saturating_sub(from_block).min(span), span);
         }
+        self.report(span, span);
         Ok(all)
+    }
+}
+
+impl<P: Provider> RpcSyncer<P> {
+    fn report(&self, done: u64, total: u64) {
+        if let Some(progress) = &self.progress {
+            progress(done, total);
+        }
     }
 }
 

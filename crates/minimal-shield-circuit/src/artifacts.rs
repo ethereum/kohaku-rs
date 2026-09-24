@@ -10,7 +10,7 @@ use crate::matrices::SerializableNpIndex;
 
 #[derive(Debug, Error)]
 pub enum ArtifactError {
-    #[error("circuit artifacts not found at {0}; run convert-msp-artifacts")]
+    #[error("circuit artifacts not found at {0}; set CIRCUIT_ARTIFACTS")]
     Missing(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
@@ -61,12 +61,12 @@ pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Artifacts, ArtifactError> 
     })
 }
 
-/// Default artifact directory: `MSP_CIRCUIT_ARTIFACTS` or `./artifacts`.
+/// Default artifact directory: `CIRCUIT_ARTIFACTS` or `./artifacts`.
 ///
 /// # Errors
 /// Returns if artifacts cannot be loaded.
 pub fn load_default() -> Result<Artifacts, ArtifactError> {
-    let dir = std::env::var("MSP_CIRCUIT_ARTIFACTS").unwrap_or_else(|_| "artifacts".into());
+    let dir = std::env::var("CIRCUIT_ARTIFACTS").unwrap_or_else(|_| "artifacts".into());
     load_from_dir(dir)
 }
 
