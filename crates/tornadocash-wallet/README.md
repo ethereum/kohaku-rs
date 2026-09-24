@@ -3,10 +3,8 @@
 Deterministic note management for [`kohaku-tornadocash`](../tornadocash/).
 
 > [!WARNING]
-> This crate is **not usable with real funds yet**. The derivation scheme is an unspecified
-> placeholder, and the only backend in-tree is a test stub that takes no secret input at all -
-> every note it produces is computable, and therefore spendable, by anyone. Until a real scheme
-> is specified and a backend ships, treat anything derived here as public.
+> This crate is **not usable with real funds yet**. The derivation scheme is a placeholder
+> and thus constant & insecure. It is only intended for testing and development purposes.
 
 ## Examples
 
