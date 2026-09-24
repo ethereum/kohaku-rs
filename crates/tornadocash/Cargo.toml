@@ -60,5 +60,8 @@ kohaku-fork-kit = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [lints]
 workspace = true
