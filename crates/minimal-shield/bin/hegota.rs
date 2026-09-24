@@ -151,6 +151,10 @@ fn persist_note(note: &Note) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    kohaku_minimal_shield_circuit::set_circuit_dir(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/.hegota-data/circuit"
+    ));
     let mut args = std::env::args().skip(1);
     let cmd = args.next().unwrap_or_else(|| "help".into());
     match cmd.as_str() {

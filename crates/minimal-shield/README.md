@@ -27,18 +27,11 @@ to 0 and spends the note on the fee, then runs `executeBatch` on the account.
 State for the `hegota` CLI lives in `.hegota-data/` (gitignored).
 
 ```
-HEGOTA_RPC_URL=... HEGOTA_DEPLOYER_PK=... ALLOW_TESTBED_SETUP=1 \
-  MSP_ROOT=../minimal-shielded-pool FRAME_ACCT_ROOT=../frame-privacy-acct \
-  CIRCUIT_ARTIFACTS=... \
-  just hegota-deploy
-just hegota-deploy-accounts
 just hegota-shield --value 500000000000000000
 just hegota-unshield --recipient 0x...
 just hegota-unshield-with-tail --owner-pk 0x... --to 0x...
 just hegota-unshield-for-gas --owner-pk 0x... --to 0x...
 ```
 
-`hegota deploy-accounts` forge-creates `FrameAccountFactory` only (reuses the
-existing Multicall3) and measures CREATE2 gas. Do not rerun full `hegota deploy`
-against a live pool. `--owner-pk` is required. `--amount` defaults to 0.001 ETH.
+`--owner-pk` is required for the tail commands. `--amount` defaults to 0.001 ETH.
 `--to` defaults to the deployer so the inner transfer is not a new EOA.

@@ -1,4 +1,4 @@
-use std::{fs, io::Cursor, path::Path};
+use std::{fs, io::Cursor, path::{Path, PathBuf}, sync::OnceLock};
 
 use ark_bn254::{Bn254, Fr};
 use ark_circom::index::NPIndex;
@@ -10,7 +10,7 @@ use crate::matrices::SerializableNpIndex;
 
 #[derive(Debug, Error)]
 pub enum ArtifactError {
-    #[error("circuit artifacts not found at {0}; set CIRCUIT_ARTIFACTS")]
+    #[error("circuit artifacts not found at {0}")]
     Missing(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
@@ -61,12 +61,19 @@ pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Artifacts, ArtifactError> 
     })
 }
 
-/// Default artifact directory: `CIRCUIT_ARTIFACTS` or `./artifacts`.
+static CIRCUIT_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Directory `load_default` reads. The first call wins.
+pub fn set_circuit_dir(dir: impl Into<PathBuf>) {
+    let _ = CIRCUIT_DIR.set(dir.into());
+}
+
+/// Load artifacts from the directory set by [`set_circuit_dir`], or `./circuit`.
 ///
 /// # Errors
 /// Returns if artifacts cannot be loaded.
 pub fn load_default() -> Result<Artifacts, ArtifactError> {
-    let dir = std::env::var("CIRCUIT_ARTIFACTS").unwrap_or_else(|_| "artifacts".into());
+    let dir = CIRCUIT_DIR.get().cloned().unwrap_or_else(|| PathBuf::from("circuit"));
     load_from_dir(dir)
 }
 

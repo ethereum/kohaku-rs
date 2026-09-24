@@ -55,12 +55,36 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
         from_block: u64,
         to_block: u64,
     ) -> Result<Vec<SyncEvent>, SyncerError> {
+        Ok(self
+            .fetch(pool, from_block, to_block)
+            .await?
+            .into_iter()
+            .map(|logged| logged.event)
+            .collect())
+    }
+}
+
+/// One pool log, with the block it was mined in.
+#[derive(Debug, Clone)]
+pub struct LoggedEvent {
+    pub block: u64,
+    pub event: SyncEvent,
+}
+
+impl<P: Provider> RpcSyncer<P> {
+    /// Logs in `from_block..=to_block`. `to_block` is included, matching [`SyncerBackend::sync`].
+    pub async fn fetch(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Vec<LoggedEvent>, SyncerError> {
         let from_block = from_block.max(pool.deployed_block);
         let span = to_block.saturating_sub(from_block).max(1);
         self.report(0, span);
         let mut all = Vec::new();
         let mut current = from_block;
-        while current < to_block {
+        while current <= to_block {
             let end = to_block.min(current + self.batch_size - 1);
             let filter = Filter::new()
                 .address(pool.address)
@@ -73,12 +97,16 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
                 .map_err(SyncerError::other)?;
             sleep(self.batch_delay).await;
             for log in &logs {
+                let block = log.block_number.unwrap_or(end);
                 match decode(log) {
-                    Ok(evs) => all.extend(evs),
+                    Ok(evs) => all.extend(evs.into_iter().map(|event| LoggedEvent { block, event })),
                     Err(e) => warn!("skip log: {e}"),
                 }
             }
             info!("{end}/{to_block} ({} events)", all.len());
+            if end == to_block {
+                break;
+            }
             current = end + 1;
             self.report(current.saturating_sub(from_block).min(span), span);
         }

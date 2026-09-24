@@ -14,4 +14,5 @@ pub use pool::Pool;
 pub use provider::{
     frame_account_salt, Call, PoolProvider, ProviderError, TailCall, UnshieldResult,
 };
+pub use kohaku_minimal_shield_circuit::set_circuit_dir;
 pub use spend::{plan_unshield, PlannedMerge, SelectError, UnshieldPlan};
