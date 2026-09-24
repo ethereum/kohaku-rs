@@ -128,18 +128,7 @@ impl PoolProvider {
 
     /// Returns if the given nullifier hash has been spent.
     pub async fn is_spent(&self, nullifier_hash: B256) -> Result<bool, PoolProviderError> {
-        let call = Tornado::isSpentCall::new((nullifier_hash,)).abi_encode();
-
-        let result = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(self.pool().address)
-                    .input(call.into()),
-            )
-            .await?;
-
-        Ok(Tornado::isSpentCall::abi_decode_returns(&result)?)
+        Ok(self.indexer.is_spent(nullifier_hash).await?)
     }
 
     /// Checks if the given note matches this provider's pool.

@@ -1,5 +1,5 @@
+use alloy::primitives::{B256, U256};
 use kohaku_kv_store::{Store, backend::StoreError};
-use ruint::aliases::U256;
 use thiserror::Error;
 use tracing::info;
 
@@ -82,7 +82,7 @@ impl Indexer {
 
     /// Returns `Some` if the given nullifier hash exists.
     #[must_use]
-    pub async fn nullifier_hash(&self, nullifier_hash: U256) -> Result<Option<()>, IndexerError> {
+    pub async fn is_spent(&self, nullifier_hash: B256) -> Result<bool, IndexerError> {
         Ok(self.store.get_nullifier_hash(nullifier_hash).await?)
     }
 
