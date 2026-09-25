@@ -27,7 +27,7 @@ const DEFAULT_GAP_LIMIT: u64 = 20;
 /// let notes = wallet.notes(&pool).await?;
 ///
 /// // Reserve a new note for the pool.
-/// let (nonce, secret, nullifier) = wallet.reserve(&pool).await?;
+/// let (secret, nullifier) = wallet.reserve(&pool).await?;
 /// # }
 /// ```
 #[derive(Clone)]
