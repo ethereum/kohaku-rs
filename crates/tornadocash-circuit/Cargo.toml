@@ -11,7 +11,7 @@ parallel = ["websnark-rs/parallel"]
 brotli = { workspace = true }
 postcard = { workspace = true }
 rand = { workspace = true }
-ruint = { workspace = true, features = ["ark-ff-06"] }
+ruint = { workspace = true, features = ["ark-ff-06", "serde"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 websnark-rs = { workspace = true }
