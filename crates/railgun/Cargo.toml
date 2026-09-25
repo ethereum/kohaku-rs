@@ -15,54 +15,53 @@ path = "bin/main.rs"
 
 [features]
 default = []
-# js = ["dep:tsify", "dep:wasm-bindgen"]
-# parallel = ["ark-groth16/parallel", "ark-ff/parallel", "ark-serialize/parallel"]
+js = ["dep:tsify", "dep:wasm-bindgen"]
+parallel = ["ark-groth16/parallel", "ark-ff/parallel", "ark-serialize/parallel"]
 testing = []
 bench = []
 
 [dependencies]
-# aes = { workspace = true }
-# aes-gcm = { workspace = true }
+# common = { workspace = true }
+# kohaku-db = { workspace = true }
+# crypto = { workspace = true }
 alloy = { workspace = true }
 ark-bn254 = { workspace = true }
-# ark-circom = { workspace = true }
 ark-ff = { workspace = true }
-# ark-groth16 = { workspace = true }
-# ark-relations = { workspace = true }
-# ark-serialize = { workspace = true }
-# ark-std = { workspace = true }
 async-trait = { workspace = true }
-# bech32 = { workspace = true }
-# common = { workspace = true }
-# crypto = { workspace = true }
-# ctr = { workspace = true }
-# curve25519-dalek = { workspace = true }
-# ed25519-dalek = { workspace = true }
-# eip-1193-provider = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
-# rand_chacha = { workspace = true }
 ruint = { workspace = true, features = ["num-bigint"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-# tsify = { workspace = true, optional = true }
 kohaku-userop-kit = { workspace = true }
-# wasm-bindgen = { workspace = true, optional = true }
-# web-time = { workspace = true }
+wasm-bindgen = { version = "=0.2.108", optional = true }
 brotli = { workspace = true }
 anyhow = { workspace = true }
-# kohaku-db = { workspace = true }
+aes = "0.9.3"
+aes-gcm = "0.11.1"
+ark-circom = "0.6.0"
+ark-groth16 = "0.6.0"
+ark-relations = "0.6.0"
+ark-serialize = "0.6.0"
+ark-std = "0.6.0"
+bech32 = "0.12.0"
+ctr = "0.10.1"
+curve25519-dalek = "5.0.0"
+ed25519-dalek = "3.0.0"
+rand_chacha = "0.10.0"
+web-time = "1.1.0"
+tsify = { version = "0.5.8", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { workspace = true, features = ["json", "rustls"] }
 tokio = { workspace = true, features = ["fs"] }
 tracing-subscriber = { workspace = true }
-# wasmer = { workspace = true }
+wasmer = { version = "6.1", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
@@ -74,7 +73,9 @@ getrandom_04 = { package = "getrandom", version = "0.4", features = [
 # js-sys = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 # tracing-wasm = { workspace = true }
-# wasmer = { workspace = true, features = ["js-default"] }
+wasmer = { version = "6.1", default-features = false, features = [
+    "js-default",
+] }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }
