@@ -5,6 +5,7 @@ members = [
     "merkle-tree",
     "tornadocash",
     "tornadocash-circuit",
+    "tornadocash-wallet",
     "userop-kit",
 ]
 resolver = "3"
@@ -34,6 +35,7 @@ kohaku-kv-store = { path = "kv-store" }
 kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-tornadocash = { path = "tornadocash" }
 kohaku-tornadocash-circuit = { path = "tornadocash-circuit" }
+kohaku-tornadocash-wallet = { path = "tornadocash-wallet" }
 kohaku-userop-kit = { path = "userop-kit" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"
