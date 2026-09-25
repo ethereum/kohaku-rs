@@ -89,6 +89,12 @@ impl Wallet {
         self
     }
 
+    /// Syncs and returns the next nonce for `pool`.
+    pub async fn nonce(&self, pool: &Pool) -> Result<u64, WalletError> {
+        let _lock = self.nonce_lock.lock().await;
+        self.recover(pool).await
+    }
+
     /// Syncs and returns the note at `nonce` for `pool`.
     ///
     /// Automatically recover's the wallet's state for `pool` before resolving the note.
@@ -124,14 +130,14 @@ impl Wallet {
     ///
     /// # Errors
     /// Returns an error if the keychain, provider, or store fails.
-    pub async fn reserve(&self, pool: &Pool) -> Result<(u64, Secret, Nullifier), WalletError> {
+    pub async fn reserve(&self, pool: &Pool) -> Result<(Secret, Nullifier), WalletError> {
         let _lock = self.nonce_lock.lock().await;
 
         let nonce = self.recover(pool).await?;
         self.pool_store(pool).set_next_nonce(nonce + 1).await?;
 
         let (secret, nullifier) = self.keychain.secrets(pool, nonce).await?;
-        Ok((nonce, secret, nullifier))
+        Ok((secret, nullifier))
     }
 
     /// Syncs `pool`, then walks the nonces against its state to find the next reservation.

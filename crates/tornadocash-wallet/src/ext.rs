@@ -17,8 +17,8 @@ pub trait DepositWalletExt: Sized {
 impl DepositWalletExt for Deposit {
     async fn with_wallet(self, wallet: &Wallet) -> Result<Self, WalletError> {
         let pool = self.pool().clone();
-        let (_, secret, nullifier) = wallet.reserve(&pool).await?;
+        let (secret, nullifier) = wallet.reserve(&pool).await?;
 
-        Ok(self.with_nullifier(nullifier).with_secret(secret))
+        Ok(self.with_secret(secret).with_nullifier(nullifier))
     }
 }

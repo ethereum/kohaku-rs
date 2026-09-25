@@ -75,7 +75,7 @@ async fn test_with_wallet_reserves_nonce() -> Result<(), anyhow::Error> {
         .await?;
 
     assert_eq!(deposit.note(), wallet.note(&pool, 0).await?.note);
-    assert_eq!(wallet.reserve(&pool).await.unwrap().0, 1);
+    assert_eq!(wallet.nonce(&pool).await.unwrap(), 0);
 
     Ok(())
 }
@@ -106,9 +106,11 @@ async fn test_pools_are_scoped() -> Result<(), anyhow::Error> {
         Store::create(),
     );
 
-    assert_eq!(wallet.reserve(&pool).await.unwrap().0, 0);
-    assert_eq!(wallet.reserve(&pool).await.unwrap().0, 1);
-    assert_eq!(wallet.reserve(&other).await.unwrap().0, 0,);
+    assert_eq!(wallet.nonce(&pool).await.unwrap(), 0);
+
+    wallet.reserve(&pool).await.unwrap();
+    assert_eq!(wallet.nonce(&pool).await.unwrap(), 1);
+    assert_eq!(wallet.nonce(&other).await.unwrap(), 0);
 
     Ok(())
 }
