@@ -3124,6 +3124,7 @@ dependencies = [
  "async-trait",
  "blake-hash",
  "brotli",
+ "cfg_aliases",
  "criterion",
  "flate2",
  "hex",
