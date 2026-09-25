@@ -1,10 +1,12 @@
 //! Alloy JSON-RPC through Arti.
 //!
-//! Address and state calls use a fresh [`TorClient::isolated_client`] per request.
-//! `eth_getLogs` and event-cache downloads reuse the shared Tor client so a long sync
-//! does not rebuild a circuit for every window.
+//! Callers choose circuit policy explicitly:
+//! - [`TorRpc::shared_rpc_client`] — reuse the bootstrapped client (pool sync, cache GET).
+//! - [`TorRpc::isolated_rpc_client`] / [`TorRpc::with_isolated`] — one
+//!   [`TorClient::isolated_client`] for a short-lived session (all RPCs about one address).
 
 use std::{
+    future::Future,
     io,
     sync::Arc,
     task::{self, Poll},
@@ -45,37 +47,67 @@ impl TorRpc {
         Ok(Self { client })
     }
 
-    /// JSON-RPC provider for `url`.
-    ///
-    /// Address and state methods get a new circuit. `eth_getLogs` shares the client.
+    /// Long-lived JSON-RPC client that reuses the shared Tor client (and its circuits).
     ///
     /// # Errors
     /// Returns when `url` is a local address an exit cannot reach.
-    pub fn rpc_client(&self, url: Url) -> Result<RpcClient> {
-        reject_local(&url)?;
-        Ok(RpcClient::new(
-            TorTransport {
-                client: self.client.clone(),
-                url,
-            },
-            false,
-        ))
+    pub fn shared_rpc_client(&self, url: Url) -> Result<RpcClient> {
+        self.rpc_client(url, self.client.clone())
     }
 
-    pub fn provider(&self, url: Url) -> Result<RootProvider> {
-        Ok(RootProvider::new(self.rpc_client(url)?))
+    /// JSON-RPC client pinned to a fresh [`TorClient::isolated_client`].
+    ///
+    /// All requests on this client share one isolation token / circuit family.
+    ///
+    /// # Errors
+    /// Returns when `url` is a local address an exit cannot reach.
+    pub fn isolated_rpc_client(&self, url: Url) -> Result<RpcClient> {
+        self.rpc_client(url, self.client.isolated_client())
     }
 
-    /// `GET url` over the shared Tor client (same pool as `eth_getLogs`).
+    /// Run `f` with an [`isolated_rpc_client`](Self::isolated_rpc_client), then drop it.
+    ///
+    /// # Errors
+    /// Returns when the client cannot be built or `f` fails.
+    pub async fn with_isolated<F, Fut, T>(&self, url: Url, f: F) -> Result<T>
+    where
+        F: FnOnce(RpcClient) -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        f(self.isolated_rpc_client(url)?).await
+    }
+
+    /// Shared-circuit Alloy provider (pool sync).
+    ///
+    /// # Errors
+    /// Returns when `url` is local.
+    pub fn shared_provider(&self, url: Url) -> Result<RootProvider> {
+        Ok(RootProvider::new(self.shared_rpc_client(url)?))
+    }
+
+    /// Isolated-session Alloy provider.
+    ///
+    /// # Errors
+    /// Returns when `url` is local.
+    pub fn isolated_provider(&self, url: Url) -> Result<RootProvider> {
+        Ok(RootProvider::new(self.isolated_rpc_client(url)?))
+    }
+
+    /// `GET url` over the shared Tor client.
     ///
     /// # Errors
     /// Returns when the download fails or the host is local.
     pub async fn get(&self, url: &Url) -> Result<Vec<u8>> {
-        let status = exchange(&self.client, url, "GET", &[], &[], false).await?;
+        let status = exchange(&self.client, url, "GET", &[], &[]).await?;
         if !(200..300).contains(&status.code) {
             bail!("GET {url} returned HTTP {}", status.code);
         }
         Ok(status.body)
+    }
+
+    fn rpc_client(&self, url: Url, client: TorClient<PreferredRuntime>) -> Result<RpcClient> {
+        reject_local(&url)?;
+        Ok(RpcClient::new(TorTransport { client, url }, false))
     }
 }
 
@@ -110,8 +142,7 @@ impl TorTransport {
                 value.to_str().unwrap_or("").to_string(),
             ));
         }
-        let isolate = requires_isolation(&req);
-        let status = exchange(&self.client, &self.url, "POST", &extra, &body, isolate)
+        let status = exchange(&self.client, &self.url, "POST", &extra, &body)
             .await
             .map_err(|err| TransportErrorKind::custom(io::Error::other(err.to_string())))?;
         if !(200..300).contains(&status.code) {
@@ -136,7 +167,6 @@ async fn exchange(
     method: &str,
     headers: &[(String, String)],
     body: &[u8],
-    isolate: bool,
 ) -> Result<HttpStatus> {
     reject_local(url)?;
     let host = url.host_str().context("url host")?.to_string();
@@ -145,11 +175,9 @@ async fn exchange(
     if url.scheme() != "http" && !https {
         bail!("Tor RPC only supports http and https, got {}", url.scheme());
     }
-    match exchange_once(client, &host, port, https, url, method, headers, body, isolate).await {
+    match exchange_once(client, &host, port, https, url, method, headers, body).await {
         Ok(status) => Ok(status),
-        Err(_) => {
-            exchange_once(client, &host, port, https, url, method, headers, body, isolate).await
-        }
+        Err(_) => exchange_once(client, &host, port, https, url, method, headers, body).await,
     }
 }
 
@@ -162,20 +190,11 @@ async fn exchange_once(
     method: &str,
     headers: &[(String, String)],
     body: &[u8],
-    isolate: bool,
 ) -> Result<HttpStatus> {
-    let stream = if isolate {
-        client
-            .isolated_client()
-            .connect((host, port))
-            .await
-            .with_context(|| format!("Tor connect {host}:{port}"))?
-    } else {
-        client
-            .connect((host, port))
-            .await
-            .with_context(|| format!("Tor connect {host}:{port}"))?
-    };
+    let stream = client
+        .connect((host, port))
+        .await
+        .with_context(|| format!("Tor connect {host}:{port}"))?;
     let path = match url.query() {
         Some(q) => format!("{}?{q}", url.path()),
         None => url.path().to_string(),
@@ -297,10 +316,6 @@ fn decode_chunks(mut rest: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn requires_isolation(req: &RequestPacket) -> bool {
-    !req.method_names().all(|method| method == "eth_getLogs")
-}
-
 fn reject_local(url: &Url) -> Result<()> {
     let host = url.host_str().unwrap_or("");
     let local = host.eq_ignore_ascii_case("localhost")
@@ -335,18 +350,29 @@ mod tests {
         assert_eq!(status.body, b"hello");
     }
 
+    #[test]
+    fn shared_and_isolated_clients_build_for_remote_url() {
+        // Construction does not need a live Tor bootstrap: we only check reject_local
+        // via the public builders once a TorRpc exists. Without bootstrap, assert URL
+        // policy on reject_local alone (method-name isolation is gone).
+        let remote: Url = "https://ethereum.publicnode.com".parse().unwrap();
+        assert!(reject_local(&remote).is_ok());
+        let local: Url = "http://localhost:8545".parse().unwrap();
+        assert!(reject_local(&local).is_err());
+    }
+
     #[tokio::test]
-    #[ignore = "bootstraps Tor and times three isolated JSON-RPC calls"]
-    async fn isolated_request_latency() {
+    #[ignore = "bootstraps Tor and times shared vs isolated JSON-RPC calls"]
+    async fn circuit_session_latency() {
         let tor = TorRpc::connect().await.unwrap();
         let url: Url = "https://ethereum.publicnode.com".parse().unwrap();
-        let provider = tor.provider(url).unwrap();
+        let shared = tor.shared_provider(url.clone()).unwrap();
         let started = std::time::Instant::now();
-        let head = alloy::providers::Provider::get_block_number(&provider)
+        let head = alloy::providers::Provider::get_block_number(&shared)
             .await
             .unwrap();
         eprintln!(
-            "isolated eth_blockNumber -> {head} in {:.1}s",
+            "shared eth_blockNumber -> {head} in {:.1}s",
             started.elapsed().as_secs_f64()
         );
         let from = head.saturating_sub(31);
@@ -359,17 +385,29 @@ mod tests {
             .to_block(head);
         for i in 0..2 {
             let started = std::time::Instant::now();
-            match alloy::providers::Provider::get_logs(&provider, &filter).await {
+            match alloy::providers::Provider::get_logs(&shared, &filter).await {
                 Ok(logs) => eprintln!(
-                    "isolated eth_getLogs {i} blocks {from}..={head} {} logs in {:.1}s",
+                    "shared eth_getLogs {i} blocks {from}..={head} {} logs in {:.1}s",
                     logs.len(),
                     started.elapsed().as_secs_f64()
                 ),
                 Err(err) => eprintln!(
-                    "isolated eth_getLogs {i} blocks {from}..={head} failed in {:.1}s: {err}",
+                    "shared eth_getLogs {i} blocks {from}..={head} failed in {:.1}s: {err}",
                     started.elapsed().as_secs_f64()
                 ),
             }
         }
+        let started = std::time::Instant::now();
+        let n = tor
+            .with_isolated(url, |client| async move {
+                let p = RootProvider::new(client);
+                Ok(alloy::providers::Provider::get_block_number(&p).await?)
+            })
+            .await
+            .unwrap();
+        eprintln!(
+            "isolated eth_blockNumber -> {n} in {:.1}s",
+            started.elapsed().as_secs_f64()
+        );
     }
 }
