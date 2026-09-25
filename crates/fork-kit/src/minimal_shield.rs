@@ -148,9 +148,9 @@ fn read_msp_config(msp_root: &Path) -> Result<MspAddrs> {
         &std::fs::read(&cfg_path).with_context(|| format!("read {}", cfg_path.display()))?,
     )
     .context("parse MSP deploy_config.json")?;
-    if cfg.profile.as_deref() != Some("generic-tail-v1") {
+    if cfg.profile.as_deref() != Some("position-notes-v2") {
         bail!(
-            "MSP deploy_config profile is {:?}; expected generic-tail-v1 (fresh deploy on feat/generic-tail-call)",
+            "MSP deploy_config profile is {:?}; expected position-notes-v2",
             cfg.profile
         );
     }

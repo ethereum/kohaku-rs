@@ -40,7 +40,7 @@ sol! {
             uint256[2] _pA,
             uint256[2][2] _pB,
             uint256[2] _pC,
-            uint256[10] _pubSignals
+            uint256[3] _pubSignals
         ) external view returns (bool);
     }
 

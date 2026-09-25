@@ -17,6 +17,7 @@ pub const SINK_INNER_1: u64 = 2;
 struct File {
     t3: Params,
     t4: Params,
+    t11: Params,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +60,7 @@ fn ready(p: &Params) -> Ready {
 fn params(t: usize) -> &'static Ready {
     static T3: OnceLock<Ready> = OnceLock::new();
     static T4: OnceLock<Ready> = OnceLock::new();
+    static T11: OnceLock<Ready> = OnceLock::new();
     static FILE: OnceLock<File> = OnceLock::new();
     let file = FILE.get_or_init(|| {
         serde_json::from_str(include_str!("poseidon_bn254_constants.json")).expect("constants json")
@@ -66,6 +68,7 @@ fn params(t: usize) -> &'static Ready {
     match t {
         3 => T3.get_or_init(|| ready(&file.t3)),
         4 => T4.get_or_init(|| ready(&file.t4)),
+        11 => T11.get_or_init(|| ready(&file.t11)),
         _ => panic!("unsupported poseidon t={t}"),
     }
 }
@@ -89,7 +92,7 @@ fn pow5(x: U256) -> U256 {
     mul_mod(x4, x)
 }
 
-/// circomlib Poseidon: 2 or 3 field elements, output `state[0]`.
+/// circomlib Poseidon: 2, 3, or 10 field elements, output `state[0]`.
 #[must_use]
 pub fn poseidon(inputs: &[U256]) -> U256 {
     let t = inputs.len() + 1;
@@ -150,6 +153,23 @@ mod tests {
             let b = parse_fe(v["in"][1].as_str().unwrap());
             let out = parse_fe(v["out"].as_str().unwrap());
             assert_eq!(p2(a, b), out);
+        }
+    }
+
+    #[test]
+    fn poseidon10_vectors() {
+        let raw: serde_json::Value =
+            serde_json::from_str(include_str!("poseidon_bn254_vectors.json")).unwrap();
+        for v in raw["poseidon10"].as_array().unwrap().iter().take(6) {
+            let inputs: Vec<U256> = v["in"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| parse_fe(x.as_str().unwrap()))
+                .collect();
+            assert_eq!(inputs.len(), 10);
+            let out = parse_fe(v["out"].as_str().unwrap());
+            assert_eq!(poseidon(&inputs), out);
         }
     }
 

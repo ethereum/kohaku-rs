@@ -103,12 +103,12 @@ mod tests {
     }
 
     #[test]
-    fn domain_matches_position_notes_v1_pool() {
-        let pool: Address = "0xac01c30f28b32dd31d3c2854012e673e74f6b100"
+    fn domain_matches_position_notes_v2_pool() {
+        let pool: Address = "0xcb83980f3cc99e258295814375b0a94fe0ac0e86"
             .parse()
             .unwrap();
         let want = U256::from_str_radix(
-            "299ba2eaf9e8f65969c2421e1d0a34955b3870ea45e6dddabd4463e4c3c50778",
+            "10fd35b358869f1e10483910240fc5488777de42911ffc614553d64b3cbb5845",
             16,
         )
         .unwrap();

@@ -8,8 +8,8 @@ use kohaku_frametx_kit::{
     estimate_frame_account_tail_gas, recent_root_tuple_bytes, source_id, Frame, FrameSig, FrameTx,
     APPROVE_EXECUTION_AND_PAYMENT, CLAIM_FRAME_GAS, CLAIM_FRAME_STATE_GAS, CREATE2_MEASURE_EXEC,
     CREATE2_MEASURE_STATE, FRAME_MODE_DEFAULT, FRAME_MODE_SENDER, FRAME_MODE_VERIFY,
-    RECENT_ROOT_ADDRESS, RECENT_ROOT_FRAME_GAS, SETTLE_FRAME_GAS, SETTLE_FRAME_STATE_GAS,
-    SHIELD_VERIFY_GAS, VERIFY_FRAME_GAS, VERIFY_FRAME_STATE_GAS,
+    MULTICALL3_OVERHEAD_EXEC, RECENT_ROOT_ADDRESS, RECENT_ROOT_FRAME_GAS, SETTLE_FRAME_GAS,
+    SETTLE_FRAME_STATE_GAS, SHIELD_VERIFY_GAS, VERIFY_FRAME_GAS, VERIFY_FRAME_STATE_GAS,
 };
 use kohaku_minimal_shield_circuit::{prove, NUM_PUBLIC_SIGNALS};
 use ruint::aliases::U256;
@@ -43,9 +43,7 @@ pub enum ProviderError {
     Account(String),
     #[error("DEFAULT tail target must be nonzero")]
     ZeroTailTarget,
-    #[error("an internal transfer tail cannot target the pool; call it through Multicall3")]
-    PoolTailOnMerge,
-    #[error("publishing a changed root needs Multicall3")]
+    #[error("combining publishEpochRoot with another DEFAULT call needs Multicall3")]
     MissingMulticall,
     #[error("join-split takes one or two input notes")]
     BadInputCount,
@@ -65,7 +63,7 @@ pub struct UnshieldResult {
     pub tx: FrameTx,
     pub public_amount: U256,
     pub fee: U256,
-    /// Circuit witness publics in verifier order (10 signals).
+    /// Circuit public signals in verifier order (`beta, gamma, alpha`).
     pub circuit_publics: [U256; NUM_PUBLIC_SIGNALS],
     /// Precomputed FrameAccount, set by the account-tail spends.
     pub account: Option<Address>,
@@ -505,28 +503,11 @@ impl PoolProvider {
 
         let (circuit_proof, publics) =
             prove(&witness.circuit_inputs()).map_err(|e| ProviderError::Circuit(e.to_string()))?;
-        let proof_bytes = Bytes::copy_from_slice(&circuit_proof.to_frame_bytes());
-        // Settle must carry the witness publics the Groth16 proof was built
-        // for, not a second rust recomputation of nf/out.
-        let nfs = [publics[0], publics[1]];
-        let outs = [publics[2], publics[3]];
-        if nfs != rust_nfs || outs != rust_outs {
-            eprintln!(
-                "unshield: circuit nf/out differ from rust nf1_rust={:#x} nf1_circuit={:#x} nf2_rust={:#x} nf2_circuit={:#x} out1_rust={:#x} out1_circuit={:#x} out2_rust={:#x} out2_circuit={:#x}",
-                rust_nfs[0],
-                nfs[0],
-                rust_nfs[1],
-                nfs[1],
-                rust_outs[0],
-                outs[0],
-                rust_outs[1],
-                outs[1]
-            );
-        }
-        witness.root = publics[4];
-        witness.domain = publics[5];
-        witness.public_amount = publics[6];
-        witness.fee = publics[7];
+        // Publics are (beta, gamma, alpha); settle carries the rust statement.
+        let nfs = rust_nfs;
+        let outs = rust_outs;
+        let beta = publics[0];
+        let proof_bytes = Bytes::copy_from_slice(&circuit_proof.to_frame_bytes(beta));
         let mut keys = [alloy_u256(nfs[0]), alloy_u256(nfs[1])];
         keys.sort();
         // Frame 0 tuple must use the circuit root settle carries. Building it
@@ -564,9 +545,9 @@ impl PoolProvider {
     /// Any remainder after the fee is the `change_template` note (its value is
     /// replaced). A zero `public_amount` is a merge: `recipient` must be zero
     /// and the template receives `sum - fee`. A new output note publishes the
-    /// post-settlement root through `multicall3`, because the single DEFAULT
-    /// tail cannot target the pool when `public_amount` is zero. A spend that
-    /// only nullifies notes leaves `tail` unchanged.
+    /// post-settlement root via a DEFAULT call to the pool (`publishEpochRoot`).
+    /// When another leftover is already present, Multicall3 combines them. A
+    /// spend that only nullifies notes leaves `tail` unchanged.
     ///
     /// # Errors
     /// Returns when the inputs, settlement shape, or fee are invalid, a note
@@ -598,9 +579,6 @@ impl PoolProvider {
         }
         if let Some(t) = &tail {
             validate_tail(t)?;
-            if public_amount.is_zero() && t.target == self.indexer.pool().address {
-                return Err(ProviderError::PoolTailOnMerge);
-            }
         }
         self.indexer.sync().await?;
         let tree = self.indexer.tree();
@@ -741,7 +719,7 @@ impl PoolProvider {
             Some(note)
         };
         let (out_inner, out_value) = change_outputs(change.as_ref());
-        let mut witness = SpendWitness {
+        let witness = SpendWitness {
             inputs: [prepared[0].clone(), prepared[1].clone()],
             out_inner,
             out_value,
@@ -754,17 +732,14 @@ impl PoolProvider {
         };
         let (circuit_proof, publics) =
             prove(&witness.circuit_inputs()).map_err(|e| ProviderError::Circuit(e.to_string()))?;
-        witness.root = publics[4];
-        witness.domain = publics[5];
-        witness.public_amount = publics[6];
-        witness.fee = publics[7];
-        let nfs = [publics[0], publics[1]];
-        let outs = [publics[2], publics[3]];
+        let nfs = witness.nullifiers();
+        let outs = witness.output_commitments();
+        let beta = publics[0];
         let mut keys = [alloy_u256(nfs[0]), alloy_u256(nfs[1])];
         keys.sort();
         let src = source_id(self.indexer.pool().address, epoch);
         let tuple = recent_root_tuple_bytes(src, root_slot, u256_to_b256(witness.root));
-        if change.is_some() && multicall3.is_zero() {
+        if change.is_some() && tail.is_some() && multicall3.is_zero() {
             return Err(ProviderError::MissingMulticall);
         }
         let mut tx = assemble_spend(
@@ -772,7 +747,7 @@ impl PoolProvider {
             chain_id,
             &keys,
             &tuple,
-            Bytes::copy_from_slice(&circuit_proof.to_frame_bytes()),
+            Bytes::copy_from_slice(&circuit_proof.to_frame_bytes(beta)),
             &spend_struct(
                 &witness, root_slot, epoch, &nfs, &outs, recipient, authorizer,
             ),
@@ -1007,56 +982,69 @@ async fn target_is_empty(rpc: &impl Provider, target: Address) -> Result<bool, P
     Ok(nonce == 0)
 }
 
-/// Extra DEFAULT-tail budget for Multicall3 calling `publishEpochRoot`.
-const PUBLISH_VIA_MULTICALL_EXEC: u64 = 350_000;
-const PUBLISH_VIA_MULTICALL_STATE: u64 = SETTLE_FRAME_STATE_GAS;
+/// Extra DEFAULT-tail budget for a direct `publishEpochRoot` on the pool.
+const PUBLISH_EPOCH_EXEC: u64 = 200_000;
+const PUBLISH_EPOCH_STATE: u64 = SETTLE_FRAME_STATE_GAS;
 
-/// Fold `publishEpochRoot` into the single DEFAULT tail via Multicall3.
+/// Fold `publishEpochRoot` into the single DEFAULT leftover.
 ///
-/// A spend cannot add a second `SENDER`, and a zero-withdrawal tail cannot
-/// target the pool. Multicall3 is the caller that reaches the pool. A later
-/// pool can drop that restriction and target the pool directly.
+/// With position-notes-v2 the pool may be the DEFAULT target on any spend, so a
+/// publish-only leftover calls the pool directly. When another leftover is
+/// already present, Multicall3 combines the legs.
 fn publish_tail(
     tail: Option<&TailCall>,
     pool: Address,
     multicall3: Address,
     epoch: u64,
 ) -> TailCall {
-    let publish = Call3 {
-        target: pool,
-        allowFailure: false,
-        callData: Bytes::from(ShieldedPool::publishEpochRootCall { epoch }.abi_encode()),
-    };
-    let (mut legs, execution_gas, state_gas) = match tail {
+    let publish_data = Bytes::from(ShieldedPool::publishEpochRootCall { epoch }.abi_encode());
+    match tail {
+        None => TailCall {
+            target: pool,
+            data: publish_data,
+            execution_gas: PUBLISH_EPOCH_EXEC,
+            state_gas: PUBLISH_EPOCH_STATE,
+        },
         Some(existing) => {
-            let legs = if existing.target == multicall3 {
-                Multicall3::aggregate3Call::abi_decode(existing.data.as_ref()).map_or_else(
-                    |_| {
-                        vec![Call3 {
-                            target: existing.target,
-                            allowFailure: false,
-                            callData: existing.data.clone(),
-                        }]
-                    },
-                    |decoded| decoded.calls,
-                )
-            } else {
-                vec![Call3 {
-                    target: existing.target,
-                    allowFailure: false,
-                    callData: existing.data.clone(),
-                }]
+            let publish = Call3 {
+                target: pool,
+                allowFailure: false,
+                callData: publish_data,
             };
-            (legs, existing.execution_gas, existing.state_gas)
+            let (mut legs, execution_gas, state_gas) = if existing.target == multicall3 {
+                let legs = Multicall3::aggregate3Call::abi_decode(existing.data.as_ref())
+                    .map_or_else(
+                        |_| {
+                            vec![Call3 {
+                                target: existing.target,
+                                allowFailure: false,
+                                callData: existing.data.clone(),
+                            }]
+                        },
+                        |decoded| decoded.calls,
+                    );
+                (legs, existing.execution_gas, existing.state_gas)
+            } else {
+                (
+                    vec![Call3 {
+                        target: existing.target,
+                        allowFailure: false,
+                        callData: existing.data.clone(),
+                    }],
+                    existing
+                        .execution_gas
+                        .saturating_add(MULTICALL3_OVERHEAD_EXEC),
+                    existing.state_gas,
+                )
+            };
+            legs.push(publish);
+            TailCall {
+                target: multicall3,
+                data: Bytes::from(Multicall3::aggregate3Call { calls: legs }.abi_encode()),
+                execution_gas: execution_gas.saturating_add(PUBLISH_EPOCH_EXEC),
+                state_gas: state_gas.saturating_add(PUBLISH_EPOCH_STATE),
+            }
         }
-        None => (Vec::new(), 0, 0),
-    };
-    legs.push(publish);
-    TailCall {
-        target: multicall3,
-        data: Bytes::from(Multicall3::aggregate3Call { calls: legs }.abi_encode()),
-        execution_gas: execution_gas.saturating_add(PUBLISH_VIA_MULTICALL_EXEC),
-        state_gas: state_gas.saturating_add(PUBLISH_VIA_MULTICALL_STATE),
     }
 }
 
@@ -1282,7 +1270,7 @@ mod tests {
         use alloy::sol_types::SolCall;
 
         let factory = address!("0x7BD5f77A0bbFB144d66337Dbb5c0755B34131adc");
-        let pool = address!("0xac01c30f28b32dd31d3c2854012e673e74f6b100");
+        let pool = address!("0xcb83980f3cc99e258295814375b0a94fe0ac0e86");
         let account = address!("0x055D4C56401fE20Ff5D0cB5F712586E70167e7d8");
         let owner = address!("0x88ae49c3529d0941f80dab882dcf6ec223dc36c7");
         let multicall = address!("0x6f273b85aa6384dd1e097f46eeae90cc026ce51b");
@@ -1320,19 +1308,17 @@ mod tests {
     }
 
     #[test]
-    fn publish_tail_calls_the_pool_through_multicall() {
+    fn publish_tail_targets_pool_directly_when_alone() {
         use super::publish_tail;
         use crate::abis::{Multicall3, ShieldedPool};
         use alloy::sol_types::SolCall;
 
-        let pool = address!("0xac01c30f28b32dd31d3c2854012e673e74f6b100");
+        let pool = address!("0xcb83980f3cc99e258295814375b0a94fe0ac0e86");
         let multicall = address!("0x6f273b85aa6384dd1e097f46eeae90cc026ce51b");
         let bare = publish_tail(None, pool, multicall, 4);
-        assert_eq!(bare.target, multicall);
-        assert_ne!(bare.target, pool);
-        let decoded = Multicall3::aggregate3Call::abi_decode(bare.data.as_ref()).unwrap();
-        assert_eq!(decoded.calls.len(), 1);
-        assert_eq!(decoded.calls[0].target, pool);
+        assert_eq!(bare.target, pool);
+        let sel = &ShieldedPool::publishEpochRootCall { epoch: 4 }.abi_encode()[..4];
+        assert_eq!(&bare.data.as_ref()[..4], sel);
 
         let claim = super::TailCall {
             target: pool,

@@ -161,9 +161,30 @@ pub struct SpendWitness {
 }
 
 impl SpendWitness {
+    /// Ten-value statement for hybrid compression / settle binding.
+    #[must_use]
+    pub fn statement(&self) -> [U256; 10] {
+        let nfs = self.nullifiers();
+        let outs = self.output_commitments();
+        [
+            nfs[0],
+            nfs[1],
+            outs[0],
+            outs[1],
+            self.root,
+            self.domain,
+            self.public_amount,
+            self.fee,
+            addr_to_u256(self.recipient),
+            addr_to_u256(self.authorizer),
+        ]
+    }
+
     #[must_use]
     pub fn circuit_inputs(&self) -> CircuitInputs {
+        let alpha = crate::crypto::compression_alpha(&self.statement());
         CircuitInputs {
+            alpha,
             root: self.root,
             domain: self.domain,
             in_spend_key: [

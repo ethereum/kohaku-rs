@@ -1,8 +1,8 @@
 //! Pinned gas limits from MSP HEAD [`gas_profile.py`].
 
-pub const RECENT_ROOT_FRAME_GAS: u64 = 30_000;
+pub const RECENT_ROOT_FRAME_GAS: u64 = 8_000;
 pub const RECENT_ROOT_TUPLE_BYTES: usize = 72;
-pub const VERIFY_FRAME_GAS: u64 = 320_000;
+pub const VERIFY_FRAME_GAS: u64 = 225_000;
 pub const VERIFY_FRAME_STATE_GAS: u64 = 195_840;
 pub const SETTLE_FRAME_GAS: u64 = 2_000_000;
 pub const SETTLE_FRAME_STATE_GAS: u64 = 550_000;

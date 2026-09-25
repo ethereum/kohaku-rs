@@ -2,13 +2,15 @@
 
 Hegota client for the [minimal-shielded-pool](../../../minimal-shielded-pool) join-split.
 
-Unshield is a **three- or four-frame** pool-as-sender FrameTx (`generic-tail-v1`):
+Unshield is a **three- or four-frame** pool-as-sender FrameTx (`position-notes-v2`):
 
-1. `VERIFY(0x8272, 72-byte recent-root tuple)`
-2. `VERIFY(pool, 256-byte Groth16 proof)` with payment approval
+1. `VERIFY(0x8272, 72-byte recent-root tuple)` (wallet default ~8k gas)
+2. `VERIFY(pool, 288-byte Groth16 proof + beta)` with payment approval (~225k gas)
 3. `SENDER(pool, settle)`
 4. Optional leftover `DEFAULT` (mode 0, value 0). The proof `recipient` is the
-   payout destination, not the frame target.
+   payout destination, not the frame target. The leftover may target the pool
+   (e.g. `publishEpochRoot` after a change note). Multicall3 is only used when
+   several calls must share that single DEFAULT.
 
 EOA withdraw: leftover `claimWithdrawal(recipient)` targeting the pool.
 

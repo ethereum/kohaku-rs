@@ -129,7 +129,7 @@ fn require_addr(opt: Option<&str>, name: &str) -> Result<Address> {
 }
 
 /// Unset used to mean 0 and made `indexer.sync` walk the entire Hegotá history.
-const DEFAULT_DEPLOYED_BLOCK: u64 = 105_977;
+const DEFAULT_DEPLOYED_BLOCK: u64 = 143_402;
 
 fn deployed_block(st: &DeployState) -> u64 {
     st.deployed_block.unwrap_or(DEFAULT_DEPLOYED_BLOCK)

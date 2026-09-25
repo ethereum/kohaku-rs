@@ -4,13 +4,13 @@ use ruint::aliases::U256;
 
 pub const DEPTH: usize = 20;
 
-/// Circom public signal count: `nf1, nf2, out_cm1, out_cm2, root, domain,
-/// public_amount, fee, recipient, authorizer`.
-pub const NUM_PUBLIC_SIGNALS: usize = 10;
+/// Circom public signal count after hybrid compression: `beta, gamma, alpha`.
+pub const NUM_PUBLIC_SIGNALS: usize = 3;
 
-/// Private and public signals for `circuits/spend.circom`.
+/// Private and public signals for `circuits/spend.circom` (`CompressedSpend`).
 #[derive(Debug, Clone)]
 pub struct CircuitInputs {
+    pub alpha: U256,
     pub root: U256,
     pub domain: U256,
     pub in_spend_key: [U256; 2],
@@ -30,6 +30,7 @@ impl CircuitInputs {
     #[must_use]
     pub fn to_circuit_signals(&self) -> HashMap<String, Vec<U256>> {
         let mut m = HashMap::new();
+        m.insert("alpha".into(), vec![self.alpha]);
         m.insert("root".into(), vec![self.root]);
         m.insert("domain".into(), vec![self.domain]);
         m.insert("in_spend_key".into(), self.in_spend_key.to_vec());

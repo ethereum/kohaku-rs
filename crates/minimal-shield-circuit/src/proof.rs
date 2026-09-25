@@ -13,9 +13,9 @@ pub struct Proof {
 }
 
 impl Proof {
-    /// 256-byte VERIFY-frame calldata (`pA || pB || pC`, eight 32-byte words).
+    /// 256-byte snarkjs `pA || pB || pC` (eight 32-byte words).
     #[must_use]
-    pub fn to_frame_bytes(&self) -> [u8; 256] {
+    pub fn to_proof_bytes(&self) -> [u8; 256] {
         let words = [
             self.a[0],
             self.a[1],
@@ -30,6 +30,15 @@ impl Proof {
         for (i, w) in words.iter().enumerate() {
             out[i * 32..(i + 1) * 32].copy_from_slice(&w.to_be_bytes::<32>());
         }
+        out
+    }
+
+    /// 288-byte VERIFY-frame calldata: proof (256) then hybrid-compression `beta`.
+    #[must_use]
+    pub fn to_frame_bytes(&self, beta: U256) -> [u8; 288] {
+        let mut out = [0u8; 288];
+        out[..256].copy_from_slice(&self.to_proof_bytes());
+        out[256..].copy_from_slice(&beta.to_be_bytes::<32>());
         out
     }
 }
@@ -66,7 +75,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn frame_bytes_are_eight_words() {
+    fn frame_bytes_are_proof_plus_beta() {
         let p = Proof {
             a: [U256::from(1), U256::from(2)],
             b: [
@@ -75,10 +84,12 @@ mod tests {
             ],
             c: [U256::from(3), U256::from(4)],
         };
-        let b = p.to_frame_bytes();
+        let beta = U256::from(0xdead_u64);
+        let b = p.to_frame_bytes(beta);
         assert_eq!(&b[64..96], &U256::from(0x11).to_be_bytes::<32>());
         assert_eq!(&b[96..128], &U256::from(0x10).to_be_bytes::<32>());
         assert_eq!(&b[128..160], &U256::from(0x21).to_be_bytes::<32>());
         assert_eq!(&b[160..192], &U256::from(0x20).to_be_bytes::<32>());
+        assert_eq!(&b[256..], &beta.to_be_bytes::<32>());
     }
 }

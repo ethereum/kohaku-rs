@@ -32,9 +32,8 @@ pub enum CircuitError {
 
 /// Prove `inputs` and self-verify. Requires converted artifacts on disk.
 ///
-/// Returns the snarkjs-layout proof and the 10 circuit public signals in
-/// verifier order: `nf1, nf2, out_cm1, out_cm2, root, domain, public_amount,
-/// fee, recipient, authorizer`.
+/// Returns the snarkjs-layout proof and the 3 circuit public signals in
+/// verifier order: `beta, gamma, alpha`.
 ///
 /// # Errors
 /// Returns if artifacts are missing, witness calculation fails, or the proof does not verify.
