@@ -8,7 +8,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    syncer::{Syncer, rpc::RpcSyncer},
+    syncer::{SyncerExt, rpc::RpcSyncer},
     withdrawal::Withdrawal,
 };
 
@@ -62,7 +62,7 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
         .await?;
 
     // Construct a TornadoProvider
-    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
+    let syncer = RpcSyncer::new(provider.clone()).erased();
 
     // Sync a Merkle tree against the provider
     let tree = MerkleTree::new(Store::create());

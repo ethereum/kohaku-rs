@@ -17,12 +17,12 @@ pub type MerkleTree = kohaku_merkle_tree::MerkleTree<DEPTH, TornadoHasher>;
 pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<DEPTH>;
 
 /// MerkleTree extension trait for Tornado Cash.
-///
-/// Implemented for [`MerkleTree`].
-#[async_trait::async_trait]
 pub trait MerkleTreeExt {
     /// Splices the given events into the Merkle tree.
-    async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError>;
+    fn splice_events(
+        &self,
+        events: &[SyncEvent],
+    ) -> impl Future<Output = Result<(), MerkleTreeError>>;
 }
 
 /// Hasher used in Tornado Cash Merkle tree.
@@ -52,7 +52,6 @@ impl Hasher for TornadoHasher {
     }
 }
 
-#[async_trait::async_trait]
 impl MerkleTreeExt for MerkleTree {
     async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
         let first_leaf_index = events.iter().find_map(|e| match e {

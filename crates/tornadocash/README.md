@@ -43,13 +43,13 @@ use kohaku_tornadocash::{
     merkle_tree::{MerkleTree, MerkleTreeExt},
     note::Note,
     pool::Pool,
-    syncer::Syncer,
+    syncer::{DynSyncer, SyncerExt},
     withdrawal::Withdrawal,
 };
 
 async fn example(
     provider: DynProvider,
-    syncer: &Syncer,
+    syncer: &DynSyncer,
     pool: Pool,
     note: Note,
     recipient: Address,

@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{
     pool::Pool,
-    syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
+    syncer::{SyncEvent, Synced, Syncer, SyncerError},
 };
 
 /// A syncer that reads from a remote database of cached data.
@@ -57,15 +57,28 @@ impl RemoteSyncer {
 
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl SyncerBackend for RemoteSyncer {
-    async fn sync(
+impl Syncer for RemoteSyncer {
+    async fn sync_range(
         &self,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
-        let deposits = self.deposits(pool).await.map_err(SyncerError::other)?;
-        let withdrawals = self.withdrawals(pool).await.map_err(SyncerError::other)?;
+        self.sync_range(pool, from_block, to_block)
+            .await
+            .map_err(SyncerError::other)
+    }
+}
+
+impl RemoteSyncer {
+    pub async fn sync_range(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Synced, RemoteSyncerError> {
+        let deposits = self.deposits(pool).await?;
+        let withdrawals = self.withdrawals(pool).await?;
 
         //? The cache only covers up to the last block it holds an event for.
         let from = from_block.max(pool.deployed_block);
@@ -92,9 +105,7 @@ impl SyncerBackend for RemoteSyncer {
 
         Ok(Synced { range, events })
     }
-}
 
-impl RemoteSyncer {
     async fn deposits(&self, pool: &Pool) -> Result<Vec<RemoteDeposit>, RemoteSyncerError> {
         let resp = self
             .client

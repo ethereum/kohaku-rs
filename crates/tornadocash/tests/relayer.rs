@@ -13,7 +13,7 @@ use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
     relayer::Relayer,
-    syncer::{Syncer, rpc::RpcSyncer},
+    syncer::{DynSyncer, SyncerExt, rpc::RpcSyncer},
     withdrawal::Withdrawal,
 };
 
@@ -60,7 +60,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
         .await?;
 
     // Construct a TornadoProvider
-    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
+    let syncer: DynSyncer = RpcSyncer::new(provider.clone()).erased();
 
     // Construct a relayer
     let relayer = Relayer::from_client(relayer_instance.clone());

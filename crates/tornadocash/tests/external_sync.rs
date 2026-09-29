@@ -3,7 +3,7 @@ use alloy::primitives::B256;
 use kohaku_tornadocash::syncer::saga_sync::SagaSyncSyncer;
 use kohaku_tornadocash::{
     pool::Pool,
-    syncer::{SyncerBackend, event::SyncEvent, remote::RemoteSyncer},
+    syncer::{Syncer, event::SyncEvent, remote::RemoteSyncer},
 };
 
 const REMOTE_SYNC_BASE_URL: &str = "https://raw.githubusercontent.com/Robert-MacWha/privacy-protocols/refs/heads/sync-state/tornadocash-sync";
@@ -28,7 +28,7 @@ async fn test_saga_sync_matches_snapshot() -> Result<(), anyhow::Error> {
 
 /// Syncs `target_syncer` over [`FROM_BLOCK`, `TO_BLOCK`) and asserts its reported event log
 /// exactly matches a checked-in snapshot.
-async fn assert_matches_snapshot(target_syncer: &dyn SyncerBackend) -> Result<(), anyhow::Error> {
+async fn assert_matches_snapshot(target_syncer: &dyn Syncer) -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_test_writer()
@@ -36,7 +36,9 @@ async fn assert_matches_snapshot(target_syncer: &dyn SyncerBackend) -> Result<()
         .ok();
 
     let pool = Pool::SEPOLIA_ETHER_01;
-    let synced = target_syncer.sync(&pool, FROM_BLOCK, TO_BLOCK).await?;
+    let synced = target_syncer
+        .sync_range(&pool, FROM_BLOCK, TO_BLOCK)
+        .await?;
 
     let (mut commitments, mut nullifiers) = commitments_and_nullifiers(&synced.events);
     commitments.sort();

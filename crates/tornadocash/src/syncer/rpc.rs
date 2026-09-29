@@ -11,7 +11,7 @@ use tracing::{info, warn};
 use crate::{
     abis::tornado::Tornado,
     pool::Pool,
-    syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
+    syncer::{SyncEvent, Synced, Syncer, SyncerError},
 };
 
 /// A syncer that reads from an Ethereum JSON-RPC provider
@@ -62,22 +62,22 @@ impl<P: Provider> RpcSyncer<P> {
 
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl<P: Provider> SyncerBackend for RpcSyncer<P> {
-    async fn sync(
+impl<P: Provider> Syncer for RpcSyncer<P> {
+    async fn sync_range(
         &self,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
         Ok(self
-            .sync(pool, from_block, to_block)
+            .sync_range(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)?)
     }
 }
 
 impl<P: Provider> RpcSyncer<P> {
-    async fn sync(
+    async fn sync_range(
         &self,
         pool: &Pool,
         from_block: u64,

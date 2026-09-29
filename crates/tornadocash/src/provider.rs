@@ -3,35 +3,37 @@ use ruint::aliases::U256;
 
 use crate::{abis::tornado::Tornado, asset::Asset, pool::Pool};
 
-#[async_trait::async_trait]
 pub trait TornadoProviderExt: Provider {
     /// Indicates whether `nullifier_hash` has been spent.
-    async fn is_spent(
+    fn is_spent(
         &self,
         pool: &Pool,
         nullifier_hash: U256,
-    ) -> Result<bool, alloy::contract::Error>;
+    ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
     /// Indicates whether each of `nullifier_hashes` has been spent.
     ///
     /// The returned vector will have the same length and ordering as `nullifier_hashes`.
-    async fn is_spent_array(
+    fn is_spent_array(
         &self,
         pool: &Pool,
         nullifier_hashes: &[U256],
-    ) -> Result<Vec<bool>, alloy::contract::Error>;
+    ) -> impl Future<Output = Result<Vec<bool>, alloy::contract::Error>>;
     /// Indicates whether `root` is known to the Tornado pool.
-    async fn is_known_root(&self, pool: &Pool, root: U256) -> Result<bool, alloy::contract::Error>;
+    fn is_known_root(
+        &self,
+        pool: &Pool,
+        root: U256,
+    ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
     /// Returns the amount of fee token equivalent to the given `wei_amount`.
     ///
     /// If the pool's asset is native, returns `wei_amount` directly.
-    async fn quote_wei_in_fee_token(
+    fn quote_wei_in_fee_token(
         &self,
         pool: &Pool,
         wei_amount: U256,
-    ) -> Result<U256, alloy::contract::Error>;
+    ) -> impl Future<Output = Result<U256, alloy::contract::Error>>;
 }
 
-#[async_trait::async_trait]
 impl<P: Provider> TornadoProviderExt for P {
     async fn is_spent(
         &self,

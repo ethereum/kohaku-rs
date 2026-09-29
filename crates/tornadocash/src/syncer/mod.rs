@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{pool::Pool, syncer::event::SyncEvent};
@@ -14,15 +15,16 @@ pub mod rpc;
 #[cfg(feature = "saga-sync")]
 pub mod saga_sync;
 
-/// Generic syncer interface.
+/// Fetches a pool's events from some source.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-pub trait SyncerBackend: Send + Sync {
-    /// See [`Syncer::sync`].
+pub trait Syncer: Send + Sync {
+    /// Fetch the events emitted by the given `pool` within the given block range.
     ///
-    /// `from_block` and `to_block` form a half-open range. Backends are expected to
-    /// clamp this range to what they can serve.
-    async fn sync(
+    /// `from_block` and `to_block` form a half-open range. Implementers are expected to
+    /// clamp this range to what they can serve. The returned range may be a subset of the requested
+    /// range.
+    async fn sync_range(
         &self,
         pool: &Pool,
         from_block: u64,
@@ -30,13 +32,31 @@ pub trait SyncerBackend: Send + Sync {
     ) -> Result<Synced, SyncerError>;
 }
 
-/// A syncer for tornadocash.
+/// Range sugar for [`Syncer`].
+pub trait SyncerExt: Syncer {
+    fn sync(
+        &self,
+        pool: &Pool,
+        range: impl RangeBounds<u64>,
+    ) -> impl Future<Output = Result<Synced, SyncerError>>;
+
+    /// Returns a type-erased version of this syncer.
+    fn erased(self) -> DynSyncer
+    where
+        Self: Sized + 'static,
+    {
+        DynSyncer::new(self)
+    }
+}
+
+/// A type-erased syncer.
 ///
-/// Syncers are used to fetch events from the chain to build a local pool representation.
+/// See [`Syncer`].
 #[derive(Clone)]
-pub struct Syncer(Arc<dyn SyncerBackend>);
+pub struct DynSyncer(Arc<dyn Syncer>);
 
 /// A set of events emitted by a pool within a given block range.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Synced {
     /// The half-open block range these events cover.
     pub range: Range<u64>,
@@ -51,28 +71,34 @@ pub enum SyncerError {
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl Syncer {
-    pub fn new(syncer: impl SyncerBackend + 'static) -> Self {
-        Self(Arc::new(syncer))
-    }
-
-    /// Returns the events emitted by the given `pool` within the given block `range`.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer fails to fetch the events.
-    pub async fn sync(
-        &self,
-        pool: &Pool,
-        range: impl RangeBounds<u64>,
-    ) -> Result<Synced, SyncerError> {
+impl<T: Syncer + ?Sized> SyncerExt for T {
+    async fn sync(&self, pool: &Pool, range: impl RangeBounds<u64>) -> Result<Synced, SyncerError> {
         let range = block_range(range);
-        self.0.sync(pool, range.start, range.end).await
+        self.sync_range(pool, range.start, range.end).await
     }
 }
 
-impl<T: SyncerBackend + 'static> From<T> for Syncer {
-    fn from(syncer: T) -> Self {
-        Self::new(syncer)
+impl DynSyncer {
+    #[must_use]
+    pub fn new(syncer: impl Syncer + 'static) -> Self {
+        Self(Arc::new(syncer))
+    }
+
+    pub fn erased(self) -> Self {
+        self
+    }
+}
+
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
+impl Syncer for DynSyncer {
+    async fn sync_range(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Synced, SyncerError> {
+        self.0.sync_range(pool, from_block, to_block).await
     }
 }
 

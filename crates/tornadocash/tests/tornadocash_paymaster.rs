@@ -16,7 +16,7 @@ use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
     provider::TornadoProviderExt,
-    syncer::{Syncer, rpc::RpcSyncer},
+    syncer::{SyncerExt, rpc::RpcSyncer},
     userop_provider::UserOperationPaymasterExt,
     withdrawal::Withdrawal,
 };
@@ -76,7 +76,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .await?;
 
     // Sync a Merkle tree against the provider
-    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
+    let syncer = RpcSyncer::new(provider.clone()).erased();
     let tree = MerkleTree::new(Store::create());
     let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
@@ -175,7 +175,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         .await?;
 
     // Sync a Merkle tree against the provider
-    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
+    let syncer = RpcSyncer::new(provider.clone()).erased();
     let tree = MerkleTree::new(Store::create());
     let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;

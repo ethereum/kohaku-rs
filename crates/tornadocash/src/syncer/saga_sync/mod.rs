@@ -7,7 +7,7 @@ use self::{
 };
 use crate::{
     pool::Pool,
-    syncer::{Synced, SyncerBackend, SyncerError},
+    syncer::{Synced, Syncer, SyncerError},
 };
 
 mod decode;
@@ -63,14 +63,27 @@ impl SagaSyncSyncer {
 
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl SyncerBackend for SagaSyncSyncer {
-    async fn sync(
+impl Syncer for SagaSyncSyncer {
+    async fn sync_range(
         &self,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
-        let manifest = self.fetch_manifest().await.map_err(SyncerError::other)?;
+        self.sync_range(pool, from_block, to_block)
+            .await
+            .map_err(SyncerError::other)
+    }
+}
+
+impl SagaSyncSyncer {
+    pub async fn sync_range(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Synced, SagaSyncError> {
+        let manifest = self.fetch_manifest().await?;
         let key = stream_key(pool);
 
         let from = from_block.max(pool.deployed_block);
@@ -96,25 +109,18 @@ impl SyncerBackend for SagaSyncSyncer {
 
         let mut events = Vec::new();
         for chunk in overlapping {
-            let gz_bytes = self
-                .fetch_chunk_bytes(&chunk.file)
-                .await
-                .map_err(SyncerError::other)?;
+            let gz_bytes = self.fetch_chunk_bytes(&chunk.file).await?;
 
-            let decompressed =
-                verify_and_decompress_chunk(&gz_bytes, chunk).map_err(SyncerError::other)?;
+            let decompressed = verify_and_decompress_chunk(&gz_bytes, chunk)?;
 
-            let decoded = parse_chunk_events(&decompressed, chunk, range.clone())
-                .map_err(SyncerError::other)?;
+            let decoded = parse_chunk_events(&decompressed, chunk, range.clone())?;
 
             events.extend(decoded);
         }
 
         Ok(Synced { range, events })
     }
-}
 
-impl SagaSyncSyncer {
     async fn fetch_manifest(&self) -> Result<Manifest, SagaSyncError> {
         let bytes = self
             .client
