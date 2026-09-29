@@ -37,6 +37,7 @@ pub struct Health {
 
 impl RelayerStatus {
     /// Checks if the relayer supports the given pool.
+    #[must_use]
     pub fn supports(&self, pool: &Pool) -> bool {
         if pool.chain_id != self.net_id {
             return false;
@@ -54,14 +55,15 @@ impl RelayerStatus {
     /// # Errors
     /// Returns an error if the relayer does not support the given pool.
     pub fn quote(&self, pool: &Pool, gas_price: u128, refund: U256) -> Result<Payer, RelayerError> {
-        if !self.supports(pool) {
-            return Err(RelayerError::UnsupportedPool(pool.clone()));
-        }
-
         // Scale the fee percentage into a fixed-point integer.
         const FEE_PRECISION: u64 = 1_000_000;
         const WITHDRAWAL_GAS: U256 = uint!(500_000_U256);
 
+        if !self.supports(pool) {
+            return Err(RelayerError::UnsupportedPool(pool.clone()));
+        }
+
+        #[expect(clippy::cast_sign_loss, clippy::cast_precision_loss)]
         let fee_scaled = (self.tornado_service_fee / 100.0 * FEE_PRECISION as f64).round() as u64;
         let fee_percent =
             (U256::from(pool.amount_wei) * U256::from(fee_scaled)) / U256::from(FEE_PRECISION);

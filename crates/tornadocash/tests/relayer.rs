@@ -63,8 +63,8 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     // Sync a Merkle tree against the provider
     let tree = MerkleTree::new(Store::create());
-    let synced = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&synced.events).await?;
+    let snapshot = syncer.sync(&pool, ..).await?;
+    tree.splice_events(&snapshot.events).await?;
 
     // Withdraw the note via the relayer
     let recipient = PrivateKeySigner::random().address();
@@ -85,7 +85,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     let tx_receipt = provider.get_transaction_receipt(tx_hash).await?;
     assert!(tx_receipt.is_some(), "Transaction receipt should exist");
     let tx_receipt = tx_receipt.unwrap();
-    assert!(tx_receipt.status() == true, "Transaction should succeed");
+    assert!(tx_receipt.status(), "Transaction should succeed");
 
     // Assert recipient balance
     let balance = provider.get_balance(recipient).await?;

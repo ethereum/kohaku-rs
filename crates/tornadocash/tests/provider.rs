@@ -66,8 +66,8 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
 
     // Sync a Merkle tree against the provider
     let tree = MerkleTree::new(Store::create());
-    let synced = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&synced.events).await?;
+    let snapshot = syncer.sync(&pool, ..).await?;
+    tree.splice_events(&snapshot.events).await?;
 
     // Withdraw the note
     let recipient: Address = PrivateKeySigner::random().address();

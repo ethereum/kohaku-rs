@@ -19,6 +19,7 @@ pub struct Deposit {
 }
 
 impl Deposit {
+    #[must_use]
     pub fn new(pool: &Pool, note: Note) -> Self {
         Self {
             pool: pool.clone(),

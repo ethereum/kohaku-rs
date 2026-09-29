@@ -57,8 +57,8 @@ async fn example(
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tree = MerkleTree::new(Store::create());
-    let synced = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&synced.events).await?;
+    let snapshot = syncer.sync(&pool, ..).await?;
+    tree.splice_events(&snapshot.events).await?;
 
     let merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, recipient)

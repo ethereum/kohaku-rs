@@ -7,7 +7,7 @@ use tracing::info;
 use crate::{
     pool::Pool,
     syncer::{
-        SyncEvent, Synced, Syncer, SyncerError,
+        Snapshot, SyncEvent, Syncer, SyncerError,
         event::{Deposit, Withdrawal},
     },
 };
@@ -66,7 +66,7 @@ impl Syncer for RemoteSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError> {
+    ) -> Result<Snapshot, SyncerError> {
         self.sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)
@@ -74,12 +74,12 @@ impl Syncer for RemoteSyncer {
 }
 
 impl RemoteSyncer {
-    pub async fn sync(
+    async fn sync(
         &self,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, RemoteSyncerError> {
+    ) -> Result<Snapshot, RemoteSyncerError> {
         let deposits = self.deposits(pool).await?;
         let withdrawals = self.withdrawals(pool).await?;
 
@@ -101,12 +101,9 @@ impl RemoteSyncer {
             .map(Into::into)
             .collect();
 
-        let events = deposits
-            .into_iter()
-            .chain(withdrawals.into_iter())
-            .collect();
+        let events = deposits.into_iter().chain(withdrawals).collect();
 
-        Ok(Synced { range, events })
+        Ok(Snapshot { range, events })
     }
 
     async fn deposits(&self, pool: &Pool) -> Result<Vec<RemoteDeposit>, RemoteSyncerError> {

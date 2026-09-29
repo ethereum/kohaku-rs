@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     pool::Pool,
-    syncer::{Synced, Syncer, SyncerError},
+    syncer::{Snapshot, Syncer, SyncerError},
 };
 
 /// Helper syncer that chains multiple UTXO syncers together.
@@ -40,7 +40,7 @@ impl Syncer for ChainedSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError> {
+    ) -> Result<Snapshot, SyncerError> {
         info!("Syncing from {} to {}", from_block, to_block);
 
         //? Start at the pool's deployment block so a backend clamping the range up doesn't read
@@ -77,7 +77,7 @@ impl Syncer for ChainedSyncer {
             current = current.max(synced.range.end);
         }
 
-        Ok(Synced {
+        Ok(Snapshot {
             range: start..current,
             events,
         })

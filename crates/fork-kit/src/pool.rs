@@ -7,6 +7,9 @@ use alloy::{
 use kohaku_tornadocash::{asset::Asset, pool::Pool};
 
 mod sol {
+    #![allow(clippy::all)]
+    #![allow(clippy::pedantic)]
+
     use alloy::sol;
 
     sol!(

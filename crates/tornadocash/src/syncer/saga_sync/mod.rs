@@ -7,7 +7,7 @@ use self::{
 };
 use crate::{
     pool::Pool,
-    syncer::{Synced, Syncer, SyncerError},
+    syncer::{Snapshot, Syncer, SyncerError},
 };
 
 mod decode;
@@ -69,7 +69,7 @@ impl Syncer for SagaSyncSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError> {
+    ) -> Result<Snapshot, SyncerError> {
         self.sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)
@@ -77,18 +77,18 @@ impl Syncer for SagaSyncSyncer {
 }
 
 impl SagaSyncSyncer {
-    pub async fn sync(
+    async fn sync(
         &self,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SagaSyncError> {
+    ) -> Result<Snapshot, SagaSyncError> {
         let manifest = self.fetch_manifest().await?;
         let key = stream_key(pool);
 
         let from = from_block.max(pool.deployed_block);
         let Some(entry) = manifest.available_protocols.get(&key) else {
-            return Ok(Synced {
+            return Ok(Snapshot {
                 range: from..from,
                 events: Vec::new(),
             });
@@ -118,7 +118,7 @@ impl SagaSyncSyncer {
             events.extend(decoded);
         }
 
-        Ok(Synced { range, events })
+        Ok(Snapshot { range, events })
     }
 
     async fn fetch_manifest(&self) -> Result<Manifest, SagaSyncError> {

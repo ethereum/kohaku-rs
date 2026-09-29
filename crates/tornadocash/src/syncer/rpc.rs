@@ -12,7 +12,7 @@ use crate::{
     abis::tornado::Tornado,
     pool::Pool,
     syncer::{
-        SyncEvent, Synced, Syncer, SyncerError,
+        SyncEvent, Snapshot, Syncer, SyncerError,
         event::{Deposit, Withdrawal},
     },
 };
@@ -71,7 +71,7 @@ impl<P: Provider> Syncer for RpcSyncer<P> {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError> {
+    ) -> Result<Snapshot, SyncerError> {
         Ok(self
             .sync(pool, from_block, to_block)
             .await
@@ -85,7 +85,7 @@ impl<P: Provider> RpcSyncer<P> {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, RpcSyncerError> {
+    ) -> Result<Snapshot, RpcSyncerError> {
         let range = self.block_range(pool, from_block, to_block).await?;
         info!("Syncing from {} to {}", range.start, range.end);
 
@@ -105,7 +105,7 @@ impl<P: Provider> RpcSyncer<P> {
             let logs = self.provider.get_logs(&filter).await?;
             sleep(self.batch_delay).await;
 
-            for log in logs.into_iter() {
+            for log in logs {
                 match log.try_into() {
                     Ok(decoded) => events.push(decoded),
                     Err(e) => warn!("Failed to decode log: {}", e),
@@ -116,7 +116,7 @@ impl<P: Provider> RpcSyncer<P> {
             info!("{}/{} ({} events)", current, range.end, events.len());
         }
 
-        Ok(Synced { range, events })
+        Ok(Snapshot { range, events })
     }
 
     /// Clamps the requested range to the blocks this syncer can serve: the pool's deployment

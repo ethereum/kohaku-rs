@@ -29,13 +29,13 @@ pub trait Syncer: Send + Sync {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError>;
+    ) -> Result<Snapshot, SyncerError>;
 
     async fn sync(
         &self,
         pool: &Pool,
         range: impl RangeBounds<u64> + Send,
-    ) -> Result<Synced, SyncerError>
+    ) -> Result<Snapshot, SyncerError>
     where
         Self: Sized,
     {
@@ -52,7 +52,7 @@ pub struct DynSyncer(Arc<dyn Syncer>);
 
 /// A set of events emitted by a pool within a given block range.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Synced {
+pub struct Snapshot {
     /// The half-open block range these events cover.
     pub range: Range<u64>,
     /// The events the pool emitted within `range`.
@@ -83,7 +83,7 @@ impl Syncer for DynSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Synced, SyncerError> {
+    ) -> Result<Snapshot, SyncerError> {
         self.0.sync_range(pool, from_block, to_block).await
     }
 }

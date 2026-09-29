@@ -13,13 +13,13 @@ use crate::{
 
 const DEPTH: usize = 20;
 
-/// MerkleTree type used in Tornado Cash.
+/// `MerkleTree` type used in Tornado Cash.
 pub type MerkleTree = kohaku_merkle_tree::MerkleTree<DEPTH, TornadoHasher>;
 
-/// MerkleProof type used in Tornado Cash.
+/// `MerkleProof` type used in Tornado Cash.
 pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<DEPTH>;
 
-/// MerkleTree extension trait for Tornado Cash.
+/// `MerkleTree` extension trait for Tornado Cash.
 pub trait MerkleTreeExt {
     /// Splices the given events into the Merkle tree.
     fn splice_events(

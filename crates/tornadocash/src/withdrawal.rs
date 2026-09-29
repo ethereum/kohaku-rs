@@ -49,6 +49,7 @@ pub enum WithdrawalError {
 }
 
 impl Withdrawal {
+    #[must_use]
     pub fn new(pool: &Pool, note: Note, recipient: Address) -> Self {
         Self {
             pool: pool.clone(),
@@ -58,6 +59,7 @@ impl Withdrawal {
         }
     }
 
+    #[must_use]
     pub fn with_payer(mut self, payer: Payer) -> Self {
         self.payer = payer;
         self
