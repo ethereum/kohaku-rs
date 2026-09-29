@@ -7,8 +7,7 @@ use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
-    indexer::rpc::RpcSyncer,
-    merkle_tree::{TcMerkleTree, TcMerkleTreeExt},
+    merkle_tree::{MerkleTree, MerkleTreeExt},
     provider::TornadoProvider,
     syncer::rpc::RpcSyncer,
     withdrawal::Withdrawal,

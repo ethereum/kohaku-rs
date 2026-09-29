@@ -8,7 +8,7 @@ use kohaku_userop_kit::{
 };
 
 use crate::{
-    merkle_tree::TcMerkleTree,
+    merkle_tree::MerkleTree,
     pool::Pool,
     provider::{TornadoProvider, TornadoProviderError},
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
@@ -40,7 +40,7 @@ pub trait UserOperationPaymasterExt: Sized {
         withdrawal: Withdrawal,
         provider: &TornadoProvider,
         bundler: &dyn Bundler,
-        tree: &TcMerkleTree,
+        tree: &MerkleTree,
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
     where
@@ -70,7 +70,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         withdrawal: Withdrawal,
         provider: &TornadoProvider,
         bundler: &dyn Bundler,
-        tree: &TcMerkleTree,
+        tree: &MerkleTree,
         rng: &mut R,
     ) -> Result<Self, TornadoPaymasterError>
     where
@@ -112,7 +112,7 @@ async fn estimate_at_fee<S, R>(
     builder: UserOperationBuilder<S>,
     withdrawal: Withdrawal,
     fee: U256,
-    tree: &TcMerkleTree,
+    tree: &MerkleTree,
     bundler: &dyn Bundler,
     rng: &mut R,
 ) -> Result<UserOperationBuilder<S>, TornadoPaymasterError>

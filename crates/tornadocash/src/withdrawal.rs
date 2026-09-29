@@ -13,7 +13,7 @@ use websnark_rs::proof::Proof;
 
 use crate::{
     abis::tornado::Tornado::withdrawCall,
-    merkle_tree::TcMerkleTree,
+    merkle_tree::MerkleTree,
     note::Note,
     pool::Pool,
     relayer::{RelayerError, status::RelayerStatus},
@@ -102,7 +102,7 @@ impl Withdrawal {
     /// Returns an error if the note is missing from `tree` or if proof generation fails.
     pub async fn prove(
         self,
-        tree: &TcMerkleTree,
+        tree: &MerkleTree,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvenWithdrawal, WithdrawalError> {
         let root = tree.root().await?;

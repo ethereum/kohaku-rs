@@ -37,7 +37,7 @@ use alloy::{
 };
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
-    merkle_tree::{TcMerkleTree, TcMerkleTreeExt},
+    merkle_tree::{MerkleTree, MerkleTreeExt},
     note::Note,
     pool::Pool,
     provider::TornadoProvider,
@@ -50,7 +50,7 @@ async fn example(
     note: Note,
     recipient: Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let tree = TcMerkleTree::new(Store::create());
+    let tree = MerkleTree::new(Store::create());
     let synced = provider.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
@@ -72,7 +72,7 @@ use alloy::{
     providers::Provider,
 };
 use kohaku_tornadocash::{
-    merkle_tree::TcMerkleTree,
+    merkle_tree::MerkleTree,
     note::Note,
     pool::Pool,
     provider::TornadoProvider,
@@ -82,7 +82,7 @@ use kohaku_tornadocash::{
 
 async fn example(
     provider: &TornadoProvider,
-    tree: &TcMerkleTree,
+    tree: &MerkleTree,
     note: Note,
     recipient: Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -111,7 +111,7 @@ async fn example(
 ```rust,no_run
 use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
 use kohaku_tornadocash::{
-    merkle_tree::TcMerkleTree,
+    merkle_tree::MerkleTree,
     note::Note,
     pool::Pool,
     provider::TornadoProvider,
@@ -127,7 +127,7 @@ use kohaku_userop_kit::{
 async fn example(
     provider: DynProvider,
     tornado_provider: &TornadoProvider,
-    tree: &TcMerkleTree,
+    tree: &MerkleTree,
     note: Note,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pool = Pool::SEPOLIA_ETHER_01;
