@@ -87,13 +87,7 @@ impl Deposit {
     /// Returns the note associated with this deposit.
     #[must_use]
     pub fn note(&self) -> Note {
-        Note::new(
-            self.nullifier,
-            self.secret,
-            self.pool.symbol(),
-            self.pool.amount(),
-            self.pool.chain_id,
-        )
+        Note::new(self.nullifier, self.secret)
     }
 }
 

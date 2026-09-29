@@ -3,7 +3,7 @@ use std::fmt::Display;
 use alloy::primitives::{Address, address};
 use serde::{Deserialize, Serialize};
 
-use crate::{asset::Asset, note::Note};
+use crate::{asset::Asset, note::NoteString};
 
 /// Represents a tornadocash pool. Pools are uniquely defined by their `chain_id`, `asset` symbol,
 /// and `amount`.
@@ -144,7 +144,7 @@ impl Pool {
     };
 
     #[must_use]
-    pub fn from_note(note: &Note) -> Option<Self> {
+    pub fn from_note(note: &NoteString) -> Option<Self> {
         Self::from_raw(&note.amount, &note.symbol, note.chain_id)
     }
 
