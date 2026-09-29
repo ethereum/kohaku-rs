@@ -7,8 +7,9 @@ use ruint::aliases::U256;
 
 use crate::{
     abis::{erc20::ERC20, tornado::Tornado},
+    asset::Asset,
     note::{Note, Nullifier, Secret},
-    pool::{Asset, Pool},
+    pool::Pool,
 };
 
 /// A Tornado Cash deposit.

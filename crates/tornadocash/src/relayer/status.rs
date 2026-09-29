@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    pool::{Asset, Pool},
-    relayer::RelayerError,
-    withdrawal::Payer,
-};
+use crate::{asset::Asset, pool::Pool, relayer::RelayerError, withdrawal::Payer};
 
 /// Relayer status response.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -45,7 +41,7 @@ impl RelayerStatus {
             return false;
         }
 
-        let Some(instance) = self.instances.get(&pool.symbol()) else {
+        let Some(instance) = self.instances.get(pool.symbol()) else {
             return false;
         };
 
@@ -88,7 +84,7 @@ impl RelayerStatus {
             });
         }
 
-        let Some(price) = self.eth_prices.get(&pool.symbol()).copied() else {
+        let Some(price) = self.eth_prices.get(pool.symbol()).copied() else {
             return Err(RelayerError::UnsupportedPool(pool.clone()));
         };
 
@@ -116,10 +112,10 @@ mod tests {
 
         let status = RelayerStatus {
             instances: HashMap::from([(
-                pool.symbol(),
+                pool.symbol().to_string(),
                 Instance {
                     instance_address: HashMap::from([(pool.amount(), pool.address)]),
-                    symbol: pool.symbol(),
+                    symbol: pool.symbol().to_string(),
                     decimals: pool.asset.decimals(),
                 },
             )]),
@@ -148,12 +144,12 @@ mod tests {
 
         let status = RelayerStatus {
             tornado_service_fee: 1.0,
-            eth_prices: HashMap::from([(pool.symbol(), U256::from(pool.amount_wei))]),
+            eth_prices: HashMap::from([(pool.symbol().to_string(), U256::from(pool.amount_wei))]),
             instances: HashMap::from([(
-                pool.symbol(),
+                pool.symbol().to_string(),
                 Instance {
                     instance_address: HashMap::from([(pool.amount(), pool.address)]),
-                    symbol: pool.symbol(),
+                    symbol: pool.symbol().to_string(),
                     decimals: pool.asset.decimals(),
                 },
             )]),
@@ -177,12 +173,15 @@ mod tests {
 
         let status = RelayerStatus {
             tornado_service_fee: 1.0,
-            eth_prices: HashMap::from([(pool.symbol(), U256::from(1_000_000_000_000_000_000u64))]),
+            eth_prices: HashMap::from([(
+                pool.symbol().to_string(),
+                U256::from(1_000_000_000_000_000_000u64),
+            )]),
             instances: HashMap::from([(
-                pool.symbol(),
+                pool.symbol().to_string(),
                 Instance {
                     instance_address: HashMap::from([(pool.amount(), pool.address)]),
-                    symbol: pool.symbol(),
+                    symbol: pool.symbol().to_string(),
                     decimals: pool.asset.decimals(),
                 },
             )]),

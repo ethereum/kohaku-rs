@@ -1,27 +1,9 @@
-use std::{borrow::Cow, fmt::Display};
+use std::fmt::Display;
 
 use alloy::primitives::{Address, address};
 use serde::{Deserialize, Serialize};
 
-use crate::note::Note;
-
-/// Represents an asset in a tornadocash pool. Assets can either be native (e.g. ETH, MATIC) or
-/// ERC20 tokens.
-///
-/// Tornadocash assets are by convention represented by their symbol and decimal precision rather
-/// than their contract addresses.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum Asset {
-    Native {
-        symbol: Cow<'static, str>,
-        decimals: u8,
-    },
-    Erc20 {
-        address: Address,
-        symbol: Cow<'static, str>,
-        decimals: u8,
-    },
-}
+use crate::{asset::Asset, note::Note};
 
 /// Represents a tornadocash pool. Pools are uniquely defined by their `chain_id`, `asset` symbol,
 /// and `amount`.
@@ -36,9 +18,6 @@ pub struct Pool {
     pub adapter_address: Option<Address>,
 }
 
-/// Hardcoded list of known tornadocash assets.
-pub const ASSETS: &[Asset] = &[Asset::ETH, Asset::MATIC, Asset::DAI];
-
 /// Hardcoded list of known tornadocash pools.
 pub const POOLS: &[Pool] = &[
     Pool::SEPOLIA_ETHER_01,
@@ -51,38 +30,6 @@ pub const POOLS: &[Pool] = &[
     Pool::POLYGON_MATIC_100,
     Pool::POLYGON_MATIC_1000,
 ];
-
-impl Asset {
-    pub const ETH: Asset = Asset::Native {
-        symbol: Cow::Borrowed("eth"),
-        decimals: 18,
-    };
-
-    pub const MATIC: Asset = Asset::Native {
-        symbol: Cow::Borrowed("matic"),
-        decimals: 18,
-    };
-
-    pub const DAI: Asset = Asset::Erc20 {
-        address: address!("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
-        symbol: Cow::Borrowed("dai"),
-        decimals: 18,
-    };
-
-    #[must_use]
-    pub fn symbol(&self) -> String {
-        match self {
-            Asset::Native { symbol, .. } | Asset::Erc20 { symbol, .. } => symbol.to_string(),
-        }
-    }
-
-    #[must_use]
-    pub fn decimals(&self) -> u8 {
-        match self {
-            Asset::Native { decimals, .. } | Asset::Erc20 { decimals, .. } => *decimals,
-        }
-    }
-}
 
 #[allow(clippy::unreadable_literal)]
 impl Pool {
@@ -224,7 +171,7 @@ impl Pool {
 
     /// Pool asset symbol, e.g. "eth" or "matic"
     #[must_use]
-    pub fn symbol(&self) -> String {
+    pub fn symbol(&self) -> &str {
         self.asset.symbol()
     }
 

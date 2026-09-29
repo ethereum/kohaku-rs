@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod abis;
+pub mod asset;
 mod crypto;
 pub mod deposit;
 pub mod merkle_tree;

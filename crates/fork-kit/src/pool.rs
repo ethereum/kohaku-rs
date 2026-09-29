@@ -4,7 +4,7 @@ use alloy::{
     primitives::{Address, U256},
     providers::{DynProvider, Provider},
 };
-use kohaku_tornadocash::pool::{Asset, Pool};
+use kohaku_tornadocash::{asset::Asset, pool::Pool};
 
 mod sol {
     use alloy::sol;

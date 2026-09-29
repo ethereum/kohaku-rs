@@ -185,7 +185,7 @@ impl RelayerBuilder {
             ("BASE_FEE_RESERVE_PERCENTAGE".into(), "25".into()),
             ("APP_PORT".into(), port.to_string()),
             ("LOCAL_POOL_ADDRESS".into(), self.pool.address.to_string()),
-            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol()),
+            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol().to_string()),
             ("LOCAL_POOL_AMOUNT".into(), self.pool.amount()),
             (
                 "LOCAL_POOL_DECIMALS".into(),

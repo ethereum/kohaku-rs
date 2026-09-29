@@ -1,10 +1,7 @@
 use alloy::providers::Provider;
 use ruint::aliases::U256;
 
-use crate::{
-    abis::tornado::Tornado,
-    pool::{Asset, Pool},
-};
+use crate::{abis::tornado::Tornado, asset::Asset, pool::Pool};
 
 #[async_trait::async_trait]
 pub trait TornadoProviderExt: Provider {
