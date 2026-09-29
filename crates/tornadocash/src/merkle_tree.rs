@@ -8,14 +8,22 @@ use ruint::{aliases::U256, uint};
 
 use crate::{crypto::mimc::mimc_sponge_hash, indexer::syncer::SyncEvent};
 
+/// MerkleTree type used in Tornado Cash.
 pub type TcMerkleTree = MerkleTree<20, TcMerkleTreeHasher>;
 
+/// MerkleTree extension trait for Tornado Cash.
+///
+/// Implemented for [`TcMerkleTree`].
 #[async_trait::async_trait]
 pub trait TcMerkleTreeExt {
     /// Splices the given events into the Merkle tree.
     async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError>;
 }
 
+/// Hasher used in Tornado Cash Merkle tree.
+///
+/// Follows the hashing scheme used in Tornado Cash. Reference implementation:
+/// [contracts/Classic/MerkleTreeWithHistory.sol](https://github.com/tornado-dao/tornado-contracts/blob/cc57528ae13e762c36ae715f37e018528d6e0605/contracts/Classic/MerkleTreeWithHistory.sol#L57)
 #[derive(Copy, Clone)]
 pub struct TcMerkleTreeHasher;
 

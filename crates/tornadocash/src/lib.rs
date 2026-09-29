@@ -11,5 +11,5 @@ pub mod provider;
 pub mod relayer;
 pub mod withdrawal;
 
-// #[cfg(feature = "paymaster")]
-// pub mod userop_provider;
+#[cfg(feature = "paymaster")]
+pub mod userop_provider;

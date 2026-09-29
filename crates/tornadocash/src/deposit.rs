@@ -11,6 +11,7 @@ use crate::{
     pool::{Asset, Pool},
 };
 
+/// A Tornado Cash deposit.
 #[derive(Debug, Clone)]
 pub struct Deposit {
     pub pool: Pool,

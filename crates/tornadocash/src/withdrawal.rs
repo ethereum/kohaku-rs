@@ -19,6 +19,7 @@ use crate::{
     relayer::{RelayerError, status::RelayerStatus},
 };
 
+/// A Tornado Cash withdrawal.
 #[derive(Debug, Clone)]
 pub struct Withdrawal {
     pub pool: Pool,
@@ -29,6 +30,7 @@ pub struct Withdrawal {
     pub refund: Option<U256>,
 }
 
+/// A proven Tornado Cash withdrawal.
 #[derive(Debug, Clone)]
 pub struct ProvenWithdrawal {
     pub root: U256,
