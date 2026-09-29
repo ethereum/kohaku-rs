@@ -61,6 +61,8 @@ pub struct Synced {
     /// The half-open block range these events cover.
     pub range: Range<u64>,
     /// The events the pool emitted within `range`.
+    ///
+    /// Events must be in ascending order by leaf index.
     pub events: Vec<SyncEvent>,
 }
 

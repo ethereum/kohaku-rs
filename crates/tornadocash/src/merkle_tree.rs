@@ -6,7 +6,10 @@ use ark_ff::{BigInt, PrimeField};
 use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
 use ruint::{aliases::U256, uint};
 
-use crate::{crypto::mimc::mimc_sponge_hash, syncer::event::SyncEvent};
+use crate::{
+    crypto::mimc::mimc_sponge_hash,
+    syncer::event::{Deposit, SyncEvent},
+};
 
 const DEPTH: usize = 20;
 
@@ -54,23 +57,29 @@ impl Hasher for TornadoHasher {
 
 impl MerkleTreeExt for MerkleTree {
     async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
-        let first_leaf_index = events.iter().find_map(|e| match e {
-            SyncEvent::Deposit(d) => Some(d.leaf_index),
-            SyncEvent::Withdrawal(_) => None,
-        });
-
-        let commitments: Vec<U256> = events
+        let deposits: Vec<&Deposit> = events
             .iter()
             .filter_map(|e| match e {
-                SyncEvent::Deposit(d) => Some(d.commitment.into()),
-                _ => None,
+                SyncEvent::Deposit(d) => Some(d),
+                SyncEvent::Withdrawal(_) => None,
             })
             .collect();
 
-        if let Some(first_leaf_index) = first_leaf_index {
-            self.splice(first_leaf_index as usize, &commitments).await?;
+        let Some(first_leaf_index) = deposits.first().map(|d| d.leaf_index) else {
+            return Ok(());
+        };
+
+        for (offset, d) in deposits.iter().enumerate() {
+            let expected = first_leaf_index + offset as u32;
+            if d.leaf_index != expected {
+                return Err(MerkleTreeError::Other(format!(
+                    "non-contiguous deposit events: expected leaf {expected}, got {}",
+                    d.leaf_index
+                )));
+            }
         }
 
-        Ok(())
+        let commitments: Vec<U256> = deposits.into_iter().map(|d| d.commitment.into()).collect();
+        self.splice(first_leaf_index as usize, &commitments).await
     }
 }
