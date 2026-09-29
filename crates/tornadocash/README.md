@@ -72,7 +72,7 @@ async fn example(
 
 ```rust,no_run
 use alloy::{
-    primitives::Address,
+    primitives::{Address, U256},
     providers::Provider,
 };
 use kohaku_tornadocash::{
@@ -99,7 +99,7 @@ async fn example(
     let merkle_proof = tree.leaf_proof(note.commitment()).await?;
 
     let withdrawal = Withdrawal::new(&pool, note, recipient)
-        .with_relayer(&status, gas_price)?
+        .with_relayer(&status, gas_price, U256::ZERO)?
         .prove(&merkle_proof, rng)?;
 
     // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.

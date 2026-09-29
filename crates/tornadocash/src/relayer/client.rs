@@ -109,9 +109,9 @@ impl RelayerClient {
                 withdrawal.root.into(),
                 nullifier_hash,
                 withdrawal.recipient,
-                withdrawal.relayer.unwrap_or_default(),
-                withdrawal.fee.unwrap_or_default().into(),
-                withdrawal.refund.unwrap_or_default().into(),
+                withdrawal.relayer(),
+                withdrawal.fee().into(),
+                withdrawal.refund().into(),
             ),
         };
 

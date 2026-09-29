@@ -25,9 +25,7 @@ pub struct Withdrawal {
     pub pool: Pool,
     pub note: Note,
     pub recipient: Address,
-    pub relayer: Option<Address>,
-    pub fee: Option<U256>,
-    pub refund: Option<U256>,
+    pub payer: Payer,
 }
 
 /// A proven Tornado Cash withdrawal.
@@ -36,6 +34,16 @@ pub struct ProvenWithdrawal {
     pub root: U256,
     pub proof: Proof,
     pub inner: Withdrawal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Payer {
+    SelfPay,
+    Relayer {
+        address: Address,
+        fee: U256,
+        refund: U256,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,24 +62,40 @@ impl Withdrawal {
             pool: pool.clone(),
             note,
             recipient,
-            relayer: None,
-            fee: None,
-            refund: None,
+            payer: Payer::SelfPay,
         }
     }
 
-    pub fn with_relayer_address(mut self, relayer: Address) -> Self {
-        self.relayer = Some(relayer);
-        self
+    #[must_use]
+    pub fn relayer(&self) -> Address {
+        match self.payer {
+            Payer::Relayer { address, .. } => address,
+            _ => Address::ZERO,
+        }
     }
 
-    pub fn with_fee(mut self, fee: U256) -> Self {
-        self.fee = Some(fee);
-        self
+    #[must_use]
+    pub fn fee(&self) -> U256 {
+        match self.payer {
+            Payer::Relayer { fee, .. } => fee,
+            _ => U256::ZERO,
+        }
     }
 
-    pub fn with_refund(mut self, refund: U256) -> Self {
-        self.refund = Some(refund);
+    #[must_use]
+    pub fn refund(&self) -> U256 {
+        match self.payer {
+            Payer::Relayer { refund, .. } => refund,
+            _ => U256::ZERO,
+        }
+    }
+
+    pub fn with_payer(mut self, relayer: Address, fee: U256, refund: U256) -> Self {
+        self.payer = Payer::Relayer {
+            address: relayer,
+            fee,
+            refund,
+        };
         self
     }
 
@@ -83,11 +107,9 @@ impl Withdrawal {
         mut self,
         status: &RelayerStatus,
         gas_price: u128,
+        refund: U256,
     ) -> Result<Self, WithdrawalError> {
-        let fee = status.fee(&self.pool, gas_price, self.refund.unwrap_or_default())?;
-
-        self.relayer = Some(status.reward_account);
-        self.fee = Some(fee);
+        self.payer = status.quote(&self.pool, gas_price, refund)?;
         Ok(self)
     }
 
@@ -117,9 +139,9 @@ impl Withdrawal {
             merkle_proof.root,
             self.note.nullifier_hash(),
             self.recipient.into_word().into(),
-            self.relayer.unwrap_or_default().into_word().into(),
-            self.fee.unwrap_or_default(),
-            self.refund.unwrap_or_default(),
+            self.relayer().into_word().into(),
+            self.fee(),
+            self.refund(),
             self.note.nullifier.into(),
             self.note.secret.into(),
             path_elements,
@@ -144,9 +166,9 @@ impl ProvenWithdrawal {
             _root: self.root.into(),
             _nullifierHash: self.note.nullifier_hash().into(),
             _recipient: self.recipient,
-            _relayer: self.relayer.unwrap_or_default(),
-            _fee: self.fee.unwrap_or_default(),
-            _refund: self.refund.unwrap_or_default(),
+            _relayer: self.relayer(),
+            _fee: self.fee(),
+            _refund: self.refund(),
         }
         .abi_encode()
     }

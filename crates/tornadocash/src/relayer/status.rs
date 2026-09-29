@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     pool::{Asset, Pool},
     relayer::RelayerError,
+    withdrawal::Payer,
 };
 
 /// Relayer status response.
@@ -61,11 +62,11 @@ impl RelayerStatus {
         false
     }
 
-    /// Calculates the fee for a transaction.
+    /// Quotes the fee for a withdrawal paid by the relayer.
     ///
     /// # Errors
     /// Returns an error if the relayer does not support the given pool.
-    pub fn fee(&self, pool: &Pool, gas_price: u128, refund: U256) -> Result<U256, RelayerError> {
+    pub fn quote(&self, pool: &Pool, gas_price: u128, refund: U256) -> Result<Payer, RelayerError> {
         if !self.supports(pool) {
             return Err(RelayerError::UnsupportedPool(pool.clone()));
         }
@@ -80,19 +81,26 @@ impl RelayerStatus {
 
         // If the asset is native, the fee is `expense + fee_percent`
         if matches!(pool.asset, Asset::Native { .. }) {
-            return Ok(fee_percent + expense);
+            return Ok(Payer::Relayer {
+                address: self.reward_account,
+                fee: expense + fee_percent,
+                refund,
+            });
         }
 
-        let Some(price) = self.eth_prices.get(&pool.symbol()) else {
+        let Some(price) = self.eth_prices.get(&pool.symbol()).copied() else {
             return Err(RelayerError::UnsupportedPool(pool.clone()));
         };
 
         // If the asset is non-native, the fee is:
-        // `((expense + refund) * 10^decimals / price) + fee_percent`
-        Ok(
-            (expense + refund) * U256::from(10).pow(U256::from(pool.asset.decimals())) / *price
-                + fee_percent,
-        )
+        let fee = (expense + refund) * U256::from(10).pow(U256::from(pool.asset.decimals()))
+            / price
+            + fee_percent;
+        Ok(Payer::Relayer {
+            address: self.reward_account,
+            fee,
+            refund,
+        })
     }
 }
 
@@ -153,7 +161,11 @@ mod tests {
             ..Default::default()
         };
 
-        let fee = status.fee(&pool, 1_000_000_000u128, U256::ZERO).unwrap();
+        let payer = status.quote(&pool, 1_000_000_000u128, U256::ZERO).unwrap();
+        let fee = match payer {
+            Payer::Relayer { fee, .. } => fee,
+            _ => panic!("expected relayer payer"),
+        };
 
         // 1% of 1 ETH + (1 gwei * 500,000 gas)
         assert_eq!(fee, U256::from(10_500_000_000_000_000u64));
@@ -178,9 +190,13 @@ mod tests {
             ..Default::default()
         };
 
-        let fee = status
-            .fee(&pool, 1_000_000_000u128, U256::from(100u64))
+        let payer = status
+            .quote(&pool, 1_000_000_000u128, U256::from(100u64))
             .unwrap();
+        let fee = match payer {
+            Payer::Relayer { fee, .. } => fee,
+            _ => panic!("expected relayer payer"),
+        };
 
         // 1% of 100 DAI + ((1 gwei * 500,000 gas) + 100 refund) valued in DAI
         assert_eq!(fee, U256::from(1_000_500_000_000_000_100u64));

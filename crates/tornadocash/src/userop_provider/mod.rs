@@ -124,8 +124,7 @@ where
 {
     let (paymaster, adapter) = paymaster_addresses(&withdrawal.pool)?;
     let withdrawal = withdrawal
-        .with_relayer_address(paymaster)
-        .with_fee(fee)
+        .with_payer(paymaster, fee, U256::ZERO)
         .prove(merkle_proof, rng)?;
 
     Ok(builder
@@ -163,9 +162,9 @@ fn encode_paymaster_data(adapter: Address, withdrawal: &ProvenWithdrawal) -> Byt
         root: withdrawal.root.into(),
         nullifierHash: withdrawal.note.nullifier_hash().into(),
         recipient: withdrawal.recipient,
-        relayer: withdrawal.relayer.unwrap_or_default(),
-        fee: withdrawal.fee.unwrap_or_default(),
-        refund: withdrawal.refund.unwrap_or_default(),
+        relayer: withdrawal.relayer(),
+        fee: withdrawal.fee(),
+        refund: withdrawal.refund(),
     };
     let data = PaymasterData {
         adapter,
