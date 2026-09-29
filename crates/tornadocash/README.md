@@ -2,7 +2,7 @@
 
 Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to interface with Tornado Cash's smart contracts. It provides support for:
 - Deposit and withdrawal transaction generation
-- Pluggable event syncing ([JSON-RPC](./src/indexer/rpc.rs), [cached remote](./src/indexer/remote.rs), [saga-sync](./src/indexer/saga_sync/mod.rs))
+- Pluggable event syncing ([JSON-RPC](./src/syncer/rpc.rs), [cached remote](./src/syncer/remote.rs), [saga-sync](./src/syncer/saga_sync/mod.rs))
 - Merkle tree construction and proof generation
 - [Relayed](./src/relayer/) withdrawal transactions
 - [Paymaster-sponsored](./src/userop_provider/) withdrawal transactions
@@ -12,6 +12,7 @@ Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to in
 ### Depositing into a Tornado Cash pool
 
 ```rust,no_run
+use rand::RngExt;
 use alloy::providers::{DynProvider, Provider};
 use kohaku_tornadocash::{deposit::Deposit, pool::Pool};
 
@@ -19,7 +20,7 @@ async fn example(
     provider: DynProvider, 
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let deposit = Deposit::random(&Pool::SEPOLIA_ETHER_01, rng);
+    let deposit = Deposit::new(&Pool::SEPOLIA_ETHER_01, rng.random());
     
     // ERC20 pools are pulled with `transferFrom` and require an approval before the deposit.
     if let Some(approval) = deposit.approval() {
@@ -43,7 +44,7 @@ use kohaku_tornadocash::{
     merkle_tree::{MerkleTree, MerkleTreeExt},
     note::Note,
     pool::Pool,
-    syncer::{DynSyncer, SyncerExt},
+    syncer::{DynSyncer, Syncer},
     withdrawal::Withdrawal,
 };
 
@@ -87,11 +88,11 @@ use kohaku_tornadocash::{
 async fn example(
     provider: DynProvider,
     tree: &MerkleTree,
+    pool: Pool,
     note: Note,
     recipient: Address,
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let pool = Pool::SEPOLIA_ETHER_01;
     let relayer = Relayer::new("https://mainnet.relayer.com");
 
     let status = relayer.status().await?;
@@ -99,7 +100,7 @@ async fn example(
     let merkle_proof = tree.leaf_proof(note.commitment()).await?;
 
     let withdrawal = Withdrawal::new(&pool, note, recipient)
-        .with_relayer(&status, gas_price, U256::ZERO)?
+        .with_payer(status.quote(&pool, gas_price, U256::ZERO)?)
         .prove(&merkle_proof, rng)?;
 
     // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.
@@ -131,10 +132,10 @@ use kohaku_userop_kit::{
 async fn example(
     provider: DynProvider,
     tree: &MerkleTree,
+    pool: Pool,
     note: Note,
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let pool = Pool::SEPOLIA_ETHER_01;
     let owner = PrivateKeySigner::random();
     let bundler = PimlicoBundler::new("https://bundler.pimlico.com".parse()?);
 
@@ -158,12 +159,3 @@ async fn example(
     Ok(())
 }
 ```
-
-## Benchmarks
-
-Benchmarks were run on a Ryzen 5 3600, 32GB RAM.
-
-| Method | Target           | Time (ms) |
-| ------ | ---------------- | --------- |
-| prove  | native           | 1,442     |
-| prove  | native +parallel | 485.72    |

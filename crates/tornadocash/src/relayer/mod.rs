@@ -7,31 +7,44 @@
 //!
 //! See [tornado-relayer](https://github.com/tornado-dao/tornado-relayer/tree/mainnet-v5) for
 //! the reference implementation.
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use alloy::{primitives::TxHash, providers::Provider};
+use alloy::{
+    primitives::{TxHash, U256},
+    providers::Provider,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     pool::Pool,
     provider::TornadoProviderExt,
     relayer::{
-        client::{JobReceipt, JobStatus, RelayerClient, RelayerClientError},
         status::RelayerStatus,
+        wire::{JobId, JobResponse, JobStatus, WithdrawRequest, WithdrawResponse},
     },
     withdrawal::ProvenWithdrawal,
 };
 
-pub mod client;
 pub mod status;
+pub mod wire;
 
 /// Tornadocash relayer.
 ///
 /// Interacts with a relayer client to create, submit, and monitor withdrawal proofs.
 pub struct Relayer {
-    client: RelayerClient,
+    url: String,
+    client: reqwest::Client,
+
     timeout: Duration,
     poll_interval: Duration,
+}
+
+/// A receipt for a relayer job.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobReceipt {
+    pub id: JobId,
+    pub pool: Pool,
+    pub nullifier_hash: U256,
 }
 
 /// The status of a relayed withdrawal.
@@ -51,10 +64,10 @@ pub struct WithdrawalStatus {
 
 #[derive(Debug, thiserror::Error)]
 pub enum RelayerError {
-    #[error("Relayer does not support pool: {0}")]
+    #[error("Unsupported pool: {0}")]
     UnsupportedPool(Pool),
-    #[error("Relayer client error: {0}")]
-    Client(#[from] RelayerClientError),
+    #[error("Reqwest error: {0}")]
+    Client(#[from] reqwest::Error),
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::contract::Error),
     #[error("Relayer error: {reason}")]
@@ -73,13 +86,9 @@ pub enum RelayerError {
 impl Relayer {
     #[must_use]
     pub fn new(url: &str) -> Self {
-        Self::from_client(RelayerClient::new(url))
-    }
-
-    #[must_use]
-    pub fn from_client(client: RelayerClient) -> Self {
         Self {
-            client,
+            url: url.to_string(),
+            client: reqwest::Client::new(),
             timeout: Duration::from_secs(30),
             poll_interval: Duration::from_millis(500),
         }
@@ -97,19 +106,56 @@ impl Relayer {
 
     /// Retrieves the relayer's status.
     ///
-    /// # Errors
-    /// Returns an error if the relayer cannot be reached.
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L7>
+    /// for the reference implementation.
     pub async fn status(&self) -> Result<RelayerStatus, RelayerError> {
-        Ok(self.client.status().await?)
+        let url = format!("{}/v1/status", self.url);
+        let response: RelayerStatus = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        Ok(response)
     }
 
-    /// Submits a withdrawal request to the relayer.
+    /// Submits a withdrawal job to the relayer.
     ///
-    /// # Errors
-    /// Returns an error if the request cannot be submitted or the relayer returns an error.
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/controller.js#L9>
+    /// for the reference implementation.
     pub async fn withdraw(&self, withdrawal: ProvenWithdrawal) -> Result<JobReceipt, RelayerError> {
-        let receipt = self.client.withdraw(withdrawal).await?;
-        Ok(receipt)
+        let nullifier_hash = withdrawal.note.nullifier_hash();
+        let request = WithdrawRequest {
+            contract: withdrawal.pool.address,
+            proof: withdrawal.proof_bytes(),
+            args: (
+                withdrawal.root.into(),
+                nullifier_hash.into(),
+                withdrawal.recipient,
+                withdrawal.payer.address,
+                withdrawal.payer.fee.into(),
+                withdrawal.payer.refund.into(),
+            ),
+        };
+
+        let url = format!("{}/v1/tornadoWithdraw", self.url);
+        let response: WithdrawResponse = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        Ok(JobReceipt {
+            id: response.id,
+            nullifier_hash,
+            pool: withdrawal.inner.pool,
+        })
     }
 
     /// Checks the status of a relayed withdrawal.
@@ -123,7 +169,7 @@ impl Relayer {
         receipt: &JobReceipt,
     ) -> Result<WithdrawalStatus, RelayerError> {
         let (job, spent) = tokio::join!(
-            self.client.job_status(&receipt.id),
+            self.job_status(&receipt.id),
             provider.is_spent(&receipt.pool, receipt.nullifier_hash)
         );
         let spent = spent?;
@@ -162,7 +208,7 @@ impl Relayer {
         provider: &impl Provider,
         receipt: &JobReceipt,
     ) -> Result<Option<TxHash>, RelayerError> {
-        let start = Instant::now();
+        let start = std::time::Instant::now();
         let mut last_status;
 
         loop {
@@ -183,5 +229,22 @@ impl Relayer {
 
             tokio::time::sleep(self.poll_interval).await;
         }
+    }
+
+    /// Polls the relayer for a withdrawal job's status.
+    ///
+    /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L32>
+    /// for the reference implementation.
+    async fn job_status(&self, id: &JobId) -> Result<JobResponse, RelayerError> {
+        let url = format!("{}/v1/jobs/{}", self.url, id.0);
+        let response: JobResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        Ok(response)
     }
 }

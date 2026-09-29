@@ -12,8 +12,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    relayer::Relayer,
-    syncer::{DynSyncer, SyncerExt, rpc::RpcSyncer},
+    syncer::{Syncer, rpc::RpcSyncer},
     withdrawal::Withdrawal,
 };
 
@@ -37,7 +36,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let relayer_signer = PrivateKeySigner::random();
     let reward_account = PrivateKeySigner::random().address();
-    let relayer_instance = RelayerBuilder::new(
+    let relayer = RelayerBuilder::new(
         anvil.endpoint(),
         anvil.ws_endpoint(),
         pool.clone(),
@@ -51,7 +50,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     .await?;
 
     // Deposit a note
-    let deposit = Deposit::random(&pool, &mut rand::rng());
+    let deposit = Deposit::new(&pool, rand::random());
     let note = deposit.note();
     provider
         .send_transaction(deposit.into())
@@ -60,10 +59,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
         .await?;
 
     // Construct a TornadoProvider
-    let syncer: DynSyncer = RpcSyncer::new(provider.clone()).erased();
-
-    // Construct a relayer
-    let relayer = Relayer::from_client(relayer_instance.clone());
+    let syncer = RpcSyncer::new(provider.clone());
 
     // Sync a Merkle tree against the provider
     let tree = MerkleTree::new(Store::create());
@@ -76,7 +72,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     let gas_price = provider.get_gas_price().await?;
     let merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, recipient)
-        .with_relayer(&status, gas_price, U256::ZERO)?
+        .with_payer(status.quote(&pool, gas_price, U256::ZERO)?)
         .prove(&merkle_proof, &mut rand::rng())?;
 
     let receipt = relayer.withdraw(withdrawal).await?;

@@ -12,11 +12,7 @@ use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
 
 use crate::{
-    abis::tornado::Tornado::withdrawCall,
-    merkle_tree::MerkleProof,
-    note::Note,
-    pool::Pool,
-    relayer::{RelayerError, status::RelayerStatus},
+    abis::tornado::Tornado::withdrawCall, merkle_tree::MerkleProof, note::Note, pool::Pool,
 };
 
 /// A Tornado Cash withdrawal.
@@ -36,22 +32,18 @@ pub struct ProvenWithdrawal {
     pub inner: Withdrawal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Payer {
-    SelfPay,
-    Relayer {
-        address: Address,
-        fee: U256,
-        refund: U256,
-    },
+/// The payer of a withdrawal transaction.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub struct Payer {
+    pub address: Address,
+    pub fee: U256,
+    pub refund: U256,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum WithdrawalError {
     #[error("Circuit error: {0}")]
     Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
-    #[error("Relayer error: {0}")]
-    Relayer(#[from] RelayerError),
     #[error("Proof leaf mismatch: expected {expected}, got {actual}")]
     ProofLeafMismatch { expected: U256, actual: U256 },
 }
@@ -62,51 +54,13 @@ impl Withdrawal {
             pool: pool.clone(),
             note,
             recipient,
-            payer: Payer::SelfPay,
-        }
-    }
-
-    #[must_use]
-    pub fn relayer(&self) -> Address {
-        match self.payer {
-            Payer::Relayer { address, .. } => address,
-            Payer::SelfPay => Address::ZERO,
-        }
-    }
-
-    #[must_use]
-    pub fn fee(&self) -> U256 {
-        match self.payer {
-            Payer::Relayer { fee, .. } => fee,
-            Payer::SelfPay => U256::ZERO,
-        }
-    }
-
-    #[must_use]
-    pub fn refund(&self) -> U256 {
-        match self.payer {
-            Payer::Relayer { refund, .. } => refund,
-            Payer::SelfPay => U256::ZERO,
+            payer: Payer::default(),
         }
     }
 
     pub fn with_payer(mut self, payer: Payer) -> Self {
         self.payer = payer;
         self
-    }
-
-    /// Pays `status`'s relayer to submit this withdrawal, at the fee it quotes for `gas_price`.
-    ///
-    /// # Errors
-    /// Returns an error if the relayer does not support this withdrawal's pool.
-    pub fn with_relayer(
-        mut self,
-        status: &RelayerStatus,
-        gas_price: u128,
-        refund: U256,
-    ) -> Result<Self, WithdrawalError> {
-        self.payer = status.quote(&self.pool, gas_price, refund)?;
-        Ok(self)
     }
 
     /// Generates the proof this withdrawal needs to be submitted.
@@ -135,9 +89,9 @@ impl Withdrawal {
             merkle_proof.root,
             self.note.nullifier_hash(),
             self.recipient.into_word().into(),
-            self.relayer().into_word().into(),
-            self.fee(),
-            self.refund(),
+            self.payer.address.into_word().into(),
+            self.payer.fee,
+            self.payer.refund,
             self.note.nullifier.into(),
             self.note.secret.into(),
             path_elements,
@@ -162,9 +116,9 @@ impl ProvenWithdrawal {
             _root: self.root.into(),
             _nullifierHash: self.note.nullifier_hash().into(),
             _recipient: self.recipient,
-            _relayer: self.relayer(),
-            _fee: self.fee(),
-            _refund: self.refund(),
+            _relayer: self.payer.address,
+            _fee: self.payer.fee,
+            _refund: self.payer.refund,
         }
         .abi_encode()
     }

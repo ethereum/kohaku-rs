@@ -147,37 +147,15 @@ impl Pool {
         paymaster: None,
     };
 
-    pub fn new(
-        chain_id: u64,
-        address: Address,
-        asset: Asset,
-        amount_wei: u128,
-        deployed_block: u64,
-        paymaster: Option<PaymasterInfo>,
-    ) -> Self {
-        Self {
-            chain_id,
-            address,
-            asset,
-            amount_wei,
-            deployed_block,
-            paymaster,
-        }
-    }
-
     /// Creates a pool from the note's pool hints. Returns `None` if the note's pool is not known.
     #[must_use]
     pub fn from_note(note: &NoteString) -> Option<Self> {
-        Self::from_raw(&note.amount, &note.symbol, note.chain_id)
-    }
-
-    /// Creates a pool from the provided hints. Returns `None` if the pool is not known.
-    #[must_use]
-    pub fn from_raw(amount: &str, symbol: &str, chain_id: u64) -> Option<Self> {
         POOLS
             .iter()
             .find(|pool| {
-                pool.chain_id == chain_id && pool.symbol() == symbol && pool.amount() == amount
+                pool.chain_id == note.chain_id
+                    && pool.symbol() == note.symbol
+                    && pool.amount() == note.amount
             })
             .cloned()
     }
@@ -203,11 +181,7 @@ impl Pool {
     /// Decimal amount as a string, e.g. "0.1"
     #[must_use]
     pub fn amount(&self) -> String {
-        let decimals = match &self.asset {
-            Asset::Native { decimals, .. } | Asset::Erc20 { decimals, .. } => *decimals,
-        };
-
-        format_amount(self.amount_wei, decimals)
+        format_amount(self.amount_wei, self.asset.decimals())
     }
 }
 

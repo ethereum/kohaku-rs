@@ -30,22 +30,17 @@ pub trait Syncer: Send + Sync {
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError>;
-}
 
-/// Range sugar for [`Syncer`].
-pub trait SyncerExt: Syncer {
-    fn sync(
+    async fn sync(
         &self,
         pool: &Pool,
-        range: impl RangeBounds<u64>,
-    ) -> impl Future<Output = Result<Synced, SyncerError>>;
-
-    /// Returns a type-erased version of this syncer.
-    fn erased(self) -> DynSyncer
+        range: impl RangeBounds<u64> + Send,
+    ) -> Result<Synced, SyncerError>
     where
-        Self: Sized + 'static,
+        Self: Sized,
     {
-        DynSyncer::new(self)
+        let range = block_range(range);
+        self.sync_range(pool, range.start, range.end).await
     }
 }
 
@@ -62,7 +57,7 @@ pub struct Synced {
     pub range: Range<u64>,
     /// The events the pool emitted within `range`.
     ///
-    /// Events must be in ascending order by leaf index.
+    /// Deposits must be contiguous and in ascending order by leaf index.
     pub events: Vec<SyncEvent>,
 }
 
@@ -73,21 +68,10 @@ pub enum SyncerError {
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl<T: Syncer + ?Sized> SyncerExt for T {
-    async fn sync(&self, pool: &Pool, range: impl RangeBounds<u64>) -> Result<Synced, SyncerError> {
-        let range = block_range(range);
-        self.sync_range(pool, range.start, range.end).await
-    }
-}
-
 impl DynSyncer {
     #[must_use]
     pub fn new(syncer: impl Syncer + 'static) -> Self {
         Self(Arc::new(syncer))
-    }
-
-    pub fn erased(self) -> Self {
-        self
     }
 }
 

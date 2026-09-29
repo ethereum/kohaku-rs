@@ -2,13 +2,12 @@ use alloy::{
     network::TransactionBuilder, primitives::Address, rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
-use rand::RngExt;
 use ruint::aliases::U256;
 
 use crate::{
     abis::{erc20::ERC20, tornado::Tornado},
     asset::Asset,
-    note::{Note, Nullifier, Secret},
+    note::Note,
     pool::Pool,
 };
 
@@ -16,21 +15,15 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Deposit {
     pub pool: Pool,
-    pub nullifier: Nullifier,
-    pub secret: Secret,
+    pub note: Note,
 }
 
 impl Deposit {
-    pub fn new(pool: &Pool, nullifier: Nullifier, secret: Secret) -> Self {
+    pub fn new(pool: &Pool, note: Note) -> Self {
         Self {
             pool: pool.clone(),
-            nullifier,
-            secret,
+            note,
         }
-    }
-
-    pub fn random(pool: &Pool, rng: &mut impl rand::Rng) -> Self {
-        Self::new(pool, rng.random(), rng.random())
     }
 
     /// Returns the value required for this deposit transaction.
@@ -87,7 +80,7 @@ impl Deposit {
     /// Returns the note associated with this deposit.
     #[must_use]
     pub fn note(&self) -> Note {
-        Note::new(self.nullifier, self.secret)
+        self.note.clone()
     }
 }
 

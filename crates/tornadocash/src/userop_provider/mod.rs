@@ -1,6 +1,6 @@
 use alloy::{
     primitives::{Address, Bytes, U256},
-    providers::DynProvider,
+    providers::Provider,
     sol_types::SolValue,
 };
 use kohaku_userop_kit::{
@@ -10,7 +10,7 @@ use kohaku_userop_kit::{
 
 use crate::{
     merkle_tree::MerkleProof,
-    pool::{PaymasterInfo, Pool},
+    pool::Pool,
     provider::TornadoProviderExt,
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
     withdrawal::{Payer, ProvenWithdrawal, Withdrawal, WithdrawalError},
@@ -40,7 +40,7 @@ pub trait UserOperationPaymasterExt: Sized {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        provider: &DynProvider,
+        provider: &impl Provider,
         bundler: &dyn Bundler,
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
@@ -72,7 +72,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        provider: &DynProvider,
+        provider: &impl Provider,
         bundler: &dyn Bundler,
         rng: &mut R,
     ) -> Result<Self, TornadoPaymasterError>
@@ -123,9 +123,13 @@ async fn estimate_at_fee<S, R>(
 where
     R: rand::CryptoRng,
 {
-    let info = paymaster_info(&withdrawal.pool)?;
+    let pool = withdrawal.pool.clone();
+    let info = pool
+        .paymaster
+        .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool))?;
+
     let withdrawal = withdrawal
-        .with_payer(Payer::Relayer {
+        .with_payer(Payer {
             address: info.address,
             fee,
             refund: U256::ZERO,
@@ -143,7 +147,7 @@ where
 
 /// Quotes the operation's maximum gas cost in the pool's fee token.
 async fn gas_cost<S>(
-    provider: &DynProvider,
+    provider: &impl Provider,
     pool: &Pool,
     builder: &UserOperationBuilder<S>,
 ) -> Result<U256, TornadoPaymasterError> {
@@ -155,23 +159,15 @@ async fn gas_cost<S>(
     Ok(provider.quote_wei_in_fee_token(pool, gas * price).await?)
 }
 
-fn paymaster_info(pool: &Pool) -> Result<PaymasterInfo, TornadoPaymasterError> {
-    let paymaster = pool
-        .paymaster
-        .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
-
-    Ok(paymaster)
-}
-
 fn encode_paymaster_data(adapter: Address, withdrawal: &ProvenWithdrawal) -> Bytes {
     let adapter_data = TornadoAdapterData {
         proof: withdrawal.proof_bytes(),
         root: withdrawal.root.into(),
         nullifierHash: withdrawal.note.nullifier_hash().into(),
         recipient: withdrawal.recipient,
-        relayer: withdrawal.relayer(),
-        fee: withdrawal.fee(),
-        refund: withdrawal.refund(),
+        relayer: withdrawal.payer.address,
+        fee: withdrawal.payer.fee,
+        refund: withdrawal.payer.refund,
     };
     let data = PaymasterData {
         adapter,

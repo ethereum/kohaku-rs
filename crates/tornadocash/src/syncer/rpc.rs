@@ -11,7 +11,10 @@ use tracing::{info, warn};
 use crate::{
     abis::tornado::Tornado,
     pool::Pool,
-    syncer::{SyncEvent, Synced, Syncer, SyncerError},
+    syncer::{
+        SyncEvent, Synced, Syncer, SyncerError,
+        event::{Deposit, Withdrawal},
+    },
 };
 
 /// A syncer that reads from an Ethereum JSON-RPC provider
@@ -70,14 +73,14 @@ impl<P: Provider> Syncer for RpcSyncer<P> {
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
         Ok(self
-            .sync_range(pool, from_block, to_block)
+            .sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)?)
     }
 }
 
 impl<P: Provider> RpcSyncer<P> {
-    async fn sync_range(
+    async fn sync(
         &self,
         pool: &Pool,
         from_block: u64,
@@ -140,21 +143,21 @@ impl TryFrom<Log> for SyncEvent {
         match log.topics().first() {
             Some(&Tornado::Deposit::SIGNATURE_HASH) => {
                 let decoded = Tornado::Deposit::decode_log(&log.inner)?.data;
-                Ok(SyncEvent::new_deposit(
-                    decoded.commitment,
-                    decoded.leafIndex,
-                    log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
-                ))
+                Ok(SyncEvent::Deposit(Deposit {
+                    commitment: decoded.commitment,
+                    leaf_index: decoded.leafIndex,
+                    block_number: log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
+                }))
             }
             Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
                 let decoded = Tornado::Withdrawal::decode_log(&log.inner)?.data;
-                Ok(SyncEvent::new_withdrawal(
-                    decoded.to,
-                    decoded.nullifierHash,
-                    decoded.relayer,
-                    decoded.fee,
-                    log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
-                ))
+                Ok(SyncEvent::Withdrawal(Withdrawal {
+                    to: decoded.to,
+                    nullifier_hash: decoded.nullifierHash,
+                    relayer: decoded.relayer,
+                    fee: decoded.fee,
+                    block_number: log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
+                }))
             }
             _ => Err(RpcSyncerError::UnknownEvent {
                 topics: log.topics().to_vec(),

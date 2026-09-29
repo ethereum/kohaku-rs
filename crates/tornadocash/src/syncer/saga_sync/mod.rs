@@ -70,14 +70,14 @@ impl Syncer for SagaSyncSyncer {
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
-        self.sync_range(pool, from_block, to_block)
+        self.sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)
     }
 }
 
 impl SagaSyncSyncer {
-    pub async fn sync_range(
+    pub async fn sync(
         &self,
         pool: &Pool,
         from_block: u64,

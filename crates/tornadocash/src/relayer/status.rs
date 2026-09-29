@@ -46,17 +46,7 @@ impl RelayerStatus {
             return false;
         };
 
-        for (amount, address) in &instance.instance_address {
-            if amount != &pool.amount() {
-                continue;
-            }
-            if address != &pool.address {
-                continue;
-            }
-            return true;
-        }
-
-        false
+        instance.instance_address.get(&pool.amount()) == Some(&pool.address)
     }
 
     /// Quotes the fee for a withdrawal paid by the relayer.
@@ -79,7 +69,7 @@ impl RelayerStatus {
 
         // If the asset is native, the fee is `expense + fee_percent`
         if matches!(pool.asset, Asset::Native { .. }) {
-            return Ok(Payer::Relayer {
+            return Ok(Payer {
                 address: self.reward_account,
                 fee: expense + fee_percent,
                 refund,
@@ -94,7 +84,7 @@ impl RelayerStatus {
         let fee = (expense + refund) * U256::from(10).pow(U256::from(pool.asset.decimals()))
             / price
             + fee_percent;
-        Ok(Payer::Relayer {
+        Ok(Payer {
             address: self.reward_account,
             fee,
             refund,
@@ -159,11 +149,10 @@ mod tests {
             ..Default::default()
         };
 
-        let payer = status.quote(&pool, 1_000_000_000u128, U256::ZERO).unwrap();
-        let fee = match payer {
-            Payer::Relayer { fee, .. } => fee,
-            _ => panic!("expected relayer payer"),
-        };
+        let fee = status
+            .quote(&pool, 1_000_000_000u128, U256::ZERO)
+            .unwrap()
+            .fee;
 
         // 1% of 1 ETH + (1 gwei * 500,000 gas)
         assert_eq!(fee, U256::from(10_500_000_000_000_000u64));
@@ -191,13 +180,10 @@ mod tests {
             ..Default::default()
         };
 
-        let payer = status
+        let fee = status
             .quote(&pool, 1_000_000_000u128, U256::from(100u64))
-            .unwrap();
-        let fee = match payer {
-            Payer::Relayer { fee, .. } => fee,
-            _ => panic!("expected relayer payer"),
-        };
+            .unwrap()
+            .fee;
 
         // 1% of 100 DAI + ((1 gwei * 500,000 gas) + 100 refund) valued in DAI
         assert_eq!(fee, U256::from(1_000_500_000_000_000_100u64));

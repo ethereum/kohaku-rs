@@ -11,7 +11,13 @@ use super::{
     SagaSyncError,
     manifest::{ChunkRef, deserialize_hex_u64},
 };
-use crate::{abis::tornado::Tornado, syncer::SyncEvent};
+use crate::{
+    abis::tornado::Tornado,
+    syncer::{
+        SyncEvent,
+        event::{Deposit, Withdrawal},
+    },
+};
 
 /// One line of a saga-sync chunk file.
 ///
@@ -37,22 +43,22 @@ impl SagaEvent {
         match self.topics.first() {
             Some(&Tornado::Deposit::SIGNATURE_HASH) => {
                 let decoded = Tornado::Deposit::decode_raw_log(self.topics.iter().copied(), &data)?;
-                Ok(Some(SyncEvent::new_deposit(
-                    decoded.commitment,
-                    decoded.leafIndex,
-                    self.block_number,
-                )))
+                Ok(Some(SyncEvent::Deposit(Deposit {
+                    commitment: decoded.commitment,
+                    leaf_index: decoded.leafIndex,
+                    block_number: self.block_number,
+                })))
             }
             Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
                 let decoded =
                     Tornado::Withdrawal::decode_raw_log(self.topics.iter().copied(), &data)?;
-                Ok(Some(SyncEvent::new_withdrawal(
-                    decoded.to,
-                    decoded.nullifierHash,
-                    decoded.relayer,
-                    decoded.fee,
-                    self.block_number,
-                )))
+                Ok(Some(SyncEvent::Withdrawal(Withdrawal {
+                    to: decoded.to,
+                    nullifier_hash: decoded.nullifierHash,
+                    relayer: decoded.relayer,
+                    fee: decoded.fee,
+                    block_number: self.block_number,
+                })))
             }
             _ => Ok(None),
         }

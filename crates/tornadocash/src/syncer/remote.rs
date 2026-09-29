@@ -1,12 +1,15 @@
 use alloy::primitives::{Address, B256, U256};
-use reqwest::{Client, Url};
+use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::info;
 
 use crate::{
     pool::Pool,
-    syncer::{SyncEvent, Synced, Syncer, SyncerError},
+    syncer::{
+        SyncEvent, Synced, Syncer, SyncerError,
+        event::{Deposit, Withdrawal},
+    },
 };
 
 /// A syncer that reads from a remote database of cached data.
@@ -64,14 +67,14 @@ impl Syncer for RemoteSyncer {
         from_block: u64,
         to_block: u64,
     ) -> Result<Synced, SyncerError> {
-        self.sync_range(pool, from_block, to_block)
+        self.sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)
     }
 }
 
 impl RemoteSyncer {
-    pub async fn sync_range(
+    pub async fn sync(
         &self,
         pool: &Pool,
         from_block: u64,
@@ -145,19 +148,23 @@ impl RemoteSyncer {
 
 impl From<RemoteDeposit> for SyncEvent {
     fn from(remote: RemoteDeposit) -> Self {
-        SyncEvent::new_deposit(remote.commitment, remote.leaf_index, remote.block_number)
+        SyncEvent::Deposit(Deposit {
+            commitment: remote.commitment,
+            leaf_index: remote.leaf_index,
+            block_number: remote.block_number,
+        })
     }
 }
 
 impl From<RemoteWithdrawal> for SyncEvent {
     fn from(remote: RemoteWithdrawal) -> Self {
-        SyncEvent::new_withdrawal(
-            remote.to,
-            remote.nullifier,
-            Address::ZERO,
-            remote.fee,
-            remote.block_number,
-        )
+        SyncEvent::Withdrawal(Withdrawal {
+            to: remote.to,
+            nullifier_hash: remote.nullifier,
+            relayer: Address::ZERO,
+            fee: remote.fee,
+            block_number: remote.block_number,
+        })
     }
 }
 
@@ -173,28 +180,23 @@ fn latest_block(deposits: &[RemoteDeposit], withdrawals: &[RemoteWithdrawal]) ->
     latest_deposit.max(latest_withdrawal)
 }
 
-fn deposits_url(base: &str, pool: &Pool) -> Url {
-    format!(
-        "{}/{}_{}_{}_deposits.ndjson",
-        base,
-        pool.chain_id,
-        pool.symbol().to_uppercase(),
-        pool.amount()
-    )
-    .parse()
-    .unwrap()
+fn deposits_url(base: &str, pool: &Pool) -> String {
+    url(base, pool, "deposits")
 }
 
-fn withdrawals_url(base: &str, pool: &Pool) -> Url {
+fn withdrawals_url(base: &str, pool: &Pool) -> String {
+    url(base, pool, "nullifiers")
+}
+
+fn url(base: &str, pool: &Pool, suffix: &str) -> String {
     format!(
-        "{}/{}_{}_{}_nullifiers.ndjson",
+        "{}/{}_{}_{}_{}.ndjson",
         base,
         pool.chain_id,
         pool.symbol().to_uppercase(),
-        pool.amount()
+        pool.amount(),
+        suffix
     )
-    .parse()
-    .unwrap()
 }
 
 #[cfg(test)]

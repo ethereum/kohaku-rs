@@ -14,3 +14,10 @@ pub mod withdrawal;
 
 #[cfg(feature = "paymaster")]
 pub mod userop_provider;
+
+pub use asset::{ASSETS, Asset};
+pub use deposit::Deposit;
+pub use note::{Note, NoteString};
+pub use relayer::Relayer;
+pub use syncer::DynSyncer;
+pub use withdrawal::{ProvenWithdrawal, Withdrawal};
