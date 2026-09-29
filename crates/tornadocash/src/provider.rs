@@ -10,6 +10,7 @@ pub trait TornadoProviderExt: Provider {
         pool: &Pool,
         nullifier_hash: U256,
     ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
+
     /// Indicates whether each of `nullifier_hashes` has been spent.
     ///
     /// The returned vector will have the same length and ordering as `nullifier_hashes`.
@@ -18,12 +19,14 @@ pub trait TornadoProviderExt: Provider {
         pool: &Pool,
         nullifier_hashes: &[U256],
     ) -> impl Future<Output = Result<Vec<bool>, alloy::contract::Error>>;
+
     /// Indicates whether `root` is known to the Tornado pool.
     fn is_known_root(
         &self,
         pool: &Pool,
         root: U256,
     ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
+
     /// Returns the amount of fee token equivalent to the given `wei_amount`.
     ///
     /// If the pool's asset is native, returns `wei_amount` directly.

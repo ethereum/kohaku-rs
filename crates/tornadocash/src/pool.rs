@@ -17,6 +17,7 @@ pub struct Pool {
 
     /// Privacy-paymaster address for this pool, if any.
     pub paymaster: Option<Address>,
+
     /// Privacy-paymaster adapter address for this pool, if any.
     pub adapter: Option<Address>,
 }
