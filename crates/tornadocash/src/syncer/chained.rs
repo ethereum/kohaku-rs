@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use tracing::info;
 
 use crate::{
     pool::Pool,
-    syncer::{Synced, Syncer, SyncerBackend, SyncerError},
+    syncer::{Synced, SyncerBackend, SyncerError},
 };
 
 /// Helper syncer that chains multiple UTXO syncers together.
@@ -11,7 +13,7 @@ use crate::{
 /// where the previous one left off.
 #[derive(Default)]
 pub struct ChainedSyncer {
-    syncers: Vec<Syncer>,
+    syncers: Vec<Arc<dyn SyncerBackend>>,
 }
 
 impl ChainedSyncer {
@@ -25,7 +27,7 @@ impl ChainedSyncer {
     /// Adds a syncer to the chain.
     #[must_use]
     pub fn then<S: SyncerBackend + 'static>(mut self, syncer: S) -> Self {
-        self.syncers.push(syncer.into());
+        self.syncers.push(Arc::new(syncer));
         self
     }
 }
@@ -67,7 +69,7 @@ impl SyncerBackend for ChainedSyncer {
                 break;
             }
 
-            let synced = match syncer.sync(pool, current..to_block).await {
+            let synced = match syncer.sync(pool, current, to_block).await {
                 Ok(synced) => synced,
                 Err(e) => {
                     // Leave `current` unchanged so the next syncer retries this range.
