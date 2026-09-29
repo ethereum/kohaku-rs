@@ -5,7 +5,6 @@ use thiserror::Error;
 use tracing::info;
 
 use crate::{
-    abis::tornado::Tornado::{Deposit, Withdrawal},
     pool::Pool,
     syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
 };
@@ -27,7 +26,7 @@ struct RemoteDeposit {
     pub block_number: u64,
     pub commitment: B256,
     pub leaf_index: u32,
-    pub timestamp: U256,
+    // pub timestamp: U256,
 }
 
 #[derive(Deserialize)]
@@ -82,12 +81,12 @@ impl SyncerBackend for RemoteSyncer {
 
         info!("Syncing from {} to {}", range.start, range.end);
 
-        let deposits: Vec<Deposit> = deposits
+        let deposits: Vec<SyncEvent> = deposits
             .into_iter()
             .filter(|d| range.contains(&d.block_number))
             .map(Into::into)
             .collect();
-        let withdrawals: Vec<Withdrawal> = withdrawals
+        let withdrawals: Vec<SyncEvent> = withdrawals
             .into_iter()
             .filter(|n| range.contains(&n.block_number))
             .map(Into::into)
@@ -95,8 +94,7 @@ impl SyncerBackend for RemoteSyncer {
 
         let events = deposits
             .into_iter()
-            .map(SyncEvent::Deposit)
-            .chain(withdrawals.into_iter().map(SyncEvent::Withdrawal))
+            .chain(withdrawals.into_iter())
             .collect();
 
         Ok(Synced { range, events })
@@ -141,24 +139,21 @@ impl RemoteSyncer {
     }
 }
 
-impl From<RemoteDeposit> for Deposit {
+impl From<RemoteDeposit> for SyncEvent {
     fn from(remote: RemoteDeposit) -> Self {
-        Deposit {
-            commitment: remote.commitment,
-            leafIndex: remote.leaf_index,
-            timestamp: remote.timestamp,
-        }
+        SyncEvent::new_deposit(remote.commitment, remote.leaf_index, remote.block_number)
     }
 }
 
-impl From<RemoteWithdrawal> for Withdrawal {
+impl From<RemoteWithdrawal> for SyncEvent {
     fn from(remote: RemoteWithdrawal) -> Self {
-        Withdrawal {
-            nullifierHash: remote.nullifier,
-            to: remote.to,
-            relayer: Address::ZERO,
-            fee: remote.fee,
-        }
+        SyncEvent::new_withdrawal(
+            remote.to,
+            remote.nullifier,
+            Address::ZERO,
+            remote.fee,
+            remote.block_number,
+        )
     }
 }
 

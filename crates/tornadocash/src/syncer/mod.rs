@@ -5,12 +5,10 @@ use std::{
 
 use thiserror::Error;
 
-use crate::{
-    abis::tornado::Tornado::{Deposit, Withdrawal},
-    pool::Pool,
-};
+use crate::{pool::Pool, syncer::event::SyncEvent};
 
 pub mod chained;
+pub mod event;
 pub mod remote;
 pub mod rpc;
 #[cfg(feature = "saga-sync")]
@@ -47,11 +45,6 @@ pub struct Synced {
     pub range: Range<u64>,
     /// The events the pool emitted within `range`.
     pub events: Vec<SyncEvent>,
-}
-
-pub enum SyncEvent {
-    Deposit(Deposit),
-    Withdrawal(Withdrawal),
 }
 
 #[derive(Debug, Error)]

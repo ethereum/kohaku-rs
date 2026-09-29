@@ -9,7 +9,7 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::{
-    abis::tornado::Tornado::{Deposit, Withdrawal},
+    abis::tornado::Tornado,
     pool::Pool,
     syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
 };
@@ -23,7 +23,7 @@ pub struct RpcSyncer<P: Provider> {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum RpcSyncerError {
+pub enum RpcSyncerError {
     #[error("Error decoding log: {0}")]
     LogDecodeError(#[from] alloy::sol_types::Error),
     #[error("RPC error: {0}")]
@@ -32,6 +32,8 @@ enum RpcSyncerError {
     UnknownEvent {
         topics: Vec<alloy::primitives::B256>,
     },
+    #[error("Missing block number in log")]
+    MissingBlockNumber,
 }
 
 impl<P: Provider> RpcSyncer<P> {
@@ -108,9 +110,9 @@ impl<P: Provider> RpcSyncer<P> {
             let logs = self.provider.get_logs(&filter).await?;
             sleep(self.batch_delay).await;
 
-            for log in &logs {
-                match log_to_sync_events(log) {
-                    Ok(decoded) => events.extend(decoded),
+            for log in logs.into_iter() {
+                match log.try_into() {
+                    Ok(decoded) => events.push(decoded),
                     Err(e) => warn!("Failed to decode log: {}", e),
                 }
             }
@@ -139,16 +141,32 @@ impl<P: Provider> RpcSyncer<P> {
     }
 }
 
-fn log_to_sync_events(log: &Log) -> Result<Vec<SyncEvent>, RpcSyncerError> {
-    match log.topics().first() {
-        Some(&Deposit::SIGNATURE_HASH) => Ok(vec![SyncEvent::Deposit(
-            Deposit::decode_log(&log.inner)?.data,
-        )]),
-        Some(&Withdrawal::SIGNATURE_HASH) => Ok(vec![SyncEvent::Withdrawal(
-            Withdrawal::decode_log(&log.inner)?.data,
-        )]),
-        _ => Err(RpcSyncerError::UnknownEvent {
-            topics: log.topics().to_vec(),
-        }),
+impl TryFrom<Log> for SyncEvent {
+    type Error = RpcSyncerError;
+
+    fn try_from(log: Log) -> Result<Self, Self::Error> {
+        match log.topics().first() {
+            Some(&Tornado::Deposit::SIGNATURE_HASH) => {
+                let decoded = Tornado::Deposit::decode_log(&log.inner)?.data;
+                Ok(SyncEvent::new_deposit(
+                    decoded.commitment,
+                    decoded.leafIndex,
+                    log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
+                ))
+            }
+            Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
+                let decoded = Tornado::Withdrawal::decode_log(&log.inner)?.data;
+                Ok(SyncEvent::new_withdrawal(
+                    decoded.to,
+                    decoded.nullifierHash,
+                    decoded.relayer,
+                    decoded.fee,
+                    log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
+                ))
+            }
+            _ => Err(RpcSyncerError::UnknownEvent {
+                topics: log.topics().to_vec(),
+            }),
+        }
     }
 }

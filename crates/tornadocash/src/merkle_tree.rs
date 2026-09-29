@@ -6,7 +6,7 @@ use ark_ff::{BigInt, PrimeField};
 use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
 use ruint::{aliases::U256, uint};
 
-use crate::{crypto::mimc::mimc_sponge_hash, syncer::SyncEvent};
+use crate::{crypto::mimc::mimc_sponge_hash, syncer::event::SyncEvent};
 
 const DEPTH: usize = 20;
 
@@ -56,9 +56,10 @@ impl Hasher for TornadoHasher {
 impl MerkleTreeExt for MerkleTree {
     async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
         let first_leaf_index = events.iter().find_map(|e| match e {
-            SyncEvent::Deposit(d) => Some(d.leafIndex),
+            SyncEvent::Deposit(d) => Some(d.leaf_index),
             _ => None,
         });
+
         let commitments: Vec<U256> = events
             .iter()
             .filter_map(|e| match e {

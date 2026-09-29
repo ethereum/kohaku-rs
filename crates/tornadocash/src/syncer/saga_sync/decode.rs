@@ -11,10 +11,7 @@ use super::{
     SagaSyncError,
     manifest::{ChunkRef, deserialize_hex_u64},
 };
-use crate::{
-    abis::tornado::Tornado::{Deposit, Withdrawal},
-    syncer::SyncEvent,
-};
+use crate::{abis::tornado::Tornado, syncer::SyncEvent};
 
 /// One line of a saga-sync chunk file.
 ///
@@ -38,12 +35,25 @@ impl SagaEvent {
         let data = hex::decode(self.data.strip_prefix("0x").unwrap_or(&self.data))?;
 
         match self.topics.first() {
-            Some(&Deposit::SIGNATURE_HASH) => Ok(Some(SyncEvent::Deposit(
-                Deposit::decode_raw_log(self.topics.iter().copied(), &data)?,
-            ))),
-            Some(&Withdrawal::SIGNATURE_HASH) => Ok(Some(SyncEvent::Withdrawal(
-                Withdrawal::decode_raw_log(self.topics.iter().copied(), &data)?,
-            ))),
+            Some(&Tornado::Deposit::SIGNATURE_HASH) => {
+                let decoded = Tornado::Deposit::decode_raw_log(self.topics.iter().copied(), &data)?;
+                Ok(Some(SyncEvent::new_deposit(
+                    decoded.commitment,
+                    decoded.leafIndex,
+                    self.block_number,
+                )))
+            }
+            Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
+                let decoded =
+                    Tornado::Withdrawal::decode_raw_log(self.topics.iter().copied(), &data)?;
+                Ok(Some(SyncEvent::new_withdrawal(
+                    decoded.to,
+                    decoded.nullifierHash,
+                    decoded.relayer,
+                    decoded.fee,
+                    self.block_number,
+                )))
+            }
             _ => Ok(None),
         }
     }
