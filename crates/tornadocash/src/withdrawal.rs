@@ -53,7 +53,7 @@ pub enum WithdrawalError {
     #[error("Relayer error: {0}")]
     Relayer(#[from] RelayerError),
     #[error("Proof leaf mismatch: expected {expected}, got {actual}")]
-    ProofLeafMissmatch { expected: U256, actual: U256 },
+    ProofLeafMismatch { expected: U256, actual: U256 },
 }
 
 impl Withdrawal {
@@ -90,12 +90,8 @@ impl Withdrawal {
         }
     }
 
-    pub fn with_payer(mut self, relayer: Address, fee: U256, refund: U256) -> Self {
-        self.payer = Payer::Relayer {
-            address: relayer,
-            fee,
-            refund,
-        };
+    pub fn with_payer(mut self, payer: Payer) -> Self {
+        self.payer = payer;
         self
     }
 
@@ -126,7 +122,7 @@ impl Withdrawal {
         rng: &mut impl CryptoRng,
     ) -> Result<ProvenWithdrawal, WithdrawalError> {
         if merkle_proof.leaf != self.note.commitment() {
-            return Err(WithdrawalError::ProofLeafMissmatch {
+            return Err(WithdrawalError::ProofLeafMismatch {
                 expected: self.note.commitment(),
                 actual: merkle_proof.leaf,
             });
