@@ -50,8 +50,8 @@ pub trait UserOperationPaymasterExt: Sized {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TornadoPaymasterError {
-    #[error("Pool missing paymaster address: {0}")]
-    PoolMissingPaymasterAddress(Pool),
+    #[error("Pool missing paymaster: {0}")]
+    PoolMissingPaymaster(Pool),
     #[error("Pool denomination cannot cover the operation's gas: {required} > {denomination}")]
     InsufficientDenomination { required: U256, denomination: U256 },
     #[error("Operation outgrew the proven fee: {required} > {fee}")]
@@ -149,10 +149,13 @@ async fn gas_cost<S>(
 }
 
 fn paymaster_addresses(pool: &Pool) -> Result<(Address, Address), TornadoPaymasterError> {
-    let missing = || TornadoPaymasterError::PoolMissingPaymasterAddress(pool.clone());
+    let paymaster = pool
+        .paymaster
+        .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
-    let paymaster = pool.paymaster_address.ok_or_else(missing)?;
-    let adapter = pool.adapter_address.ok_or_else(missing)?;
+    let adapter = pool
+        .adapter
+        .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
     Ok((paymaster, adapter))
 }

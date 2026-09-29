@@ -61,9 +61,9 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    pool.adapter_address =
+    pool.adapter =
         Some(deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?);
-    pool.paymaster_address = Some(paymaster_address);
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");
@@ -160,9 +160,9 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    pool.adapter_address =
+    pool.adapter =
         Some(deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?);
-    pool.paymaster_address = Some(paymaster_address);
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");
