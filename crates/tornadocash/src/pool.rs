@@ -36,6 +36,8 @@ pub const POOLS: &[Pool] = &[
     Pool::ETHEREUM_ETHER_100,
     Pool::POLYGON_MATIC_100,
     Pool::POLYGON_MATIC_1000,
+    Pool::ETHEREUM_DAI_100,
+    Pool::ETHEREUM_DAI_1000,
 ];
 
 #[allow(clippy::unreadable_literal)]
