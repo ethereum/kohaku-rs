@@ -9,8 +9,8 @@
 //! the reference implementation.
 use std::time::{Duration, Instant};
 
-use alloy::{primitives::TxHash, providers::DynProvider};
-use tracing::warn;
+use alloy::{primitives::TxHash, providers::Provider};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     pool::Pool,
@@ -25,15 +25,28 @@ use crate::{
 pub mod client;
 pub mod status;
 
-/// How often [`Relayer::await_confirmation`] re-checks the relayer and the pool.
-const POLL_INTERVAL: Duration = Duration::from_millis(500);
-
 /// Tornadocash relayer.
 ///
 /// Interacts with a relayer client to create, submit, and monitor withdrawal proofs.
 pub struct Relayer {
     client: RelayerClient,
     timeout: Duration,
+    poll_interval: Duration,
+}
+
+/// The status of a relayed withdrawal.
+///
+/// `spent` should be considered authoritative, because it's queried directly
+/// from the chain. `tx_hash` and `job` are reported by the relayer which may be
+/// unreliable or malicious.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WithdrawalStatus {
+    /// Whether the nullifier has been spent on-chain.
+    pub spent: bool,
+    /// The reported transaction hash, if any.
+    pub tx_hash: Option<TxHash>,
+    /// The reported job status, if any.
+    pub job: Option<JobStatus>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -41,11 +54,20 @@ pub enum RelayerError {
     #[error("Relayer does not support pool: {0}")]
     UnsupportedPool(Pool),
     #[error("Relayer client error: {0}")]
-    Relayer(#[from] RelayerClientError),
+    Client(#[from] RelayerClientError),
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::contract::Error),
-    #[error("Nullifier still unspent after {timeout:?} (relayer reported: {reason})")]
-    NotSpent { timeout: Duration, reason: String },
+    #[error("Relayer error: {reason}")]
+    JobFailed {
+        reason: String,
+        tx_hash: Option<TxHash>,
+    },
+    #[error("Timeout after {timeout:?} (last status: ({last_status:?}): {reason})")]
+    Timeout {
+        timeout: Duration,
+        last_status: Option<JobStatus>,
+        reason: String,
+    },
 }
 
 impl Relayer {
@@ -59,7 +81,18 @@ impl Relayer {
         Self {
             client,
             timeout: Duration::from_secs(30),
+            poll_interval: Duration::from_millis(500),
         }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_poll_interval(mut self, poll_interval: Duration) -> Self {
+        self.poll_interval = poll_interval;
+        self
     }
 
     /// Retrieves the relayer's status.
@@ -79,54 +112,76 @@ impl Relayer {
         Ok(receipt)
     }
 
-    /// Waits until `receipt`'s withdrawal has landed on-chain.
-    ///
-    /// Returns `Ok(Some(tx_hash))` if the relayer supplied one. Returns `Ok(None)` if the nullifier
-    /// was spent but the relayer did not supply a transaction hash.
+    /// Checks the status of a relayed withdrawal.
     ///
     /// # Errors
-    /// Returns [`RelayerError::NotSpent`] if the nullifier is still unspent once the timeout
-    /// elapses, carrying whatever reason the relayer gave.
+    /// Returns an error if the relayer cannot be reached, the relayer returns an error, or the
+    /// provider returns an error.
+    pub async fn check(
+        &self,
+        provider: &impl Provider,
+        receipt: &JobReceipt,
+    ) -> Result<WithdrawalStatus, RelayerError> {
+        let (job, spent) = tokio::join!(
+            self.client.job_status(&receipt.id),
+            provider.is_spent(&receipt.pool, receipt.nullifier_hash)
+        );
+        let spent = spent?;
+
+        //? If the nullifier is spent, we don't care about the job status so early-exit.
+        if spent {
+            let job = job.ok();
+            return Ok(WithdrawalStatus {
+                spent: true,
+                tx_hash: job.as_ref().and_then(|j| j.tx_hash),
+                job: job.as_ref().map(|j| j.status),
+            });
+        }
+
+        let job = job?;
+        if job.status == JobStatus::Failed {
+            return Err(RelayerError::JobFailed {
+                reason: job.failed_reason.unwrap_or_else(|| "failed".to_string()),
+                tx_hash: job.tx_hash,
+            });
+        }
+
+        Ok(WithdrawalStatus {
+            spent: false,
+            tx_hash: job.tx_hash,
+            job: Some(job.status),
+        })
+    }
+
+    /// Polls until `receipt`'s withdrawal has landed on-chain.
+    ///
+    /// Returns the transaction hash or `None` if one was not supplied by the relayer.
+    #[cfg(native)]
     pub async fn await_confirmation(
         &self,
-        provider: &DynProvider,
+        provider: &impl Provider,
         receipt: &JobReceipt,
     ) -> Result<Option<TxHash>, RelayerError> {
         let start = Instant::now();
-        let mut tx_hash = None;
-        let mut reason = None;
+        let mut last_status;
 
         loop {
-            match self.client.job_status(&receipt.id).await {
-                Ok(job) => {
-                    //? Prefer the most recently reported hash; relayers may resubmit.
-                    tx_hash = job.tx_hash.or(tx_hash);
-                    if job.status == JobStatus::Failed {
-                        reason = Some(job.failed_reason.unwrap_or_else(|| "failed".to_string()));
-                    }
-                }
-                //? The chain is authoritative, so an unreachable relayer is not fatal here.
-                Err(e) => {
-                    warn!("Failed to poll relayer job status: {}", e);
-                    reason = Some(e.to_string());
-                }
+            let status = self.check(provider, receipt).await?;
+            if status.spent {
+                return Ok(status.tx_hash);
             }
 
-            if provider
-                .is_spent(&receipt.pool, receipt.nullifier_hash)
-                .await?
-            {
-                return Ok(tx_hash);
-            }
+            last_status = status.job;
 
-            if start.elapsed() >= self.timeout {
-                return Err(RelayerError::NotSpent {
+            if start.elapsed() > self.timeout {
+                return Err(RelayerError::Timeout {
                     timeout: self.timeout,
-                    reason: reason.unwrap_or_else(|| "no error".to_string()),
+                    last_status,
+                    reason: "withdrawal did not land on-chain in time".to_string(),
                 });
             }
 
-            tokio::time::sleep(POLL_INTERVAL).await;
+            tokio::time::sleep(self.poll_interval).await;
         }
     }
 }

@@ -13,7 +13,7 @@ use crate::{
     pool::Pool,
     provider::TornadoProviderExt,
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
-    withdrawal::{ProvenWithdrawal, Withdrawal, WithdrawalError},
+    withdrawal::{Payer, ProvenWithdrawal, Withdrawal, WithdrawalError},
 };
 
 mod abis;
@@ -125,7 +125,11 @@ where
 {
     let (paymaster, adapter) = paymaster_addresses(&withdrawal.pool)?;
     let withdrawal = withdrawal
-        .with_payer(paymaster, fee, U256::ZERO)
+        .with_payer(Payer::Relayer {
+            address: paymaster,
+            fee,
+            refund: U256::ZERO,
+        })
         .prove(merkle_proof, rng)?;
 
     Ok(builder

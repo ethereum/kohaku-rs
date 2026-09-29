@@ -18,8 +18,6 @@ pub struct RelayerClient {
 pub enum RelayerClientError {
     #[error("Relayer request failed: {0}")]
     RequestFailed(#[from] reqwest::Error),
-    #[error("Relayer returned an error: {0}")]
-    RelayerError(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,7 +28,7 @@ pub struct JobReceipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JobId(pub(super) String);
+pub struct JobId(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct WithdrawRequest {
