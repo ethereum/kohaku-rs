@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     abis::tornado::Tornado::{Deposit, Withdrawal},
-    indexer::syncer::SyncEvent,
+    syncer::SyncEvent,
 };
 
 /// One line of a saga-sync chunk file.
@@ -131,7 +131,7 @@ mod tests {
     use flate2::{Compression, write::GzEncoder};
 
     use super::*;
-    use crate::indexer::saga_sync::manifest::Digest;
+    use crate::syncer::saga_sync::manifest::Digest;
 
     fn gzip(bytes: &[u8]) -> Vec<u8> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());

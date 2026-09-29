@@ -10,6 +10,7 @@ use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     merkle_tree::{TcMerkleTree, TcMerkleTreeExt},
     provider::TornadoProvider,
+    syncer::rpc::RpcSyncer,
     withdrawal::Withdrawal,
 };
 
@@ -67,7 +68,7 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
     let provider = TornadoProvider::new(provider, syncer.clone().into());
 
     // Sync a Merkle tree against the provider
-    let tree = TcMerkleTree::new(Store::create());
+    let tree = MerkleTree::new(Store::create());
     let synced = provider.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 

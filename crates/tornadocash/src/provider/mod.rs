@@ -9,8 +9,8 @@ use thiserror::Error;
 
 use crate::{
     abis::tornado::Tornado::{self, TornadoInstance},
-    indexer::syncer::{Synced, Syncer},
     pool::{Asset, Pool},
+    syncer::{Synced, Syncer},
 };
 
 /// A provider for interacting with Tornado Cash pools.
@@ -25,7 +25,7 @@ pub enum TornadoProviderError {
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::contract::Error),
     #[error("Syncer error: {0}")]
-    Syncer(#[from] crate::indexer::syncer::SyncerError),
+    Syncer(#[from] crate::syncer::SyncerError),
 }
 
 impl TornadoProvider {

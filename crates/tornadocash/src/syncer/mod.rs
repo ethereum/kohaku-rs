@@ -10,6 +10,12 @@ use crate::{
     pool::Pool,
 };
 
+pub mod chained;
+pub mod remote;
+pub mod rpc;
+#[cfg(feature = "saga-sync")]
+pub mod saga_sync;
+
 /// Generic syncer interface.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]

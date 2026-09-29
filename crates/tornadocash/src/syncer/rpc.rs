@@ -10,8 +10,8 @@ use tracing::{info, warn};
 
 use crate::{
     abis::tornado::Tornado::{Deposit, Withdrawal},
-    indexer::syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
     pool::Pool,
+    syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
 };
 
 /// A syncer that reads from an Ethereum JSON-RPC provider

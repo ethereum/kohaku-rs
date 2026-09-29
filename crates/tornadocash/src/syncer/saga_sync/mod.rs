@@ -6,8 +6,8 @@ use self::{
     manifest::Manifest,
 };
 use crate::{
-    indexer::syncer::{Synced, SyncerBackend, SyncerError},
     pool::Pool,
+    syncer::{Synced, SyncerBackend, SyncerError},
 };
 
 mod decode;
