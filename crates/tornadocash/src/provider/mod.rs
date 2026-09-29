@@ -1,4 +1,4 @@
-use std::ops::RangeBounds;
+use std::ops::{Deref, RangeBounds};
 
 use alloy::{
     primitives::{Address, B256},
@@ -16,8 +16,8 @@ use crate::{
 /// A provider for interacting with Tornado Cash pools.
 #[derive(Clone)]
 pub struct TornadoProvider {
-    syncer: Syncer,
     provider: DynProvider,
+    syncer: Syncer,
 }
 
 #[derive(Debug, Error)]
@@ -30,8 +30,8 @@ pub enum TornadoProviderError {
 
 impl TornadoProvider {
     #[must_use]
-    pub fn new(syncer: Syncer, provider: DynProvider) -> Self {
-        Self { syncer, provider }
+    pub fn new(provider: DynProvider, syncer: Syncer) -> Self {
+        Self { provider, syncer }
     }
 
     /// Syncs the given pool, returning the events within `range` and the range actually covered.
@@ -110,5 +110,13 @@ impl TornadoProvider {
 
     fn tornado(&self, pool: &Pool) -> TornadoInstance<DynProvider> {
         Tornado::new(pool.address, self.provider.clone())
+    }
+}
+
+impl Deref for TornadoProvider {
+    type Target = DynProvider;
+
+    fn deref(&self) -> &Self::Target {
+        &self.provider
     }
 }

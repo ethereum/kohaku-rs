@@ -69,16 +69,16 @@ impl WithdrawalPaymasterExt for Withdrawal {
         S: Send + Sync,
         R: rand::CryptoRng,
     {
-        let pool = self.pool().await?;
+        let paymaster = self
+            .pool
+            .paymaster_address
+            .ok_or_else(|| TornadoPaymasterError::PoolMissingPaymasterAddress(self.pool.clone()))?;
+        let adapter = self
+            .pool
+            .adapter_address
+            .ok_or_else(|| TornadoPaymasterError::PoolMissingPaymasterAddress(self.pool.clone()))?;
 
-        let paymaster = pool.paymaster_address.ok_or_else(|| {
-            TornadoPaymasterError::PoolMissingPaymasterAddress(pool.clone())
-        })?;
-        let adapter = pool.adapter_address.ok_or_else(|| {
-            TornadoPaymasterError::PoolMissingPaymasterAddress(pool.clone())
-        })?;
-
-        let mut fee_estimate = U256::from(pool.amount_wei);
+        let mut fee_estimate = U256::from(self.pool.amount_wei);
 
         loop {
             let withdraw_call = self
@@ -92,7 +92,7 @@ impl WithdrawalPaymasterExt for Withdrawal {
             builder = builder.with_gas_estimate(bundler).await?;
 
             let wei = max_gas(&builder);
-            let new_fee_estimate = self.provider().quote_wei_in_fee_token(&pool, wei).await?;
+            let new_fee_estimate = self.provider().quote_wei_in_fee_token(&self, wei).await?;
             if new_fee_estimate <= fee_estimate {
                 break;
             }

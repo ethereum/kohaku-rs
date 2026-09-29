@@ -62,14 +62,14 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     // Construct a TornadoProvider
     let syncer = RpcSyncer::new(provider.clone());
-    let tornado_provider = TornadoProvider::new(syncer.clone().into(), provider.clone());
+    let provider = TornadoProvider::new(provider, syncer.clone().into());
 
     // Construct a relayer
     let relayer = Relayer::from_client(relayer_instance.clone());
 
     // Sync a Merkle tree against the provider
     let tree = TcMerkleTree::new(Store::create());
-    let synced = tornado_provider.sync(&pool, ..).await?;
+    let synced = provider.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
     // Withdraw the note via the relayer
@@ -83,7 +83,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let receipt = relayer.withdraw(withdrawal).await?;
     let tx_hash = relayer
-        .await_confirmation(&tornado_provider, &receipt)
+        .await_confirmation(&provider, &receipt)
         .await?
         .unwrap();
 

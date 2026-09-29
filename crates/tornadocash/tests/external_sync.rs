@@ -39,9 +39,9 @@ async fn assert_matches_snapshot(target_syncer: &dyn SyncerBackend) -> Result<()
         .ok();
 
     let pool = Pool::SEPOLIA_ETHER_01;
-    let events = target_syncer.sync(&pool, FROM_BLOCK, TO_BLOCK).await?;
+    let synced = target_syncer.sync(&pool, FROM_BLOCK, TO_BLOCK).await?;
 
-    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(&events);
+    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(&synced.events);
     commitments.sort();
     nullifiers.sort();
 
