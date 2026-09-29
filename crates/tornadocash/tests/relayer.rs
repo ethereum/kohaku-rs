@@ -12,9 +12,8 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    provider::TornadoProvider,
     relayer::Relayer,
-    syncer::rpc::RpcSyncer,
+    syncer::{Syncer, rpc::RpcSyncer},
     withdrawal::Withdrawal,
 };
 
@@ -61,15 +60,14 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
         .await?;
 
     // Construct a TornadoProvider
-    let syncer = RpcSyncer::new(provider.clone());
-    let provider = TornadoProvider::new(provider, syncer.clone().into());
+    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
 
     // Construct a relayer
     let relayer = Relayer::from_client(relayer_instance.clone());
 
     // Sync a Merkle tree against the provider
     let tree = MerkleTree::new(Store::create());
-    let synced = provider.sync(&pool, ..).await?;
+    let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
     // Withdraw the note via the relayer

@@ -1,5 +1,6 @@
 use alloy::{
     primitives::{Address, Bytes, U256},
+    providers::DynProvider,
     sol_types::SolValue,
 };
 use kohaku_userop_kit::{
@@ -10,7 +11,7 @@ use kohaku_userop_kit::{
 use crate::{
     merkle_tree::MerkleProof,
     pool::Pool,
-    provider::{TornadoProvider, TornadoProviderError},
+    provider::TornadoProviderExt,
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
     withdrawal::{ProvenWithdrawal, Withdrawal, WithdrawalError},
 };
@@ -39,7 +40,7 @@ pub trait UserOperationPaymasterExt: Sized {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        provider: &TornadoProvider,
+        provider: &DynProvider,
         bundler: &dyn Bundler,
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
@@ -57,10 +58,10 @@ pub enum TornadoPaymasterError {
     InsufficientFee { required: U256, fee: U256 },
     #[error("Bundler error: {0}")]
     Bundler(#[from] kohaku_userop_kit::bundler::BundlerError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] alloy::contract::Error),
     #[error("Withdrawal error: {0}")]
     Withdrawal(#[from] WithdrawalError),
-    #[error("Tornado provider error: {0}")]
-    TornadoProvider(#[from] TornadoProviderError),
     #[error("Merkle tree error: {0}")]
     MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
 }
@@ -71,7 +72,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        provider: &TornadoProvider,
+        provider: &DynProvider,
         bundler: &dyn Bundler,
         rng: &mut R,
     ) -> Result<Self, TornadoPaymasterError>
@@ -135,7 +136,7 @@ where
 
 /// Quotes the operation's maximum gas cost in the pool's fee token.
 async fn gas_cost<S>(
-    provider: &TornadoProvider,
+    provider: &DynProvider,
     pool: &Pool,
     builder: &UserOperationBuilder<S>,
 ) -> Result<U256, TornadoPaymasterError> {

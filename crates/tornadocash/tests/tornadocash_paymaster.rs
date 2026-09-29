@@ -15,8 +15,8 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    provider::TornadoProvider,
-    syncer::rpc::RpcSyncer,
+    provider::TornadoProviderExt,
+    syncer::{Syncer, rpc::RpcSyncer},
     userop_provider::UserOperationPaymasterExt,
     withdrawal::Withdrawal,
 };
@@ -76,10 +76,9 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .await?;
 
     // Sync a Merkle tree against the provider
-    let syncer = RpcSyncer::new(provider.clone());
-    let tornado_provider = TornadoProvider::new(provider.clone(), syncer.into());
+    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
     let tree = MerkleTree::new(Store::create());
-    let synced = tornado_provider.sync(&pool, ..).await?;
+    let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
     info!("Starting local alto bundler");
@@ -112,7 +111,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .with_tornado_paymaster(
             withdrawal,
             &withdrawal_merkle_proof,
-            &tornado_provider,
+            &provider,
             &*alto,
             &mut rand::rng(),
         )
@@ -125,7 +124,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     assert!(userop_receipt.success, "userop should succeed");
     assert!(
-        tornado_provider
+        provider
             .is_spent(&pool, note.nullifier_hash().into())
             .await?,
         "note should be spent"
@@ -178,10 +177,9 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         .await?;
 
     // Sync a Merkle tree against the provider
-    let syncer = RpcSyncer::new(provider.clone());
-    let tornado_provider = TornadoProvider::new(provider.clone(), syncer.into());
+    let syncer: Syncer = RpcSyncer::new(provider.clone()).into();
     let tree = MerkleTree::new(Store::create());
-    let synced = tornado_provider.sync(&pool, ..).await?;
+    let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
     info!("Starting local alto bundler");
@@ -218,7 +216,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         .with_tornado_paymaster(
             withdrawal,
             &withdrawal_merkle_proof,
-            &tornado_provider,
+            &provider,
             &*alto,
             &mut rand::rng(),
         )

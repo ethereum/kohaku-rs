@@ -9,12 +9,12 @@
 //! the reference implementation.
 use std::time::{Duration, Instant};
 
-use alloy::primitives::TxHash;
+use alloy::{primitives::TxHash, providers::DynProvider};
 use tracing::warn;
 
 use crate::{
     pool::Pool,
-    provider::{TornadoProvider, TornadoProviderError},
+    provider::TornadoProviderExt,
     relayer::{
         client::{JobReceipt, JobStatus, RelayerClient, RelayerClientError},
         status::RelayerStatus,
@@ -40,10 +40,10 @@ pub struct Relayer {
 pub enum RelayerError {
     #[error("Relayer does not support pool: {0}")]
     UnsupportedPool(Pool),
-    #[error(transparent)]
+    #[error("Relayer client error: {0}")]
     Relayer(#[from] RelayerClientError),
-    #[error(transparent)]
-    TornadoProvider(#[from] TornadoProviderError),
+    #[error("Provider error: {0}")]
+    Provider(#[from] alloy::contract::Error),
     #[error("Nullifier still unspent after {timeout:?} (relayer reported: {reason})")]
     NotSpent { timeout: Duration, reason: String },
 }
@@ -89,7 +89,7 @@ impl Relayer {
     /// elapses, carrying whatever reason the relayer gave.
     pub async fn await_confirmation(
         &self,
-        provider: &TornadoProvider,
+        provider: &DynProvider,
         receipt: &JobReceipt,
     ) -> Result<Option<TxHash>, RelayerError> {
         let start = Instant::now();

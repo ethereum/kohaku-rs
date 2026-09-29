@@ -12,11 +12,11 @@ Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to in
 ### Depositing into a Tornado Cash pool
 
 ```rust,no_run
-use alloy::providers::{Provider};
-use kohaku_tornadocash::{deposit::Deposit, pool::Pool, provider::TornadoProvider};
+use alloy::providers::{DynProvider, Provider};
+use kohaku_tornadocash::{deposit::Deposit, pool::Pool};
 
 async fn example(
-    provider: &TornadoProvider, 
+    provider: DynProvider, 
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let deposit = Deposit::random(&Pool::SEPOLIA_ETHER_01, rng);
@@ -36,26 +36,27 @@ async fn example(
 ```rust,no_run
 use alloy::{
     primitives::Address,
-    providers::Provider,
+    providers::{DynProvider, Provider},
 };
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     merkle_tree::{MerkleTree, MerkleTreeExt},
     note::Note,
     pool::Pool,
-    provider::TornadoProvider,
+    syncer::Syncer,
     withdrawal::Withdrawal,
 };
 
 async fn example(
-    provider: &TornadoProvider,
+    provider: DynProvider,
+    syncer: &Syncer,
     pool: Pool,
     note: Note,
     recipient: Address,
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tree = MerkleTree::new(Store::create());
-    let synced = provider.sync(&pool, ..).await?;
+    let synced = syncer.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
     let merkle_proof = tree.leaf_proof(note.commitment()).await?;
@@ -73,19 +74,18 @@ async fn example(
 ```rust,no_run
 use alloy::{
     primitives::{Address, U256},
-    providers::Provider,
+    providers::{DynProvider, Provider},
 };
 use kohaku_tornadocash::{
     merkle_tree::MerkleTree,
     note::Note,
     pool::Pool,
-    provider::TornadoProvider,
     relayer::Relayer,
     withdrawal::Withdrawal,
 };
 
 async fn example(
-    provider: &TornadoProvider,
+    provider: DynProvider,
     tree: &MerkleTree,
     note: Note,
     recipient: Address,
@@ -104,7 +104,7 @@ async fn example(
 
     // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.
     let receipt = relayer.withdraw(withdrawal).await?;
-    let tx_hash = relayer.await_confirmation(provider, &receipt).await?;
+    let tx_hash = relayer.await_confirmation(&provider, &receipt).await?;
     println!("{tx_hash:?}");
 
     Ok(())
@@ -119,7 +119,6 @@ use kohaku_tornadocash::{
     merkle_tree::MerkleTree,
     note::Note,
     pool::Pool,
-    provider::TornadoProvider,
     userop_provider::UserOperationPaymasterExt,
     withdrawal::Withdrawal,
 };
@@ -131,7 +130,6 @@ use kohaku_userop_kit::{
 
 async fn example(
     provider: DynProvider,
-    tornado_provider: &TornadoProvider,
     tree: &MerkleTree,
     note: Note,
     rng: &mut impl rand::CryptoRng,
@@ -140,7 +138,7 @@ async fn example(
     let owner = PrivateKeySigner::random();
     let bundler = PimlicoBundler::new("https://bundler.pimlico.com".parse()?);
 
-    let smart_account = Simple7702SmartAccount::new(provider, owner.address(), pool.chain_id);
+    let smart_account = Simple7702SmartAccount::new(provider.clone(), owner.address(), pool.chain_id);
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
         .with_call(&vec![Call::default()]);
@@ -150,7 +148,7 @@ async fn example(
     let withdrawal_merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, owner.address());
     let builder = builder
-        .with_tornado_paymaster(withdrawal, &withdrawal_merkle_proof, tornado_provider, &bundler, rng)
+        .with_tornado_paymaster(withdrawal, &withdrawal_merkle_proof, &provider, &bundler, rng)
         .await?;
 
     let userop = builder.build().sign(&owner).await?;
