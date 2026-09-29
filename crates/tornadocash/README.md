@@ -15,8 +15,11 @@ Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to in
 use alloy::providers::{Provider};
 use kohaku_tornadocash::{deposit::Deposit, pool::Pool, provider::TornadoProvider};
 
-async fn example(provider: &TornadoProvider,) -> Result<(), Box<dyn std::error::Error>> {
-    let deposit = Deposit::random(&Pool::SEPOLIA_ETHER_01, &mut rand::rng());
+async fn example(
+    provider: &TornadoProvider, 
+    rng: &mut impl rand::CryptoRng,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let deposit = Deposit::random(&Pool::SEPOLIA_ETHER_01, rng);
     
     // ERC20 pools are pulled with `transferFrom` and require an approval before the deposit.
     if let Some(approval) = deposit.approval() {
@@ -49,14 +52,15 @@ async fn example(
     pool: Pool,
     note: Note,
     recipient: Address,
+    rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tree = MerkleTree::new(Store::create());
     let synced = provider.sync(&pool, ..).await?;
     tree.splice_events(&synced.events).await?;
 
+    let merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, recipient)
-        .prove(&tree, &mut rand::rng())
-        .await?;
+        .prove(&merkle_proof, rng)?;
 
     provider.send_transaction(withdrawal.into()).await?.watch().await?;
 
@@ -85,17 +89,18 @@ async fn example(
     tree: &MerkleTree,
     note: Note,
     recipient: Address,
+    rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pool = Pool::SEPOLIA_ETHER_01;
     let relayer = Relayer::new("https://mainnet.relayer.com");
 
     let status = relayer.status().await?;
     let gas_price = provider.get_gas_price().await?;
+    let merkle_proof = tree.leaf_proof(note.commitment()).await?;
 
     let withdrawal = Withdrawal::new(&pool, note, recipient)
         .with_relayer(&status, gas_price)?
-        .prove(tree, &mut rand::rng())
-        .await?;
+        .prove(&merkle_proof, rng)?;
 
     // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.
     let receipt = relayer.withdraw(withdrawal).await?;
@@ -129,6 +134,7 @@ async fn example(
     tornado_provider: &TornadoProvider,
     tree: &MerkleTree,
     note: Note,
+    rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pool = Pool::SEPOLIA_ETHER_01;
     let owner = PrivateKeySigner::random();
@@ -141,9 +147,10 @@ async fn example(
 
     // The note pays for gas, and its remainder is withdrawn to `owner` during validation, so the
     // operation's own calls can spend it.
+    let withdrawal_merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, owner.address());
     let builder = builder
-        .with_tornado_paymaster(withdrawal, tornado_provider, &bundler, tree, &mut rand::rng())
+        .with_tornado_paymaster(withdrawal, &withdrawal_merkle_proof, tornado_provider, &bundler, rng)
         .await?;
 
     let userop = builder.build().sign(&owner).await?;

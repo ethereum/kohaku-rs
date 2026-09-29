@@ -73,9 +73,9 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
 
     // Withdraw the note
     let recipient: Address = PrivateKeySigner::random().address();
-    let withdrawal = Withdrawal::new(&pool, note, recipient)
-        .prove(&tree, &mut rand::rng())
-        .await?;
+    let merkle_proof = tree.leaf_proof(note.commitment()).await?;
+    let withdrawal =
+        Withdrawal::new(&pool, note, recipient).prove(&merkle_proof, &mut rand::rng())?;
     provider
         .send_transaction(withdrawal.into())
         .await?

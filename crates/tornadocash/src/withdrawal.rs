@@ -13,7 +13,7 @@ use websnark_rs::proof::Proof;
 
 use crate::{
     abis::tornado::Tornado::withdrawCall,
-    merkle_tree::MerkleTree,
+    merkle_tree::MerkleProof,
     note::Note,
     pool::Pool,
     relayer::{RelayerError, status::RelayerStatus},
@@ -40,14 +40,12 @@ pub struct ProvenWithdrawal {
 
 #[derive(Debug, thiserror::Error)]
 pub enum WithdrawalError {
-    #[error("Merkle proof generation error: {0}")]
-    MerkleProof(#[from] kohaku_merkle_tree::MerkleTreeError),
     #[error("Circuit error: {0}")]
     Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
-    #[error("Proof generation error: {0}")]
-    Proof(#[from] websnark_rs::proof::ProofError),
-    #[error(transparent)]
+    #[error("Relayer error: {0}")]
     Relayer(#[from] RelayerError),
+    #[error("Proof leaf mismatch: expected {expected}, got {actual}")]
+    ProofLeafMissmatch { expected: U256, actual: U256 },
 }
 
 impl Withdrawal {
@@ -100,18 +98,23 @@ impl Withdrawal {
     ///
     /// # Errors
     /// Returns an error if the note is missing from `tree` or if proof generation fails.
-    pub async fn prove(
+    pub fn prove(
         self,
-        tree: &MerkleTree,
+        merkle_proof: &MerkleProof,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvenWithdrawal, WithdrawalError> {
-        let root = tree.root().await?;
-        let merkle_proof = tree.leaf_proof(self.note.commitment()).await?;
+        if merkle_proof.leaf != self.note.commitment() {
+            return Err(WithdrawalError::ProofLeafMissmatch {
+                expected: self.note.commitment(),
+                actual: merkle_proof.leaf,
+            });
+        }
+
         let path_elements = merkle_proof.siblings;
         let path_indices = from_fn(|i| U256::from(merkle_proof.path[i]));
 
         let circuit_inputs = CircuitInputs::new(
-            root,
+            merkle_proof.root,
             self.note.nullifier_hash(),
             self.recipient.into_word().into(),
             self.relayer.unwrap_or_default().into_word().into(),
@@ -125,7 +128,7 @@ impl Withdrawal {
 
         let proof = prove(&circuit_inputs, rng)?;
         Ok(ProvenWithdrawal {
-            root,
+            root: merkle_proof.root,
             proof,
             inner: self,
         })

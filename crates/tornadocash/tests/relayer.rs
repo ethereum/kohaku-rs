@@ -76,10 +76,10 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     let recipient = PrivateKeySigner::random().address();
     let status = relayer.status().await?;
     let gas_price = provider.get_gas_price().await?;
+    let merkle_proof = tree.leaf_proof(note.commitment()).await?;
     let withdrawal = Withdrawal::new(&pool, note, recipient)
         .with_relayer(&status, gas_price)?
-        .prove(&tree, &mut rand::rng())
-        .await?;
+        .prove(&merkle_proof, &mut rand::rng())?;
 
     let receipt = relayer.withdraw(withdrawal).await?;
     let tx_hash = relayer

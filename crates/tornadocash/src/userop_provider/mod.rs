@@ -8,7 +8,7 @@ use kohaku_userop_kit::{
 };
 
 use crate::{
-    merkle_tree::MerkleTree,
+    merkle_tree::MerkleProof,
     pool::Pool,
     provider::{TornadoProvider, TornadoProviderError},
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
@@ -38,9 +38,9 @@ pub trait UserOperationPaymasterExt: Sized {
     fn with_tornado_paymaster<R>(
         self,
         withdrawal: Withdrawal,
+        merkle_proof: &MerkleProof,
         provider: &TornadoProvider,
         bundler: &dyn Bundler,
-        tree: &MerkleTree,
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
     where
@@ -57,10 +57,12 @@ pub enum TornadoPaymasterError {
     InsufficientFee { required: U256, fee: U256 },
     #[error("Bundler error: {0}")]
     Bundler(#[from] kohaku_userop_kit::bundler::BundlerError),
-    #[error(transparent)]
+    #[error("Withdrawal error: {0}")]
     Withdrawal(#[from] WithdrawalError),
-    #[error(transparent)]
+    #[error("Tornado provider error: {0}")]
     TornadoProvider(#[from] TornadoProviderError),
+    #[error("Merkle tree error: {0}")]
+    MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
 }
 
 impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
@@ -68,9 +70,9 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
     async fn with_tornado_paymaster<R>(
         self,
         withdrawal: Withdrawal,
+        merkle_proof: &MerkleProof,
         provider: &TornadoProvider,
         bundler: &dyn Bundler,
-        tree: &MerkleTree,
         rng: &mut R,
     ) -> Result<Self, TornadoPaymasterError>
     where
@@ -82,7 +84,8 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         //? The paymaster runs the withdrawal before checking the fee, so even this throwaway
         //? estimate needs a real proof.
         let seed = denomination / U256::from(SEED_FEE_DENOMINATOR);
-        let builder = estimate_at_fee(self, withdrawal.clone(), seed, tree, bundler, rng).await?;
+        let builder =
+            estimate_at_fee(self, withdrawal.clone(), seed, merkle_proof, bundler, rng).await?;
 
         let cost = gas_cost(provider, &pool, &builder).await?;
         let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
@@ -93,7 +96,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
             });
         }
 
-        let builder = estimate_at_fee(builder, withdrawal, fee, tree, bundler, rng).await?;
+        let builder = estimate_at_fee(builder, withdrawal, fee, merkle_proof, bundler, rng).await?;
 
         //? The proof is bound to `fee`, so a grown estimate can only be refused.
         let settled = gas_cost(provider, &pool, &builder).await?;
@@ -112,7 +115,7 @@ async fn estimate_at_fee<S, R>(
     builder: UserOperationBuilder<S>,
     withdrawal: Withdrawal,
     fee: U256,
-    tree: &MerkleTree,
+    merkle_proof: &MerkleProof,
     bundler: &dyn Bundler,
     rng: &mut R,
 ) -> Result<UserOperationBuilder<S>, TornadoPaymasterError>
@@ -123,8 +126,7 @@ where
     let withdrawal = withdrawal
         .with_relayer_address(paymaster)
         .with_fee(fee)
-        .prove(tree, rng)
-        .await?;
+        .prove(merkle_proof, rng)?;
 
     Ok(builder
         .with_paymaster_and_data(paymaster, encode_paymaster_data(adapter, &withdrawal))
