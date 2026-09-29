@@ -22,17 +22,17 @@ pub enum RelayerClientError {
     RelayerError(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobReceipt {
     pub id: JobId,
     pub pool: Pool,
     pub nullifier_hash: U256,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobId(pub(super) String);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct WithdrawRequest {
     pub contract: Address,
     pub proof: Bytes,
@@ -42,12 +42,12 @@ struct WithdrawRequest {
     pub args: (B256, B256, Address, Address, B256, B256),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct WithdrawResponse {
     pub id: JobId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobResponse {
     pub status: JobStatus,
