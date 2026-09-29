@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{
     abis::tornado::Tornado::{Deposit, Withdrawal},
-    indexer::syncer::{SyncEvent, SyncerBackend, SyncerError},
+    indexer::syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
     pool::Pool,
 };
 
@@ -63,14 +63,7 @@ impl SyncerBackend for RemoteSyncer {
         let deposits = self.deposits(pool).await.map_err(SyncerError::other)?;
         let withdrawals = self.withdrawals(pool).await.map_err(SyncerError::other)?;
 
-        let latest_deposit = deposits.iter().map(|d| d.block_number).max().unwrap_or(0);
-        let latest_nullifier = withdrawals
-            .iter()
-            .map(|n| n.block_number)
-            .max()
-            .unwrap_or(0);
-
-        Ok(latest_deposit.max(latest_nullifier))
+        Ok(latest_block(&deposits, &withdrawals))
     }
 
     async fn sync(
@@ -78,28 +71,35 @@ impl SyncerBackend for RemoteSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Vec<SyncEvent>, SyncerError> {
-        info!("Syncing from {} to {}", from_block, to_block);
-
+    ) -> Result<Synced, SyncerError> {
         let deposits = self.deposits(pool).await.map_err(SyncerError::other)?;
         let withdrawals = self.withdrawals(pool).await.map_err(SyncerError::other)?;
 
+        //? The cache only covers up to the last block it holds an event for.
+        let from = from_block.max(pool.deployed_block);
+        let latest = latest_block(&deposits, &withdrawals).saturating_add(1);
+        let range = from..to_block.min(latest).max(from);
+
+        info!("Syncing from {} to {}", range.start, range.end);
+
         let deposits: Vec<Deposit> = deposits
             .into_iter()
-            .filter(|d| d.block_number >= from_block && d.block_number <= to_block)
+            .filter(|d| range.contains(&d.block_number))
             .map(Into::into)
             .collect();
         let withdrawals: Vec<Withdrawal> = withdrawals
             .into_iter()
-            .filter(|n| n.block_number >= from_block && n.block_number <= to_block)
+            .filter(|n| range.contains(&n.block_number))
             .map(Into::into)
             .collect();
 
-        Ok(deposits
+        let events = deposits
             .into_iter()
             .map(SyncEvent::Deposit)
             .chain(withdrawals.into_iter().map(SyncEvent::Withdrawal))
-            .collect())
+            .collect();
+
+        Ok(Synced { range, events })
     }
 }
 
@@ -160,6 +160,18 @@ impl From<RemoteWithdrawal> for Withdrawal {
             fee: remote.fee,
         }
     }
+}
+
+/// Returns the highest block number covered by the cached deposits and withdrawals.
+fn latest_block(deposits: &[RemoteDeposit], withdrawals: &[RemoteWithdrawal]) -> u64 {
+    let latest_deposit = deposits.iter().map(|d| d.block_number).max().unwrap_or(0);
+    let latest_withdrawal = withdrawals
+        .iter()
+        .map(|n| n.block_number)
+        .max()
+        .unwrap_or(0);
+
+    latest_deposit.max(latest_withdrawal)
 }
 
 fn deposits_url(base: &str, pool: &Pool) -> Url {

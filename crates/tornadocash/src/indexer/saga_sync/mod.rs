@@ -6,7 +6,7 @@ use self::{
     manifest::Manifest,
 };
 use crate::{
-    indexer::syncer::{SyncEvent, SyncerBackend, SyncerError},
+    indexer::syncer::{Synced, SyncerBackend, SyncerError},
     pool::Pool,
 };
 
@@ -17,7 +17,7 @@ mod manifest;
 /// [saga-sync](https://github.com/fatlabsxyz/saga-sync) protocol.
 ///
 /// Fetches the protocol's manifest, verifies each overlapping chunk's sha256 digest against it,
-/// and decodes the chunk's events into [`SyncEvent`]s.
+/// and decodes the chunk's events into [`SyncEvent`](crate::indexer::syncer::SyncEvent)s.
 ///
 /// Does not currently implement chunk caching or chunk signature verification.
 /// - Chunk caching could be added to reduce redundant network downloads, but is not required for
@@ -80,22 +80,32 @@ impl SyncerBackend for SagaSyncSyncer {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Vec<SyncEvent>, SyncerError> {
-        info!("Syncing from {} to {}", from_block, to_block);
-
+    ) -> Result<Synced, SyncerError> {
         let manifest = self.fetch_manifest().await.map_err(SyncerError::other)?;
         let key = stream_key(pool);
+
+        let from = from_block.max(pool.deployed_block);
         let Some(entry) = manifest.available_protocols.get(&key) else {
-            return Ok(Vec::new());
+            return Ok(Synced {
+                range: from..from,
+                events: Vec::new(),
+            });
         };
+
+        //? Chunk bounds are already half-open, so the last chunk's `to_block` is the exclusive
+        //? end of everything this stream publishes.
+        let published = entry.last_block().unwrap_or(pool.deployed_block);
+        let range = from..to_block.min(published).max(from);
+
+        info!("Syncing from {} to {}", range.start, range.end);
 
         let overlapping = entry
             .chunks
             .iter()
             .chain(entry.hot_head.iter())
-            .filter(|c| c.from_block < to_block && c.to_block > from_block);
+            .filter(|c| c.from_block < range.end && c.to_block > range.start);
 
-        let mut all_events = Vec::new();
+        let mut events = Vec::new();
         for chunk in overlapping {
             let gz_bytes = self
                 .fetch_chunk_bytes(&chunk.file)
@@ -105,13 +115,13 @@ impl SyncerBackend for SagaSyncSyncer {
             let decompressed =
                 verify_and_decompress_chunk(&gz_bytes, chunk).map_err(SyncerError::other)?;
 
-            let events = parse_chunk_events(&decompressed, chunk, from_block..to_block)
+            let decoded = parse_chunk_events(&decompressed, chunk, range.clone())
                 .map_err(SyncerError::other)?;
 
-            all_events.extend(events);
+            events.extend(decoded);
         }
 
-        Ok(all_events)
+        Ok(Synced { range, events })
     }
 }
 

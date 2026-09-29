@@ -58,7 +58,7 @@ impl RelayerStatus {
             return true;
         }
 
-        return false;
+        false
     }
 
     /// Calculates the fee for a transaction.

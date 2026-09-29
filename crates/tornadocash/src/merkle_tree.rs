@@ -3,12 +3,18 @@ use std::sync::OnceLock;
 use alloy::primitives::keccak256;
 use ark_bn254::Fr;
 use ark_ff::{BigInt, PrimeField};
-use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
+use kohaku_merkle_tree::{MerkleTree, MerkleTreeError, hasher::Hasher};
 use ruint::{aliases::U256, uint};
 
-use crate::crypto::mimc::mimc_sponge_hash;
+use crate::{crypto::mimc::mimc_sponge_hash, indexer::syncer::SyncEvent};
 
 pub type TcMerkleTree = MerkleTree<20, TcMerkleTreeHasher>;
+
+#[async_trait::async_trait]
+pub trait TcMerkleTreeExt {
+    /// Splices the given events into the Merkle tree.
+    async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError>;
+}
 
 #[derive(Copy, Clone)]
 pub struct TcMerkleTreeHasher;
@@ -30,5 +36,28 @@ impl Hasher for TcMerkleTreeHasher {
             let hash_u256 = U256::from_be_bytes(*hash);
             hash_u256 % FIELD_SIZE
         })
+    }
+}
+
+#[async_trait::async_trait]
+impl TcMerkleTreeExt for TcMerkleTree {
+    async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
+        let first_leaf_index = events.iter().find_map(|e| match e {
+            SyncEvent::Deposit(d) => Some(d.leafIndex),
+            _ => None,
+        });
+        let commitments: Vec<U256> = events
+            .iter()
+            .filter_map(|e| match e {
+                SyncEvent::Deposit(d) => Some(d.commitment.into()),
+                _ => None,
+            })
+            .collect();
+
+        if let Some(first_leaf_index) = first_leaf_index {
+            self.splice(first_leaf_index as usize, &commitments).await?;
+        }
+
+        Ok(())
     }
 }

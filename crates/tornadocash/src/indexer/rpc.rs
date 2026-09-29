@@ -1,28 +1,20 @@
 use std::time::Duration;
 
 use alloy::{
-    network::TransactionBuilder,
-    primitives::{B256, U256},
     providers::Provider,
-    rpc::types::{Filter, Log, TransactionRequest},
-    sol_types::{SolCall, SolEvent},
+    rpc::types::{Filter, Log},
+    sol_types::SolEvent,
 };
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::{
-    abis::tornado::{
-        MerkleTreeWithHistory,
-        Tornado::{Deposit, Withdrawal},
-    },
-    indexer::{
-        syncer::{SyncEvent, SyncerBackend, SyncerError},
-        verifier::{VerifierBackend, VerifierError},
-    },
+    abis::tornado::Tornado::{Deposit, Withdrawal},
+    indexer::syncer::{SyncEvent, Synced, SyncerBackend, SyncerError},
     pool::Pool,
 };
 
-/// A syncer and verifier that reads from an Ethereum JSON-RPC provider
+/// A syncer that reads from an Ethereum JSON-RPC provider
 #[derive(Clone)]
 pub struct RpcSyncer<P: Provider> {
     provider: P,
@@ -78,39 +70,11 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Vec<SyncEvent>, SyncerError> {
-        info!("Syncing from {} to {}", from_block, to_block);
+    ) -> Result<Synced, SyncerError> {
         Ok(self
             .sync(pool, from_block, to_block)
             .await
             .map_err(SyncerError::other)?)
-    }
-}
-
-#[cfg_attr(native, async_trait::async_trait)]
-#[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl<P: Provider> VerifierBackend for RpcSyncer<P> {
-    async fn verify(&self, pool: &Pool, root: U256) -> Result<(), VerifierError> {
-        info!("Verifying root {} for pool {}", root, pool.address);
-
-        let call = MerkleTreeWithHistory::isKnownRootCall::new((B256::from(root),)).abi_encode();
-        let result = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(pool.address)
-                    .input(call.into()),
-            )
-            .await
-            .map_err(VerifierError::other)?;
-        let result = MerkleTreeWithHistory::isKnownRootCall::abi_decode_returns(&result)
-            .map_err(VerifierError::other)?;
-
-        if result {
-            Ok(())
-        } else {
-            Err(VerifierError::InvalidRoot { root })
-        }
     }
 }
 
@@ -124,18 +88,21 @@ impl<P: Provider> RpcSyncer<P> {
         pool: &Pool,
         from_block: u64,
         to_block: u64,
-    ) -> Result<Vec<SyncEvent>, RpcSyncerError> {
-        let from_block = from_block.max(pool.deployed_block);
-        let mut all_events = Vec::new();
-        let mut current_from = from_block;
+    ) -> Result<Synced, RpcSyncerError> {
+        let range = self.block_range(pool, from_block, to_block).await?;
+        info!("Syncing from {} to {}", range.start, range.end);
 
-        while current_from < to_block {
-            let batch_start = current_from;
-            let batch_end = to_block.min(current_from + self.batch_size - 1);
+        let batch_size = self.batch_size.max(1);
+        let mut events = Vec::new();
+        let mut current = range.start;
+
+        while current < range.end {
+            //? `eth_getLogs` treats both block bounds as inclusive
+            let batch_end = current.saturating_add(batch_size).min(range.end) - 1;
 
             let filter = Filter::new()
                 .address(pool.address)
-                .from_block(batch_start)
+                .from_block(current)
                 .to_block(batch_end);
 
             let logs = self.provider.get_logs(&filter).await?;
@@ -143,16 +110,32 @@ impl<P: Provider> RpcSyncer<P> {
 
             for log in &logs {
                 match log_to_sync_events(log) {
-                    Ok(events) => all_events.extend(events),
+                    Ok(decoded) => events.extend(decoded),
                     Err(e) => warn!("Failed to decode log: {}", e),
                 }
             }
 
-            current_from = batch_end + 1;
-            info!("{}/{} ({} events)", batch_end, to_block, all_events.len());
+            current = batch_end + 1;
+            info!("{}/{} ({} events)", current, range.end, events.len());
         }
 
-        Ok(all_events)
+        Ok(Synced { range, events })
+    }
+
+    /// Clamps the requested range to the blocks this syncer can serve: the pool's deployment
+    /// block through the chain's latest block.
+    async fn block_range(
+        &self,
+        pool: &Pool,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<std::ops::Range<u64>, RpcSyncerError> {
+        let from = from_block.max(pool.deployed_block);
+        //? `latest_block` is an inclusive block number, `to_block` an exclusive bound.
+        let latest = self.latest_block(pool).await?.saturating_add(1);
+        let to = to_block.min(latest).max(from);
+
+        Ok(from..to)
     }
 }
 

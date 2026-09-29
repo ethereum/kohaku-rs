@@ -1,7 +1,7 @@
 use alloy::primitives::{Address, B256, Bytes, TxHash};
 use serde::{Deserialize, Serialize};
 
-use crate::{abis::tornado::Tornado, pool::Pool, relayer::status::RelayerStatus};
+use crate::{pool::Pool, relayer::status::RelayerStatus, withdrawal::ProvenWithdrawal};
 
 /// Tornadocash relayer client.
 ///
@@ -99,20 +99,19 @@ impl RelayerClient {
     /// for the reference implementation.
     pub async fn withdraw(
         &self,
-        pool: &Pool,
-        call: Tornado::withdrawCall,
+        withdrawal: ProvenWithdrawal,
     ) -> Result<JobReceipt, RelayerClientError> {
-        let nullifier_hash = call._nullifierHash;
+        let nullifier_hash = withdrawal.note.nullifier_hash().into();
         let request = WithdrawRequest {
-            contract: pool.address,
-            proof: call._proof,
+            contract: withdrawal.pool.address,
+            proof: withdrawal.proof_bytes(),
             args: (
-                call._root,
-                call._nullifierHash,
-                call._recipient,
-                call._relayer,
-                call._fee.into(),
-                call._refund.into(),
+                withdrawal.root.into(),
+                nullifier_hash,
+                withdrawal.recipient,
+                withdrawal.relayer.unwrap_or_default(),
+                withdrawal.fee.unwrap_or_default().into(),
+                withdrawal.refund.unwrap_or_default().into(),
             ),
         };
 
@@ -129,8 +128,8 @@ impl RelayerClient {
 
         Ok(JobReceipt {
             id: response.id,
-            pool: pool.clone(),
             nullifier_hash,
+            pool: withdrawal.inner.pool,
         })
     }
 

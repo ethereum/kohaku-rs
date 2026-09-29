@@ -13,68 +13,40 @@ Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to in
 ### Depositing into a Tornado Cash pool
 
 ```rust,no_run
-use alloy::providers::{Provider, ProviderBuilder};
-use kohaku_kv_store::Store;
+use alloy::providers::DynProvider;
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer,
+    deposit::Deposit,
     pool::Pool,
-    provider::TornadoProvider,
 };
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let provider = ProviderBuilder::new()
-        .connect_http("http://localhost:8545".parse()?)
-        .erased();
-
-    let syncer = RpcSyncer::new(provider.clone());
-    let mut tornado_provider = TornadoProvider::new(
-        Store::create(),
-        syncer.clone().into(),
-        syncer.into(),
-        provider.clone(),
-    );
-
-    tornado_provider.sync().await?;
-
-    let deposit = tornado_provider.deposit(Pool::SEPOLIA_ETHER_01, &mut rand::rng()).await;
-    let note = deposit.note();
-    Ok(())
+async fn example(provider: DynProvider) -> Result<(), Box<dyn std::error::Error>> {
+    let deposit = Deposit::random(Pool::SEPOLIA_ETHER_01, &mut rand::rng()).await;
+    provider
+        .send_transaction(deposit.into())
+        .await?
+        .watch()
+        .await?;
 }
 ```
 
 ### Withdrawing directly from a Tornado Cash pool
 
 ```rust,no_run
-use alloy::providers::{Provider, ProviderBuilder};
+use alloy::providers::DynProvider;
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     indexer::rpc::RpcSyncer,
     pool::Pool,
     provider::TornadoProvider,
+    withdrawal::Withdrawal,
 };
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-#     let provider = ProviderBuilder::new()
-#         .connect_http("http://localhost:8545".parse()?)
-#         .erased();
-# 
-#     let syncer = RpcSyncer::new(provider.clone());
-# 
-#     let mut tornado_provider = TornadoProvider::new(
-#         Store::create(),
-#         syncer.clone().into(),
-#         syncer.into(),
-#         provider.clone(),
-#     );
-# 
-#     tornado_provider.sync().await?;
-# 
+async fn example(
+    tornado_provider: &TornadoProvider,
+) -> Result<(), Box<dyn std::error::Error>> {
     let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
     let recipient = "0xrecipient".parse()?;
     let withdrawal = tornado_provider.withdraw(note, recipient);
-    
     Ok(())
 }
 ```
@@ -92,22 +64,9 @@ use kohaku_tornadocash::{
     relayer::Relayer,
 };
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-#     let provider = ProviderBuilder::new()
-#         .connect_http("http://localhost:8545".parse()?)
-#         .erased();
-# 
-#     let syncer = RpcSyncer::new(provider.clone());
-#     let mut tornado_provider = TornadoProvider::new(
-#         Store::create(),
-#         syncer.clone().into(),
-#         syncer.into(),
-#         provider.clone(),
-#     );
-# 
-#     tornado_provider.sync().await?;
-# 
+async fn example(
+    tornado_provider: &TornadoProvider,
+) -> Result<(), Box<dyn std::error::Error>> {
     let relayer_url = "https://mainnet.relayer.com";
     let relayer = Relayer::new(relayer_url);
 
@@ -115,8 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let recipient = "0xrecipient".parse()?;
     let receipt = tornado_provider.withdraw(note, recipient).relay(&relayer, &mut rand::rng()).await?;
     let tx_hash = relayer.await_confirmation(&tornado_provider, &receipt).await?;
-
-    Ok(())
 }
 ```
 
@@ -138,20 +95,10 @@ use kohaku_userop_kit::{
     smart_account::simple_7702_smart_account::{Call, Simple7702SmartAccount},
 };
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-#     let provider = ProviderBuilder::new()
-#         .connect_http("http://localhost:8545".parse()?)
-#         .erased();
-# 
-#     let syncer = RpcSyncer::new(provider.clone());
-#     let tornado_provider = TornadoProvider::new(
-#         Store::create(),
-#         syncer.clone().into(),
-#         syncer.into(),
-#         provider.clone(),
-#     );
-
+async fn example(
+    tornado_provider: &TornadoProvider,
+    provider: &dyn Provider,
+) -> Result<(), Box<dyn std::error::Error>> {
     let owner = PrivateKeySigner::random();
     let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
     let smart_account = Simple7702SmartAccount::new(provider.clone(), owner.address(), 11155111);
