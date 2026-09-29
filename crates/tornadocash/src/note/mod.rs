@@ -76,26 +76,15 @@ impl Note {
 impl NoteString {
     #[must_use]
     pub fn new(
-        nullifier: impl Into<Nullifier>,
-        secret: impl Into<Secret>,
+        note: Note,
         symbol: impl Into<String>,
         amount: impl Into<String>,
         chain_id: u64,
     ) -> Self {
         Self {
-            note: Note::new(nullifier, secret),
+            note,
             symbol: symbol.into(),
             amount: amount.into(),
-            chain_id,
-        }
-    }
-
-    /// Generate a fresh random note for the given pool. Can be used in a deposit transaction.
-    pub fn random(symbol: &str, amount: &str, chain_id: u64, rng: &mut impl CryptoRng) -> Self {
-        Self {
-            note: rng.random(),
-            symbol: symbol.to_string(),
-            amount: amount.to_string(),
             chain_id,
         }
     }
@@ -148,7 +137,12 @@ impl FromStr for NoteString {
         nullifier.copy_from_slice(&bytes[..31]);
         secret.copy_from_slice(&bytes[31..]);
 
-        Ok(NoteString::new(nullifier, secret, symbol, amount, chain_id))
+        Ok(NoteString::new(
+            Note::new(nullifier, secret),
+            symbol,
+            amount,
+            chain_id,
+        ))
     }
 }
 
@@ -171,7 +165,7 @@ mod tests {
         let symbol = "eth";
         let amount = "1";
         let chain_id = 1;
-        let note = NoteString::new(nullifier, secret, symbol, amount, chain_id);
+        let note = NoteString::new(Note::new(nullifier, secret), symbol, amount, chain_id);
         let encoded = note.to_string();
 
         insta::assert_debug_snapshot!(encoded);
