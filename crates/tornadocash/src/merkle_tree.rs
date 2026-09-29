@@ -56,7 +56,7 @@ impl MerkleTreeExt for MerkleTree {
     async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
         let first_leaf_index = events.iter().find_map(|e| match e {
             SyncEvent::Deposit(d) => Some(d.leaf_index),
-            _ => None,
+            SyncEvent::Withdrawal(_) => None,
         });
 
         let commitments: Vec<U256> = events

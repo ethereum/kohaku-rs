@@ -15,11 +15,14 @@ pub struct Pool {
     pub amount_wei: u128,
     pub deployed_block: u64,
 
-    /// Privacy-paymaster address for this pool, if any.
-    pub paymaster: Option<Address>,
+    pub paymaster: Option<PaymasterInfo>,
+}
 
-    /// Privacy-paymaster adapter address for this pool, if any.
-    pub adapter: Option<Address>,
+/// Privacy-paymaster information for a pool.
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct PaymasterInfo {
+    pub address: Address,
+    pub adapter: Address,
 }
 
 /// Hardcoded list of known tornadocash pools.
@@ -43,8 +46,10 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(17),
         deployed_block: 5_594_400,
-        paymaster: Some(address!("0x1c5aCCb9c09D72945b79EC986776136bE01d7B2F")),
-        adapter: Some(address!("0xa616aAE443FCCABfc2F1EA2Afe001E5046FFDCe0")),
+        paymaster: Some(PaymasterInfo {
+            address: address!("0x1c5aCCb9c09D72945b79EC986776136bE01d7B2F"),
+            adapter: address!("0xa616aAE443FCCABfc2F1EA2Afe001E5046FFDCe0"),
+        }),
     };
 
     pub const SEPOLIA_ETHER_1: Pool = Pool {
@@ -53,8 +58,10 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(18),
         deployed_block: 5_594_401,
-        paymaster: Some(address!("0x1c5aCCb9c09D72945b79EC986776136bE01d7B2F")),
-        adapter: Some(address!("0x67a898343F32641206d0f30CB3367944a8919A3A")),
+        paymaster: Some(PaymasterInfo {
+            address: address!("0x1c5aCCb9c09D72945b79EC986776136bE01d7B2F"),
+            adapter: address!("0x67a898343F32641206d0f30CB3367944a8919A3A"),
+        }),
     };
 
     pub const SEPOLIA_ETHER_10: Pool = Pool {
@@ -64,7 +71,6 @@ impl Pool {
         amount_wei: 10_u128.pow(19),
         deployed_block: 5_594_402,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_ETHER_01: Pool = Pool {
@@ -74,7 +80,6 @@ impl Pool {
         amount_wei: 10_u128.pow(17),
         deployed_block: 9116966,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_ETHER_1: Pool = Pool {
@@ -84,7 +89,6 @@ impl Pool {
         amount_wei: 10_u128.pow(18),
         deployed_block: 9_117_609,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_ETHER_10: Pool = Pool {
@@ -94,7 +98,6 @@ impl Pool {
         amount_wei: 10_u128.pow(19),
         deployed_block: 9_117_720,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_ETHER_100: Pool = Pool {
@@ -104,7 +107,6 @@ impl Pool {
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_161_895,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_DAI_100: Pool = Pool {
@@ -114,7 +116,6 @@ impl Pool {
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_117_612,
         paymaster: None,
-        adapter: None,
     };
 
     pub const ETHEREUM_DAI_1000: Pool = Pool {
@@ -124,7 +125,6 @@ impl Pool {
         amount_wei: 10_u128.pow(21),
         deployed_block: 9_161_917,
         paymaster: None,
-        adapter: None,
     };
 
     pub const POLYGON_MATIC_100: Pool = Pool {
@@ -134,7 +134,6 @@ impl Pool {
         amount_wei: 10_u128.pow(20),
         deployed_block: 16_258_013,
         paymaster: None,
-        adapter: None,
     };
 
     pub const POLYGON_MATIC_1000: Pool = Pool {
@@ -144,7 +143,6 @@ impl Pool {
         amount_wei: 10_u128.pow(21),
         deployed_block: 16_258_032,
         paymaster: None,
-        adapter: None,
     };
 
     pub fn new(
@@ -153,8 +151,7 @@ impl Pool {
         asset: Asset,
         amount_wei: u128,
         deployed_block: u64,
-        paymaster: Option<Address>,
-        adapter: Option<Address>,
+        paymaster: Option<PaymasterInfo>,
     ) -> Self {
         Self {
             chain_id,
@@ -163,7 +160,6 @@ impl Pool {
             amount_wei,
             deployed_block,
             paymaster,
-            adapter,
         }
     }
 

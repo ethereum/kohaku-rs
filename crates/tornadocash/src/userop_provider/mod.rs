@@ -10,7 +10,7 @@ use kohaku_userop_kit::{
 
 use crate::{
     merkle_tree::MerkleProof,
-    pool::Pool,
+    pool::{PaymasterInfo, Pool},
     provider::TornadoProviderExt,
     userop_provider::abis::{PaymasterData, TornadoAdapterData},
     withdrawal::{Payer, ProvenWithdrawal, Withdrawal, WithdrawalError},
@@ -123,17 +123,20 @@ async fn estimate_at_fee<S, R>(
 where
     R: rand::CryptoRng,
 {
-    let (paymaster, adapter) = paymaster_addresses(&withdrawal.pool)?;
+    let info = paymaster_info(&withdrawal.pool)?;
     let withdrawal = withdrawal
         .with_payer(Payer::Relayer {
-            address: paymaster,
+            address: info.address,
             fee,
             refund: U256::ZERO,
         })
         .prove(merkle_proof, rng)?;
 
     Ok(builder
-        .with_paymaster_and_data(paymaster, encode_paymaster_data(adapter, &withdrawal))
+        .with_paymaster_and_data(
+            info.address,
+            encode_paymaster_data(info.adapter, &withdrawal),
+        )
         .with_gas_estimate(bundler)
         .await?)
 }
@@ -152,16 +155,12 @@ async fn gas_cost<S>(
     Ok(provider.quote_wei_in_fee_token(pool, gas * price).await?)
 }
 
-fn paymaster_addresses(pool: &Pool) -> Result<(Address, Address), TornadoPaymasterError> {
+fn paymaster_info(pool: &Pool) -> Result<PaymasterInfo, TornadoPaymasterError> {
     let paymaster = pool
         .paymaster
         .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
-    let adapter = pool
-        .adapter
-        .ok_or(TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
-
-    Ok((paymaster, adapter))
+    Ok(paymaster)
 }
 
 fn encode_paymaster_data(adapter: Address, withdrawal: &ProvenWithdrawal) -> Bytes {

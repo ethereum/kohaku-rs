@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
+use ruint::uint;
 use serde::{Deserialize, Serialize};
 
 use crate::{asset::Asset, pool::Pool, relayer::RelayerError, withdrawal::Payer};
@@ -69,11 +70,12 @@ impl RelayerStatus {
 
         // Scale the fee percentage into a fixed-point integer.
         const FEE_PRECISION: u64 = 1_000_000;
+        const WITHDRAWAL_GAS: U256 = uint!(500_000_U256);
 
         let fee_scaled = (self.tornado_service_fee / 100.0 * FEE_PRECISION as f64).round() as u64;
         let fee_percent =
             (U256::from(pool.amount_wei) * U256::from(fee_scaled)) / U256::from(FEE_PRECISION);
-        let expense = U256::from(gas_price) * U256::from(500_000);
+        let expense = U256::from(gas_price) * WITHDRAWAL_GAS;
 
         // If the asset is native, the fee is `expense + fee_percent`
         if matches!(pool.asset, Asset::Native { .. }) {

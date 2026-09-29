@@ -70,7 +70,7 @@ impl Withdrawal {
     pub fn relayer(&self) -> Address {
         match self.payer {
             Payer::Relayer { address, .. } => address,
-            _ => Address::ZERO,
+            Payer::SelfPay => Address::ZERO,
         }
     }
 
@@ -78,7 +78,7 @@ impl Withdrawal {
     pub fn fee(&self) -> U256 {
         match self.payer {
             Payer::Relayer { fee, .. } => fee,
-            _ => U256::ZERO,
+            Payer::SelfPay => U256::ZERO,
         }
     }
 
@@ -86,7 +86,7 @@ impl Withdrawal {
     pub fn refund(&self) -> U256 {
         match self.payer {
             Payer::Relayer { refund, .. } => refund,
-            _ => U256::ZERO,
+            Payer::SelfPay => U256::ZERO,
         }
     }
 
