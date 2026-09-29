@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, B256, Bytes, TxHash};
+use alloy::primitives::{Address, B256, Bytes, TxHash, U256};
 use serde::{Deserialize, Serialize};
 
 use crate::{pool::Pool, relayer::status::RelayerStatus, withdrawal::ProvenWithdrawal};
@@ -26,7 +26,7 @@ pub enum RelayerClientError {
 pub struct JobReceipt {
     pub id: JobId,
     pub pool: Pool,
-    pub nullifier_hash: B256,
+    pub nullifier_hash: U256,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,13 +101,13 @@ impl RelayerClient {
         &self,
         withdrawal: ProvenWithdrawal,
     ) -> Result<JobReceipt, RelayerClientError> {
-        let nullifier_hash = withdrawal.note.nullifier_hash().into();
+        let nullifier_hash = withdrawal.note.nullifier_hash();
         let request = WithdrawRequest {
             contract: withdrawal.pool.address,
             proof: withdrawal.proof_bytes(),
             args: (
                 withdrawal.root.into(),
-                nullifier_hash,
+                nullifier_hash.into(),
                 withdrawal.recipient,
                 withdrawal.relayer(),
                 withdrawal.fee().into(),

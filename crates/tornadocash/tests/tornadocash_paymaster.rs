@@ -124,9 +124,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     assert!(userop_receipt.success, "userop should succeed");
     assert!(
-        provider
-            .is_spent(&pool, note.nullifier_hash().into())
-            .await?,
+        provider.is_spent(&pool, note.nullifier_hash()).await?,
         "note should be spent"
     );
 
