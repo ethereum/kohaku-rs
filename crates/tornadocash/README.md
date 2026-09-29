@@ -1,52 +1,65 @@
 # kohaku-tornadocash
 
 Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to interface with Tornado Cash's smart contracts. It provides support for:
-- Merkle tree syncing & storage
-- Reorg recovery
-- Multi-pool management
 - Deposit and withdrawal transaction generation
+- Pluggable event syncing ([JSON-RPC](./src/indexer/rpc.rs), [cached remote](./src/indexer/remote.rs), [saga-sync](./src/indexer/saga_sync/mod.rs))
+- Merkle tree construction and proof generation
 - [Relayed](./src/relayer/) withdrawal transactions
-- [Bundled](./src/userop_provider/) withdrawal transactions
+- [Paymaster-sponsored](./src/userop_provider/) withdrawal transactions
 
 ## Example
 
 ### Depositing into a Tornado Cash pool
 
 ```rust,no_run
-use alloy::providers::DynProvider;
-use kohaku_tornadocash::{
-    deposit::Deposit,
-    pool::Pool,
-};
+use alloy::providers::{Provider};
+use kohaku_tornadocash::{deposit::Deposit, pool::Pool, provider::TornadoProvider};
 
-async fn example(provider: DynProvider) -> Result<(), Box<dyn std::error::Error>> {
-    let deposit = Deposit::random(Pool::SEPOLIA_ETHER_01, &mut rand::rng()).await;
-    provider
-        .send_transaction(deposit.into())
-        .await?
-        .watch()
-        .await?;
+async fn example(provider: &TornadoProvider,) -> Result<(), Box<dyn std::error::Error>> {
+    let deposit = Deposit::random(&Pool::SEPOLIA_ETHER_01, &mut rand::rng());
+    
+    // ERC20 pools are pulled with `transferFrom` and require an approval before the deposit.
+    if let Some(approval) = deposit.approval() {
+        provider.send_transaction(approval).await?.watch().await?;
+    }
+    provider.send_transaction(deposit.into()).await?.watch().await?;
+
+    Ok(())
 }
 ```
 
 ### Withdrawing directly from a Tornado Cash pool
 
 ```rust,no_run
-use alloy::providers::DynProvider;
+use alloy::{
+    primitives::Address,
+    providers::Provider,
+};
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer,
+    merkle_tree::{TcMerkleTree, TcMerkleTreeExt},
+    note::Note,
     pool::Pool,
     provider::TornadoProvider,
     withdrawal::Withdrawal,
 };
 
 async fn example(
-    tornado_provider: &TornadoProvider,
+    provider: &TornadoProvider,
+    pool: Pool,
+    note: Note,
+    recipient: Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
-    let recipient = "0xrecipient".parse()?;
-    let withdrawal = tornado_provider.withdraw(note, recipient);
+    let tree = TcMerkleTree::new(Store::create());
+    let synced = provider.sync(&pool, ..).await?;
+    tree.splice_events(&synced.events).await?;
+
+    let withdrawal = Withdrawal::new(&pool, note, recipient)
+        .prove(&tree, &mut rand::rng())
+        .await?;
+
+    provider.send_transaction(withdrawal.into()).await?.watch().await?;
+
     Ok(())
 }
 ```
@@ -54,40 +67,56 @@ async fn example(
 ### Withdrawing via a Tornado Cash relayer
 
 ```rust,no_run
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::primitives::U256;
-use kohaku_kv_store::Store;
+use alloy::{
+    primitives::Address,
+    providers::Provider,
+};
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer,
+    merkle_tree::TcMerkleTree,
+    note::Note,
     pool::Pool,
     provider::TornadoProvider,
     relayer::Relayer,
+    withdrawal::Withdrawal,
 };
 
 async fn example(
-    tornado_provider: &TornadoProvider,
+    provider: &TornadoProvider,
+    tree: &TcMerkleTree,
+    note: Note,
+    recipient: Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let relayer_url = "https://mainnet.relayer.com";
-    let relayer = Relayer::new(relayer_url);
+    let pool = Pool::SEPOLIA_ETHER_01;
+    let relayer = Relayer::new("https://mainnet.relayer.com");
 
-    let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
-    let recipient = "0xrecipient".parse()?;
-    let receipt = tornado_provider.withdraw(note, recipient).relay(&relayer, &mut rand::rng()).await?;
-    let tx_hash = relayer.await_confirmation(&tornado_provider, &receipt).await?;
+    let status = relayer.status().await?;
+    let gas_price = provider.get_gas_price().await?;
+
+    let withdrawal = Withdrawal::new(&pool, note, recipient)
+        .with_relayer(&status, gas_price)?
+        .prove(tree, &mut rand::rng())
+        .await?;
+
+    // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.
+    let receipt = relayer.withdraw(withdrawal).await?;
+    let tx_hash = relayer.await_confirmation(provider, &receipt).await?;
+    println!("{tx_hash:?}");
+
+    Ok(())
 }
 ```
 
-### Withdrawing via a UserOperation
+### Withdrawing via a `UserOperation`
 
 ```rust,no_run
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::signers::local::PrivateKeySigner;
-use kohaku_kv_store::Store;
+use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
 use kohaku_tornadocash::{
-    indexer::rpc::RpcSyncer,
+    merkle_tree::TcMerkleTree,
+    note::Note,
     pool::Pool,
     provider::TornadoProvider,
-    userop_provider::WithdrawalPaymasterExt,
+    userop_provider::UserOperationPaymasterExt,
+    withdrawal::Withdrawal,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
@@ -96,22 +125,30 @@ use kohaku_userop_kit::{
 };
 
 async fn example(
+    provider: DynProvider,
     tornado_provider: &TornadoProvider,
-    provider: &dyn Provider,
+    tree: &TcMerkleTree,
+    note: Note,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let pool = Pool::SEPOLIA_ETHER_01;
     let owner = PrivateKeySigner::random();
-    let note = "tornado-eth-0.1-11155111-0xsecret".parse()?;
-    let smart_account = Simple7702SmartAccount::new(provider.clone(), owner.address(), 11155111);
-    
     let bundler = PimlicoBundler::new("https://bundler.pimlico.com".parse()?);
 
-    let builder = UserOperationBuilder::new_with_smart_account(&smart_account).await?;
-    let builder = tornado_provider
-        .withdraw(note, owner.address())
-        .sponsor(&bundler, builder, &mut rand::rng())
+    let smart_account = Simple7702SmartAccount::new(provider, owner.address(), pool.chain_id);
+    let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
+        .await?
+        .with_call(&vec![Call::default()]);
+
+    // The note pays for gas, and its remainder is withdrawn to `owner` during validation, so the
+    // operation's own calls can spend it.
+    let withdrawal = Withdrawal::new(&pool, note, owner.address());
+    let builder = builder
+        .with_tornado_paymaster(withdrawal, tornado_provider, &bundler, tree, &mut rand::rng())
         .await?;
 
     let userop = builder.build().sign(&owner).await?;
+    let hash = bundler.send_user_operation(&userop).await?;
+    println!("{hash:?}");
 
     Ok(())
 }
