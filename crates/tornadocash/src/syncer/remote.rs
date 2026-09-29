@@ -58,13 +58,6 @@ impl RemoteSyncer {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl SyncerBackend for RemoteSyncer {
-    async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
-        let deposits = self.deposits(pool).await.map_err(SyncerError::other)?;
-        let withdrawals = self.withdrawals(pool).await.map_err(SyncerError::other)?;
-
-        Ok(latest_block(&deposits, &withdrawals))
-    }
-
     async fn sync(
         &self,
         pool: &Pool,

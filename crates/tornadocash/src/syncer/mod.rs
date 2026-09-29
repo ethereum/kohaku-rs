@@ -18,9 +18,6 @@ pub mod saga_sync;
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait SyncerBackend: Send + Sync {
-    /// See [`Syncer::latest_block`].
-    async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError>;
-
     /// See [`Syncer::sync`].
     ///
     /// `from_block` and `to_block` form a half-open range. Backends are expected to
@@ -57,14 +54,6 @@ pub enum SyncerError {
 impl Syncer {
     pub fn new(syncer: impl SyncerBackend + 'static) -> Self {
         Self(Arc::new(syncer))
-    }
-
-    /// Returns the latest block accessible by the syncer for the given `pool`.
-    ///
-    /// # Errors
-    /// Returns an error if the syncer fails to fetch the latest block.
-    pub async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
-        self.0.latest_block(pool).await
     }
 
     /// Returns the events emitted by the given `pool` within the given block `range`.

@@ -64,17 +64,6 @@ impl SagaSyncSyncer {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl SyncerBackend for SagaSyncSyncer {
-    async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
-        let manifest = self.fetch_manifest().await.map_err(SyncerError::other)?;
-        let key = stream_key(pool);
-
-        Ok(manifest
-            .available_protocols
-            .get(&key)
-            .and_then(manifest::StreamEntry::last_block)
-            .unwrap_or(pool.deployed_block))
-    }
-
     async fn sync(
         &self,
         pool: &Pool,

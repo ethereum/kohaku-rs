@@ -35,21 +35,6 @@ impl ChainedSyncer {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl SyncerBackend for ChainedSyncer {
-    async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
-        let mut max_block = 0u64;
-        for syncer in &self.syncers {
-            match syncer.latest_block(pool).await {
-                Ok(block) => {
-                    max_block = max_block.max(block);
-                }
-                Err(e) => {
-                    tracing::warn!("Syncer failed to get latest block: {}", e);
-                }
-            }
-        }
-        Ok(max_block)
-    }
-
     async fn sync(
         &self,
         pool: &Pool,

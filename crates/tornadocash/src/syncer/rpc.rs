@@ -63,10 +63,6 @@ impl<P: Provider> RpcSyncer<P> {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl<P: Provider> SyncerBackend for RpcSyncer<P> {
-    async fn latest_block(&self, pool: &Pool) -> Result<u64, SyncerError> {
-        Ok(self.latest_block(pool).await.map_err(SyncerError::other)?)
-    }
-
     async fn sync(
         &self,
         pool: &Pool,
@@ -81,10 +77,6 @@ impl<P: Provider> SyncerBackend for RpcSyncer<P> {
 }
 
 impl<P: Provider> RpcSyncer<P> {
-    async fn latest_block(&self, _: &Pool) -> Result<u64, RpcSyncerError> {
-        Ok(self.provider.get_block_number().await?)
-    }
-
     async fn sync(
         &self,
         pool: &Pool,
@@ -134,7 +126,7 @@ impl<P: Provider> RpcSyncer<P> {
     ) -> Result<std::ops::Range<u64>, RpcSyncerError> {
         let from = from_block.max(pool.deployed_block);
         //? `latest_block` is an inclusive block number, `to_block` an exclusive bound.
-        let latest = self.latest_block(pool).await?.saturating_add(1);
+        let latest = self.provider.get_block_number().await?.saturating_add(1);
         let to = to_block.min(latest).max(from);
 
         Ok(from..to)
