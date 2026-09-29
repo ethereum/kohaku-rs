@@ -15,6 +15,7 @@ use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     deposit::Deposit,
     merkle_tree::{MerkleTree, MerkleTreeExt},
+    pool::PaymasterInfo,
     provider::TornadoProviderExt,
     syncer::{SyncerExt, rpc::RpcSyncer},
     userop_provider::UserOperationPaymasterExt,
@@ -61,9 +62,12 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    pool.adapter =
-        Some(deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?);
-    pool.paymaster = Some(paymaster_address);
+    let adapter_address =
+        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(PaymasterInfo {
+        address: paymaster_address,
+        adapter: adapter_address,
+    });
 
     // Deposit a note
     info!("Depositing into pool");
@@ -160,9 +164,12 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    pool.adapter =
-        Some(deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?);
-    pool.paymaster = Some(paymaster_address);
+    let adapter_address =
+        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(PaymasterInfo {
+        address: paymaster_address,
+        adapter: adapter_address,
+    });
 
     // Deposit a note
     info!("Depositing into pool");
