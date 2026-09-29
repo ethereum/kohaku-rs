@@ -8,7 +8,6 @@ use thiserror::Error;
 
 use crate::{pool::Pool, syncer::event::SyncEvent};
 
-pub mod chained;
 pub mod event;
 pub mod remote;
 pub mod rpc;

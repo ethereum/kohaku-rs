@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::{asset::Asset, pool::Pool, relayer::RelayerError, withdrawal::Payer};
 
 /// Relayer status response.
+///
+/// See [tornado-relayer/src/contollers/status.js](https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L13)
+/// for the reference.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelayerStatus {
