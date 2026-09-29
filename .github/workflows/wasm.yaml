@@ -1,0 +1,82 @@
+name: WASM
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TORNADOCASH_WASM_MODULE: crates/target/tornadocash-wasm-node/kohaku_tornadocash_wasm.js
+
+jobs:
+  bindings:
+    name: Tornado bindings (Node and Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.8.1
+          package-manager-cache: false
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Install wasm-bindgen CLI
+        # Must match the wasm-bindgen dependency in crates/Cargo.toml.
+        run: cargo install wasm-bindgen-cli --version 0.2.108 --locked --bin wasm-bindgen
+
+      - name: Build WASM bindings
+        run: >-
+          cargo build --locked --manifest-path crates/Cargo.toml
+          -p kohaku-tornadocash-wasm --target wasm32-unknown-unknown
+          --target-dir crates/target
+
+      - name: Lint WASM bindings
+        run: >-
+          cargo clippy --locked --manifest-path crates/Cargo.toml
+          -p kohaku-tornadocash-wasm --target wasm32-unknown-unknown
+          --target-dir crates/target --no-deps -- -D warnings
+
+      - name: Generate Node bindings
+        run: >-
+          wasm-bindgen crates/target/wasm32-unknown-unknown/debug/kohaku_tornadocash_wasm.wasm
+          --target nodejs --out-dir crates/target/tornadocash-wasm-node
+
+      - name: Test JavaScript API
+        run: node --test crates/tornadocash-wasm/tests/*.cjs
+
+      - name: Check TypeScript declarations
+        run: >-
+          npm exec --yes --package=typescript@7.0.2 -- tsc --noEmit --strict
+          --target ES2020 --lib ES2020,ESNext.Disposable --module Node16 crates/tornadocash-wasm/tests/*.types.ts
+
+      - name: Generate browser bindings
+        run: >-
+          wasm-bindgen crates/target/wasm32-unknown-unknown/debug/kohaku_tornadocash_wasm.wasm
+          --target web --out-dir crates/target/tornadocash-wasm-web
+
+      - name: Install browser test dependencies
+        run: npm ci --prefix crates/tornadocash-wasm/tests/browser
+
+      - name: Install Chromium
+        working-directory: crates/tornadocash-wasm/tests/browser
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Test browser API
+        run: npm test --prefix crates/tornadocash-wasm/tests/browser

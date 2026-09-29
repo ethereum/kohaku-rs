@@ -1,0 +1,11 @@
+{
+  "name": "tornadocash-wasm-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test note.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

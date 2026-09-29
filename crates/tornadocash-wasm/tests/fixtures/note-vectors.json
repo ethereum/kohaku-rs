@@ -1,0 +1,26 @@
+{
+  "source": "circomlibjs@0.1.7, Pedersen BabyJubJub x-coordinate",
+  "vectors": [
+    {
+      "name": "repeated bytes",
+      "nullifier": "01010101010101010101010101010101010101010101010101010101010101",
+      "secret": "02020202020202020202020202020202020202020202020202020202020202",
+      "commitment": "0x16530cfcf96f2ba56688084e9d9f55f49d6f73874bc2d7a1768b732335080504",
+      "nullifierHash": "0x1247b27cdafda5cc981be564e7c1b992b711fc5393c137435574d875714e6638"
+    },
+    {
+      "name": "ordered bytes",
+      "nullifier": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e",
+      "secret": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1",
+      "commitment": "0x01871eea39c13256c02a6a7a9ef164a4c5651feab258ed23555c9b7ed41dee4a",
+      "nullifierHash": "0x296d6b234ecd471c14d7b3d5882662ff5d29b26cc1d7e72850252c929cf92a60"
+    },
+    {
+      "name": "zero bytes",
+      "nullifier": "00000000000000000000000000000000000000000000000000000000000000",
+      "secret": "00000000000000000000000000000000000000000000000000000000000000",
+      "commitment": "0x17731ee23dee1b3a01f4c667052b7898aee8db579cc49748d8fc798d4e769d58",
+      "nullifierHash": "0x0c0e296531c26929fd94915ffceb402c867cc40389b20afc64ff584534c99e4f"
+    }
+  ]
+}
