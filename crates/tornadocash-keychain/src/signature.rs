@@ -1,5 +1,7 @@
 //! Signature-based keychain built.
 
+use std::{collections::HashMap, sync::RwLock};
+
 use alloy::{
     dyn_abi::Eip712Domain,
     primitives::keccak256,
@@ -31,11 +33,39 @@ mod sol {
 /// Signature-based keychain built on an alloy signer.
 pub struct SignatureKeychain<S: Signer + Send + Sync> {
     signer: S,
+    derived: RwLock<HashMap<(Pool, u64), Derived>>,
+}
+
+#[derive(Clone, Copy)]
+struct Derived {
+    commitment: U256,
+    nullifier_hash: U256,
 }
 
 impl<S: Signer + Send + Sync> SignatureKeychain<S> {
     pub fn new(signer: S) -> Self {
-        Self { signer }
+        Self {
+            signer,
+            derived: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Derives the commitment and nullifier hash for a given pool and nonce, caching
+    /// the results for future calls.
+    async fn derived(&self, pool: &Pool, nonce: u64) -> Result<Derived, KeychainError> {
+        let key = (pool.clone(), nonce);
+        if let Some(d) = self.derived.read().unwrap().get(&key).copied() {
+            return Ok(d);
+        }
+
+        let note = self.note(pool, nonce).await?;
+        let d = Derived {
+            commitment: note.commitment().into(),
+            nullifier_hash: note.nullifier_hash().into(),
+        };
+
+        self.derived.write().unwrap().insert(key, d);
+        Ok(d)
     }
 }
 
@@ -58,13 +88,11 @@ impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
     }
 
     async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
-        let note = self.note(pool, nonce).await?;
-        Ok(note.commitment().into())
+        Ok(self.derived(pool, nonce).await?.commitment)
     }
 
     async fn nullifier_hash(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
-        let note = self.note(pool, nonce).await?;
-        Ok(note.nullifier_hash().into())
+        Ok(self.derived(pool, nonce).await?.nullifier_hash)
     }
 }
 
@@ -118,7 +146,7 @@ mod tests {
     const POOL: Pool = Pool::ETHEREUM_ETHER_1;
 
     #[tokio::test]
-    async fn signature_keychain_deterministic() {
+    async fn note_deterministic() {
         //? Hackery to get deterministic signer for testing.
         let signer = LocalSigner::from_bytes(&U256::from(42).into()).unwrap();
         let keychain = SignatureKeychain::new(signer);
@@ -126,5 +154,18 @@ mod tests {
         let note = keychain.note(&POOL, 0).await.unwrap();
         let expected = "tornado-eth-1-1-0x57097d3444b76cb0523228d4b26c805daf1af6fcebebf7564dd21a57ba7b37bcf98dcd3960d3519373dd127890f87205f8f42ba75c3c82cc13904b98d97a";
         assert_eq!(expected, note.to_string());
+    }
+
+    #[tokio::test]
+    async fn nonce_and_pool_different() {
+        let signer = LocalSigner::from_bytes(&U256::from(42).into()).unwrap();
+        let keychain = SignatureKeychain::new(signer);
+
+        let note1 = keychain.note(&POOL, 0).await.unwrap();
+        let note2 = keychain.note(&POOL, 1).await.unwrap();
+        let note3 = keychain.note(&Pool::ETHEREUM_ETHER_10, 0).await.unwrap();
+
+        assert_ne!(note1, note2);
+        assert_ne!(note1, note3);
     }
 }
