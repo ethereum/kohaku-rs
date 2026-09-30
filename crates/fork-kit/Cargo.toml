@@ -19,6 +19,7 @@ alloy = { workspace = true, features = [
     "contract",
     "signers",
     "signer-local",
+    "provider-anvil-api",
 ] }
 anyhow = { workspace = true }
 kohaku-tornadocash = { workspace = true }
