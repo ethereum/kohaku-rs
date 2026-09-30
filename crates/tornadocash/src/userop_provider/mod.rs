@@ -1,3 +1,5 @@
+//! Extension trait for building userops with a Tornadocash paymaster.
+
 use alloy::{
     primitives::{Address, Bytes, U256},
     providers::Provider,

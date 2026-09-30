@@ -1,3 +1,5 @@
+//! Traits and types for syncing Tornadocash events.
+
 use std::{
     ops::{Bound, Range, RangeBounds},
     sync::Arc,

@@ -1,7 +1,7 @@
 use std::{fmt::Display, ops::Deref, str::FromStr};
 
 use rand::{
-    CryptoRng, RngExt,
+    RngExt,
     distr::{Distribution, StandardUniform},
 };
 use ruint::aliases::U256;
@@ -23,10 +23,14 @@ pub struct Note {
     pub secret: Secret,
 }
 
-/// Tornadocash deposit note with pool information.
+/// Displayable Tornadocash note.
 ///
-/// Parses and formats notes in the standard Tornado Cash format, which includes hints about the
-/// pool.
+/// Includes hints for the note's asset & pool. Parses from and formats to strings in the
+/// standard tornadocash format.
+///
+/// ```text
+/// tornado-{symbol}-{amount}-{chain_id}-0x{nullifier}{secret}
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoteString {
     pub note: Note,
@@ -168,7 +172,8 @@ mod tests {
         let note = NoteString::new(Note::new(nullifier, secret), symbol, amount, chain_id);
         let encoded = note.to_string();
 
-        insta::assert_debug_snapshot!(encoded);
+        let expected = "tornado-eth-1-1-0x0101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202";
+        assert_eq!(encoded, expected);
 
         let decoded_note = NoteString::from_str(&encoded).unwrap();
         assert_eq!(note, decoded_note);

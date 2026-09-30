@@ -5,8 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{asset::Asset, note::NoteString};
 
-/// Represents a tornadocash pool. Pools are uniquely defined by their `chain_id`, `asset` symbol,
-/// and `amount`.
+/// Represents a tornadocash pool.
+///
+/// Pools are uniquely defined by their `chain_id`, `asset` symbol, and `amount`.
+///
+/// Defines a set of known Tornado Cash pools as constants. The constants are
+/// named in the format `<CHAIN>_<ASSET>_<AMOUNT>`, e.g. `ETHEREUM_ETHER_01` for
+/// the 0.1 ETH pool on Ethereum mainnet.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Pool {
     pub chain_id: u64,
@@ -25,23 +30,23 @@ pub struct PaymasterInfo {
     pub adapter: Address,
 }
 
-/// Hardcoded list of known tornadocash pools.
-pub const POOLS: &[Pool] = &[
-    Pool::SEPOLIA_ETHER_01,
-    Pool::SEPOLIA_ETHER_1,
-    Pool::SEPOLIA_ETHER_10,
-    Pool::ETHEREUM_ETHER_01,
-    Pool::ETHEREUM_ETHER_1,
-    Pool::ETHEREUM_ETHER_10,
-    Pool::ETHEREUM_ETHER_100,
-    Pool::POLYGON_MATIC_100,
-    Pool::POLYGON_MATIC_1000,
-    Pool::ETHEREUM_DAI_100,
-    Pool::ETHEREUM_DAI_1000,
-];
-
 #[allow(clippy::unreadable_literal)]
 impl Pool {
+    /// List of default Tornado Cash pools.
+    pub const POOLS: &[Pool] = &[
+        Pool::SEPOLIA_ETHER_01,
+        Pool::SEPOLIA_ETHER_1,
+        Pool::SEPOLIA_ETHER_10,
+        Pool::ETHEREUM_ETHER_01,
+        Pool::ETHEREUM_ETHER_1,
+        Pool::ETHEREUM_ETHER_10,
+        Pool::ETHEREUM_ETHER_100,
+        Pool::POLYGON_MATIC_100,
+        Pool::POLYGON_MATIC_1000,
+        Pool::ETHEREUM_DAI_100,
+        Pool::ETHEREUM_DAI_1000,
+    ];
+
     pub const SEPOLIA_ETHER_01: Pool = Pool {
         chain_id: 11155111,
         address: address!("0x8C4A04d872a6C1BE37964A21ba3a138525dFF50b"),
@@ -114,7 +119,7 @@ impl Pool {
     pub const ETHEREUM_DAI_100: Pool = Pool {
         chain_id: 1,
         address: address!("0xD4B88Df4D29F5CedD6857912842cff3b20C8Cfa3"),
-        asset: Asset::DAI,
+        asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_117_612,
         paymaster: None,
@@ -123,7 +128,7 @@ impl Pool {
     pub const ETHEREUM_DAI_1000: Pool = Pool {
         chain_id: 1,
         address: address!("0xFD8610d20aA15b7B2E3Be39B396a1bC3516c7144"),
-        asset: Asset::DAI,
+        asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(21),
         deployed_block: 9_161_917,
         paymaster: None,
@@ -150,7 +155,7 @@ impl Pool {
     /// Creates a pool from the note's pool hints. Returns `None` if the note's pool is not known.
     #[must_use]
     pub fn from_note(note: &NoteString) -> Option<Self> {
-        POOLS
+        Pool::POOLS
             .iter()
             .find(|pool| {
                 pool.chain_id == note.chain_id
@@ -163,7 +168,10 @@ impl Pool {
     /// Creates a pool from the provided address. Returns `None` if the pool is not known.
     #[must_use]
     pub fn from_address(address: Address) -> Option<Self> {
-        POOLS.iter().find(|pool| pool.address == address).cloned()
+        Pool::POOLS
+            .iter()
+            .find(|pool| pool.address == address)
+            .cloned()
     }
 
     /// Pool ID, e.g. "eth-0.1-1" for the 0.1 ETH pool on Ethereum mainnet.

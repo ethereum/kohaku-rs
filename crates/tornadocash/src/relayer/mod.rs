@@ -1,4 +1,4 @@
-//! Tornadocash Relayer Client
+//! Client for interacting with Tornadocash relayers.
 //!
 //! Tornadocash relayers are services run by third parties that accept and submit withdrawal
 //! proofs on behalf of users. They allow users to withdraw from Tornadocash to a fresh
