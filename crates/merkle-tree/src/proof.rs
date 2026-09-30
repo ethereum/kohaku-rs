@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use crate::{element::Element, hasher::Hasher};
 
 /// A Merkle proof for a leaf element in a Merkle tree of depth `DEPTH` and arity `ARITY`.
@@ -32,5 +34,28 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element + Eq> MerkleProof<DEPTH,
             hash = H::hash(children);
         }
         hash == self.root
+    }
+}
+
+impl<const DEPTH: usize, E: Element + Eq> MerkleProof<DEPTH, 2, E> {
+    /// Returns the siblings of the node on the path to the root, excluding the node itself.
+    ///
+    /// Only available for binary trees. Use `siblings` for trees of arbitrary arity.
+    pub fn sibling_paths(&self) -> [E; DEPTH] {
+        from_fn(|level| {
+            let s = &self.siblings[level];
+            s[self.path[level] as usize].clone()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sibling_paths_returns_siblings() {
+        let proof = MerkleProof::new(1u64, [[1, 2], [3, 4], [5, 6]], [0, 1, 0], 7u64);
+        assert_eq!(proof.sibling_paths(), [1, 4, 5]);
     }
 }

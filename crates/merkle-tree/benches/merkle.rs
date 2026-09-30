@@ -4,17 +4,15 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
 use rand::RngExt;
 
+type Tree = MerkleTree<20, 2, u64, BenchHasher>;
+
 #[derive(Copy, Clone)]
 struct BenchHasher;
-
-/// Rounds of mixing, chosen so hashing dominates tree construction the way a real algebraic hash
-/// (e.g. MiMC) does.
-const ROUNDS: u64 = 1024;
 
 impl Hasher<2, u64> for BenchHasher {
     fn hash(children: [u64; 2]) -> u64 {
         let mut state = children[0] ^ children[1].rotate_left(1);
-        for i in 0..ROUNDS {
+        for i in 0..1024 {
             state = state.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(29) ^ i;
         }
         state
@@ -24,8 +22,6 @@ impl Hasher<2, u64> for BenchHasher {
         0
     }
 }
-
-type Tree = MerkleTree<20, 2, u64, BenchHasher>;
 
 fn random_leaves(n: usize) -> Vec<u64> {
     let mut rng = rand::rng();

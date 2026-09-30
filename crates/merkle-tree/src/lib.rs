@@ -38,7 +38,7 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
     pub fn new() -> Self {
         const {
             assert!(ARITY >= 2, "ARITY must be at least 2");
-            assert!(ARITY <= 256, "ARITY must fit in MerkleProof::path (u8)");
+            assert!(ARITY <= 256, "ARITY must be at most 256");
         }
 
         Self {
@@ -108,7 +108,7 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
     }
 
     /// Splices in `leaves` starting at `index`. If any leaves already exist at those indices,
-    /// they are replaced.
+    /// they are replaced. Spliced leaves must be contiguous.
     ///
     /// # Errors
     /// Returns an error if the index is out of bounds or the tree is full.
@@ -186,7 +186,7 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element + PartialEq, H: Hasher<A
 }
 
 /// Hashes each `ARITY`-wide chunk of `children` into the matching slot of `parents`.
-#[cfg_attr(not(feature = "parallel"), allow(unused_variables))]
+#[cfg_attr(not(feature = "parallel"), expect(unused_variables))]
 fn hash_level<const ARITY: usize, E: Element, H: Hasher<ARITY, E>>(
     children: &[E],
     parents: &mut [E],
@@ -231,6 +231,8 @@ mod tests {
     use super::*;
     use crate::hasher::Hasher;
 
+    type TestTree = MerkleTree<3, 2, u128, TestHasher>;
+
     #[derive(Copy, Clone)]
     struct TestHasher;
 
@@ -247,8 +249,8 @@ mod tests {
         }
     }
 
-    fn tree() -> MerkleTree<3, 2, u128, TestHasher> {
-        MerkleTree::new()
+    fn tree() -> TestTree {
+        TestTree::new()
     }
 
     #[test]
@@ -264,7 +266,7 @@ mod tests {
         let mut tree_a = tree();
         tree_a.splice(0, &leaves).unwrap();
 
-        let tree_b = MerkleTree::<3, 2, u128, TestHasher>::from_leaves(&tree_a.leaves()).unwrap();
+        let tree_b = TestTree::from_leaves(&tree_a.leaves()).unwrap();
 
         assert_eq!(tree_a.root().unwrap(), tree_b.root().unwrap());
     }
@@ -312,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn reinserting_the_same_leaf_is_a_no_op() {
+    fn inserting_same_leaf_no_op() {
         let mut tree = tree();
         tree.insert(0, 1).unwrap();
         let root_before = tree.root().unwrap();
@@ -322,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn reinserting_a_different_leaf_replaces_it() {
+    fn inserting_different_leaf_replaces_it() {
         let mut tree = tree();
         tree.insert(0, 1).unwrap();
         let root_before = tree.root().unwrap();
