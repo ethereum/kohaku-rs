@@ -6,7 +6,7 @@ use kohaku_tornadocash::{
 };
 use ruint::aliases::U256;
 
-use crate::keychain::{Keychain, KeychainError};
+use crate::{Keychain, KeychainError};
 
 /// Number of consecutive nonces without a deposit after which a scan gives up.
 const DEFAULT_GAP_LIMIT: u64 = 20;
@@ -23,13 +23,29 @@ pub struct RecoveredNote {
     pub withdrawal: Option<event::Withdrawal>,
 }
 
+/// Returns the next nonce that should be used for a new note derived from `keychain` for `pool`.
+///
+/// See [`recover`] for details on how the next nonce is determined.
+pub async fn next_nonce(
+    keychain: &impl Keychain,
+    pool: &Pool,
+    events: &[SyncEvent],
+    gap_limit: Option<u64>,
+) -> Result<u64, KeychainError> {
+    let recovered = recover(keychain, pool, events, gap_limit).await?;
+    Ok(recovered.last().map_or(0, |note| note.nonce + 1))
+}
+
 /// Recovers every note `keychain` derived for `pool` that appears in `events`.
 ///
 /// Incrementally scans nonces starting from 0, finding deposits and withdrawals in `events` that
 /// match each derived note. Scanning stops after `gap_limit` consecutive nonces with no deposits.
 ///
-/// `events` should be a complete list of all deposits and withdrawals for `pool` up to the current
-/// block. If events is incomplete, some notes may be missed.
+/// Recovery may be incomplete if `events` does not contain all deposits and withdrawals made by
+/// `keychain` for `pool`. In particular, if a deposit was previously created but not yet submitted
+/// on-chain it becomes a racy deposit. If its nonce is handed out again then both deposits derive
+/// the same commitment, so only one can be submitted. Broadcasting them from different senders
+/// also links those addresses, since the losing transaction is still public.
 ///
 /// # Errors
 /// Returns an error if the keychain cannot derive a nonce's material.
@@ -109,11 +125,10 @@ mod tests {
 
     const POOL: Pool = Pool::ETHEREUM_ETHER_01;
 
-    /// A keychain deriving both secrets from the nonce alone.
     struct TestKeychain;
 
     #[tokio::test]
-    async fn test_recovers_deposited_notes() {
+    async fn recovers_deposits() {
         let events = vec![
             deposit(&note(0).await, 0),
             deposit(&foreign_note(), 1),
@@ -132,7 +147,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_recovers_withdrawals() {
+    async fn recovers_withdrawals() {
         let events = vec![
             deposit(&note(0).await, 0),
             deposit(&note(1).await, 1),
@@ -152,7 +167,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stops_at_the_gap_limit() {
+    async fn stops_at_gap_limit() {
         let events = vec![deposit(&note(0).await, 0), deposit(&note(3).await, 1)];
 
         let recovered = recover(&TestKeychain, &POOL, &events, Some(2))
@@ -161,6 +176,20 @@ mod tests {
 
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered[0].nonce, 0);
+    }
+
+    #[tokio::test]
+    async fn next_nonce_is_incremented() {
+        let events = vec![
+            deposit(&note(0).await, 0),
+            deposit(&note(1).await, 1),
+            withdrawal(&note(1).await),
+        ];
+
+        let next_nonce = next_nonce(&TestKeychain, &POOL, &events, None)
+            .await
+            .unwrap();
+        assert_eq!(next_nonce, 2);
     }
 
     #[async_trait::async_trait]

@@ -2,18 +2,20 @@
 
 Deterministic note derivation for [`kohaku-tornadocash`](../tornadocash/).
 
-Keychains are used to derive tornadocash note secrets from a single source of entropy. This makes it easier for users to manage their notes, because they only need to backup a single secret (e.g. a mnemonic) instead of each individual note secret. New notes can be derived from the keychain by incrementing a nonce, and notes can be recovered by scanning a pool's synced events against the keychain's derivation scheme.
+[`Keychain`]s are used to derive tornadocash note secrets from a single source of entropy. This makes it easier for users to manage their notes, because they only need to backup a single secret (e.g. a mnemonic) instead of each individual note secret. New notes can be derived from the keychain by incrementing a nonce, and notes can be recovered by scanning a pool's synced events against the keychain's derivation scheme.
 
-> [!WARNING]
-> This crate is **not usable with real funds yet**. The derivation scheme is a placeholder
-> and thus constant & insecure. It is only intended for testing and development purposes.
+## Nonce Hygiene
+
+Nonces are used to derive tornadocash note secrets from a keychain. Nonces should:
+- Be monotonically increasing, generally starting from 0. Increasing the nonce by too much can result in unrecoverable notes if the gap limit is exceeded.
+- Be unique per pool. Because the (pool, nonce) pair uniquely identifies a note, reusing a nonce for the same pool results in an invalid note that cannot be deposited. This may result in compromised privacy, linking multiple addresses to the same note.
 
 ## Examples
 
 ### Deposit
 
 ```rust,no_run
-use kohaku_tornadocash_keychain::{DynKeychain, KeychainExt};
+use kohaku_tornadocash_keychain::{DynKeychain};
 
 async fn example(
     keychain: &DynKeychain,
@@ -30,7 +32,7 @@ async fn example(
 
 ```rust,no_run
 use kohaku_tornadocash::withdrawal::Withdrawal;
-use kohaku_tornadocash_keychain::{DynKeychain, KeychainExt};
+use kohaku_tornadocash_keychain::{DynKeychain};
 
 async fn example(
     keychain: &DynKeychain,
@@ -46,10 +48,6 @@ async fn example(
 ```
 
 ### Note Recovery
-
-Scans a pool's synced events for notes this keychain derived.
-
-Note recovery can discover the lower bound on a keychain's consumed nonces. Note recovery can't guarantee that all notes have been discovered. Notes will be missing if they aren't present in the synced events. For example, if a withdrawal has been proven but not yet submitted on-chain, the withdrawal event won't be discovered.
 
 ```rust,no_run
 use kohaku_tornadocash::syncer::Syncer;
