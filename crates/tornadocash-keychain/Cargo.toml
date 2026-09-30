@@ -18,5 +18,8 @@ alloy = { workspace = true, features = ["eip712"], optional = true }
 alloy = { workspace = true, features = ["signers", "signer-local"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [lints]
 workspace = true

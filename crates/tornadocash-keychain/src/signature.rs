@@ -39,7 +39,8 @@ impl<S: Signer + Send + Sync> SignatureKeychain<S> {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
     async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
         let signature = self

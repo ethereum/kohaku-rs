@@ -12,7 +12,8 @@ pub mod signature;
 pub use dyn_keychain::DynKeychain;
 
 /// A deterministic keychain for tornadocash wallets.
-#[async_trait::async_trait]
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait Keychain: Send + Sync {
     /// Gets the secret and nullifier for a given pool and nonce.
     ///
