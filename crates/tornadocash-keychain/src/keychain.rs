@@ -5,12 +5,19 @@ use kohaku_tornadocash::{
     note::{Nullifier, Secret},
     pool::Pool,
 };
+use ruint::aliases::U256;
 use thiserror::Error;
 
 #[async_trait::async_trait]
 impl Keychain for DynKeychain {
     async fn secrets(&self, pool: &Pool, nonce: u64) -> Result<(Secret, Nullifier), KeychainError> {
         self.0.secrets(pool, nonce).await
+    }
+    async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
+        self.0.commitment(pool, nonce).await
+    }
+    async fn nullifier_hash(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
+        self.0.nullifier_hash(pool, nonce).await
     }
 }
 
@@ -24,6 +31,24 @@ pub trait Keychain: Send + Sync {
     /// # Errors
     /// Returns an error if the material cannot be derived.
     async fn secrets(&self, pool: &Pool, nonce: u64) -> Result<(Secret, Nullifier), KeychainError>;
+
+    /// Gets the deposit commitment for a given pool and nonce.
+    ///
+    /// # Errors
+    /// Returns an error if the material cannot be derived.
+    async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
+        let (secret, nullifier) = self.secrets(pool, nonce).await?;
+        Ok(Note::new(nullifier, secret).commitment())
+    }
+
+    /// Gets the nullifier hash for a given pool and nonce.
+    ///
+    /// # Errors
+    /// Returns an error if the material cannot be derived.
+    async fn nullifier_hash(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
+        let (secret, nullifier) = self.secrets(pool, nonce).await?;
+        Ok(Note::new(nullifier, secret).nullifier_hash())
+    }
 }
 
 pub trait KeychainExt: Keychain {
@@ -36,6 +61,7 @@ pub trait KeychainExt: Keychain {
         pool: &Pool,
         nonce: u64,
     ) -> impl Future<Output = Result<NoteString, KeychainError>>;
+
     /// Returns a deposit for `pool` at `nonce`.
     ///
     /// # Errors
@@ -67,6 +93,7 @@ impl<T: Keychain> KeychainExt for T {
             pool.chain_id,
         ))
     }
+
     async fn deposit(&self, pool: &Pool, nonce: u64) -> Result<Deposit, KeychainError> {
         let (secret, nullifier) = self.secrets(pool, nonce).await?;
         Ok(Deposit::new(pool, Note::new(nullifier, secret)))

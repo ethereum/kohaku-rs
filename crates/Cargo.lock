@@ -3151,19 +3151,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "kohaku-tornadocash-wallet"
+name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "anyhow",
  "async-trait",
- "kohaku-fork-kit",
- "kohaku-kv-store",
  "kohaku-tornadocash",
- "rand 0.10.2",
+ "ruint",
  "thiserror",
  "tokio",
- "tracing-subscriber",
 ]
 
 [[package]]
