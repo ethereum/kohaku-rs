@@ -3,14 +3,19 @@ name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["signature"]
+signature = ["dep:alloy"]
+
 [dependencies]
 async-trait = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 ruint = { workspace = true }
 thiserror = { workspace = true }
+alloy = { workspace = true, features = ["eip712"], optional = true }
 
 [dev-dependencies]
-alloy = { workspace = true }
+alloy = { workspace = true, features = ["signers", "signer-local"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]

@@ -117,7 +117,7 @@ fn withdrawals(events: &[SyncEvent]) -> HashMap<U256, &event::Withdrawal> {
 mod tests {
     use alloy::primitives::Address;
     use kohaku_tornadocash::{
-        Note,
+        Note, NoteString,
         note::{Nullifier, Secret},
     };
 
@@ -194,21 +194,19 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Keychain for TestKeychain {
-        async fn secrets(
-            &self,
-            _pool: &Pool,
-            nonce: u64,
-        ) -> Result<(Secret, Nullifier), KeychainError> {
+        async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
             let mut bytes = [0u8; 31];
             bytes[..8].copy_from_slice(&nonce.to_be_bytes());
 
-            Ok((Secret::new(bytes), Nullifier::new(bytes)))
+            Ok(NoteString::from_pool(
+                Note::new(Nullifier::new(bytes), Secret::new(bytes)),
+                pool.clone(),
+            ))
         }
     }
 
     async fn note(nonce: u64) -> Note {
-        let (secret, nullifier) = TestKeychain.secrets(&POOL, nonce).await.unwrap();
-        Note::new(nullifier, secret)
+        TestKeychain.note(&POOL, nonce).await.unwrap().note
     }
 
     fn foreign_note() -> Note {

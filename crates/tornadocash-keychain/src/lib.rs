@@ -1,15 +1,13 @@
 #![doc = include_str!("../README.md")]
 
-use kohaku_tornadocash::{
-    Deposit, Note, NoteString,
-    note::{Nullifier, Secret},
-    pool::Pool,
-};
+use kohaku_tornadocash::{Deposit, NoteString, pool::Pool};
 use ruint::aliases::U256;
 use thiserror::Error;
 
 mod dyn_keychain;
 pub mod recovery;
+#[cfg(feature = "signature")]
+pub mod signature;
 
 pub use dyn_keychain::DynKeychain;
 
@@ -22,15 +20,15 @@ pub trait Keychain: Send + Sync {
     ///
     /// # Errors
     /// Returns an error if the material cannot be derived.
-    async fn secrets(&self, pool: &Pool, nonce: u64) -> Result<(Secret, Nullifier), KeychainError>;
+    async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError>;
 
     /// Gets the deposit commitment for a given pool and nonce.
     ///
     /// # Errors
     /// Returns an error if the material cannot be derived.
     async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
-        let (secret, nullifier) = self.secrets(pool, nonce).await?;
-        Ok(Note::new(nullifier, secret).commitment())
+        let note = self.note(pool, nonce).await?;
+        Ok(note.commitment())
     }
 
     /// Gets the nullifier hash for a given pool and nonce.
@@ -38,22 +36,8 @@ pub trait Keychain: Send + Sync {
     /// # Errors
     /// Returns an error if the material cannot be derived.
     async fn nullifier_hash(&self, pool: &Pool, nonce: u64) -> Result<U256, KeychainError> {
-        let (secret, nullifier) = self.secrets(pool, nonce).await?;
-        Ok(Note::new(nullifier, secret).nullifier_hash())
-    }
-
-    /// Returns the full note for `pool` at `nonce`.
-    ///
-    /// # Errors
-    /// Returns an error if the backend cannot derive the material.
-    async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
-        let (secret, nullifier) = self.secrets(pool, nonce).await?;
-        Ok(NoteString::new(
-            Note::new(nullifier, secret),
-            pool.symbol(),
-            pool.amount(),
-            pool.chain_id,
-        ))
+        let note = self.note(pool, nonce).await?;
+        Ok(note.nullifier_hash())
     }
 
     /// Returns a deposit for `pool` at `nonce`.
@@ -61,8 +45,8 @@ pub trait Keychain: Send + Sync {
     /// # Errors
     /// Returns an error if the backend cannot derive the material.
     async fn deposit(&self, pool: &Pool, nonce: u64) -> Result<Deposit, KeychainError> {
-        let (secret, nullifier) = self.secrets(pool, nonce).await?;
-        Ok(Deposit::new(pool, Note::new(nullifier, secret)))
+        let note = self.note(pool, nonce).await?;
+        Ok(Deposit::new(pool, note.note))
     }
 }
 

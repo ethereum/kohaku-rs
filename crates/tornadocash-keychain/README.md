@@ -15,7 +15,7 @@ Nonces are used to derive tornadocash note secrets from a keychain. Nonces shoul
 ### Deposit
 
 ```rust,no_run
-use kohaku_tornadocash_keychain::{DynKeychain};
+use kohaku_tornadocash_keychain::{DynKeychain, Keychain};
 
 async fn example(
     keychain: &DynKeychain,
@@ -32,7 +32,7 @@ async fn example(
 
 ```rust,no_run
 use kohaku_tornadocash::withdrawal::Withdrawal;
-use kohaku_tornadocash_keychain::{DynKeychain};
+use kohaku_tornadocash_keychain::{DynKeychain, Keychain};
 
 async fn example(
     keychain: &DynKeychain,
@@ -51,7 +51,7 @@ async fn example(
 
 ```rust,no_run
 use kohaku_tornadocash::syncer::Syncer;
-use kohaku_tornadocash_keychain::{DynKeychain, recover};
+use kohaku_tornadocash_keychain::{DynKeychain, recovery::{recover, next_nonce}};
 
 async fn example(
     keychain: &DynKeychain,
@@ -65,8 +65,9 @@ async fn example(
         println!("{}: leaf {}", note.nonce, note.deposit.leaf_index);
     }
 
-    let next_nonce = notes.last().map(|note| note.nonce + 1).unwrap_or(0);
+    let next_nonce = next_nonce(keychain, pool, &snapshot.events, None).await?;
+    // Or calculate manually:
+    // let next_nonce = notes.last().map(|note| note.nonce + 1).unwrap_or(0);
     Ok(())
 }
 ```
-
