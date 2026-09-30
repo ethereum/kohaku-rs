@@ -8,7 +8,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use anyhow::bail;
-use kohaku_tornadocash::{pool::Pool, relayer::client::RelayerClient};
+use kohaku_tornadocash::{pool::Pool, relayer::Relayer};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command},
@@ -36,7 +36,7 @@ pub struct RelayerInstance {
     redis: Child,
     server: Child,
     worker: Child,
-    relayer: RelayerClient,
+    relayer: Relayer,
 }
 
 impl RelayerBuilder {
@@ -146,7 +146,7 @@ impl RelayerBuilder {
             "relayer-worker",
         ));
 
-        let relayer = RelayerClient::new(&format!("http://127.0.0.1:{port}"));
+        let relayer = Relayer::new(&format!("http://127.0.0.1:{port}"));
 
         if timeout(READY_TIMEOUT, wait_ready(&relayer)).await.is_err() {
             let _ = redis.start_kill();
@@ -185,7 +185,7 @@ impl RelayerBuilder {
             ("BASE_FEE_RESERVE_PERCENTAGE".into(), "25".into()),
             ("APP_PORT".into(), port.to_string()),
             ("LOCAL_POOL_ADDRESS".into(), self.pool.address.to_string()),
-            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol()),
+            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol().to_string()),
             ("LOCAL_POOL_AMOUNT".into(), self.pool.amount()),
             (
                 "LOCAL_POOL_DECIMALS".into(),
@@ -222,7 +222,7 @@ async fn forward_lines(stream: impl AsyncRead + Unpin, label: &'static str) {
 }
 
 /// Polls the relayer's `/v1/status` endpoint until it responds.
-async fn wait_ready(relayer: &RelayerClient) {
+async fn wait_ready(relayer: &Relayer) {
     loop {
         if relayer.status().await.is_ok() {
             return;
@@ -232,7 +232,7 @@ async fn wait_ready(relayer: &RelayerClient) {
 }
 
 impl Deref for RelayerInstance {
-    type Target = RelayerClient;
+    type Target = Relayer;
 
     fn deref(&self) -> &Self::Target {
         &self.relayer
