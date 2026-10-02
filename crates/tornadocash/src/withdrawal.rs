@@ -84,7 +84,7 @@ impl Withdrawal {
             });
         }
 
-        let path_elements = merkle_proof.siblings;
+        let path_elements = merkle_proof.sibling_paths();
         let path_indices = from_fn(|i| U256::from(merkle_proof.path[i]));
 
         let circuit_inputs = CircuitInputs::new(

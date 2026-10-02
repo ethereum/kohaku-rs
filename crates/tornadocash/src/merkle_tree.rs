@@ -11,21 +11,16 @@ use crate::{
     syncer::event::{Deposit, SyncEvent},
 };
 
-const DEPTH: usize = 20;
-
 /// `MerkleTree` type used in Tornado Cash.
-pub type MerkleTree = kohaku_merkle_tree::MerkleTree<DEPTH, TornadoHasher>;
+pub type MerkleTree = kohaku_merkle_tree::MerkleTree<20, 2, U256, TornadoHasher>;
 
 /// `MerkleProof` type used in Tornado Cash.
-pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<DEPTH>;
+pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<20, 2, U256>;
 
 /// `MerkleTree` extension trait for Tornado Cash.
 pub trait MerkleTreeExt {
     /// Splices the given events into the Merkle tree.
-    fn splice_events(
-        &self,
-        events: &[SyncEvent],
-    ) -> impl Future<Output = Result<(), MerkleTreeError>>;
+    fn splice_events(&mut self, events: &[SyncEvent]) -> Result<(), MerkleTreeError>;
 }
 
 /// Hasher used in Tornado Cash Merkle tree.
@@ -38,10 +33,10 @@ pub struct TornadoHasher;
 const FIELD_SIZE: U256 =
     uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
 
-impl Hasher for TornadoHasher {
-    fn hash(l: U256, r: U256) -> U256 {
-        let l: Fr = BigInt::from(l).into();
-        let r: Fr = BigInt::from(r).into();
+impl Hasher<2, U256> for TornadoHasher {
+    fn hash(children: [U256; 2]) -> U256 {
+        let l: Fr = BigInt::from(children[0]).into();
+        let r: Fr = BigInt::from(children[1]).into();
         mimc_sponge_hash(l, r).into_bigint().into()
     }
 
@@ -56,7 +51,7 @@ impl Hasher for TornadoHasher {
 }
 
 impl MerkleTreeExt for MerkleTree {
-    async fn splice_events(&self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
+    fn splice_events(&mut self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
         let deposits: Vec<&Deposit> = events
             .iter()
             .filter_map(|e| match e {
@@ -80,6 +75,6 @@ impl MerkleTreeExt for MerkleTree {
         }
 
         let commitments: Vec<U256> = deposits.into_iter().map(|d| d.commitment.into()).collect();
-        self.splice(first_leaf_index as usize, &commitments).await
+        self.splice(first_leaf_index as usize, &commitments)
     }
 }

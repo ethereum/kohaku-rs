@@ -3749,9 +3749,8 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "rand 0.10.2",
- "ruint",
+ "rayon",
  "thiserror 2.0.20",
- "tokio",
 ]
 
 [[package]]
@@ -3769,7 +3768,6 @@ dependencies = [
  "hex",
  "insta",
  "kohaku-fork-kit",
- "kohaku-kv-store",
  "kohaku-merkle-tree",
  "kohaku-tornadocash-circuit",
  "kohaku-userop-kit",
