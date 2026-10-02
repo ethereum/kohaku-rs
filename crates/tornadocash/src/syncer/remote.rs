@@ -5,7 +5,6 @@ use thiserror::Error;
 use tracing::info;
 
 use crate::{
-    field::Field,
     pool::Pool,
     syncer::{
         Snapshot, SyncEvent, Syncer, SyncerError,

@@ -13,7 +13,6 @@ use super::{
 };
 use crate::{
     abis::tornado::Tornado,
-    field::Field,
     syncer::{
         SyncEvent,
         event::{Deposit, Withdrawal},
