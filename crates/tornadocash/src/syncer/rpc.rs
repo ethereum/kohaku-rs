@@ -110,7 +110,10 @@ impl<P: Provider> RpcSyncer<P> {
             for log in logs {
                 match log.try_into() {
                     Ok(decoded) => events.push(decoded),
-                    Err(e) => warn!("Failed to decode log: {}", e),
+                    Err(RpcSyncerError::UnknownEvent { topics }) => {
+                        warn!("Unknown event with topics {topics:?}");
+                    }
+                    Err(e) => return Err(e),
                 }
             }
 
