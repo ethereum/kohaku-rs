@@ -44,7 +44,7 @@ impl<const DEPTH: usize, E: Element + Eq> MerkleProof<DEPTH, 2, E> {
     pub fn sibling_paths(&self) -> [E; DEPTH] {
         from_fn(|level| {
             let s = &self.siblings[level];
-            s[self.path[level] as usize].clone()
+            s[1 - self.path[level] as usize].clone()
         })
     }
 }
@@ -56,6 +56,6 @@ mod tests {
     #[test]
     fn sibling_paths_returns_siblings() {
         let proof = MerkleProof::new(1u64, [[1, 2], [3, 4], [5, 6]], [0, 1, 0], 7u64);
-        assert_eq!(proof.sibling_paths(), [1, 4, 5]);
+        assert_eq!(proof.sibling_paths(), [2, 3, 6]);
     }
 }

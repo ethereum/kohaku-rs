@@ -78,3 +78,51 @@ impl MerkleTreeExt for MerkleTree {
         self.splice(first_leaf_index as usize, &commitments)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::array::from_fn;
+
+    use ruint::uint;
+
+    use super::*;
+
+    #[test]
+    fn zero_hash_is_deterministic() {
+        // https://etherscan.io/address/0x910cbd523d972eb0a6f4cae4618ad62622b39dbf#readContract#F17
+        let zero = TornadoHasher::zero();
+        let expected = uint!(
+            21663839004416932945382355908790599225266501822907911457504978515578255421292_U256
+        );
+
+        assert_eq!(zero, expected);
+    }
+
+    #[test]
+    fn hash_is_deterministic() {
+        // https://etherscan.io/address/0x910cbd523d972eb0a6f4cae4618ad62622b39dbf#readContract#F3
+        let l = uint!(0x0000000000000000000000000000000000000000000000000000000000000001_U256);
+        let r = uint!(0x0000000000000000000000000000000000000000000000000000000000000002_U256);
+
+        let hash = TornadoHasher::hash([l, r]);
+        let expected = uint!(
+            19814528709687996974327303300007262407299502847885145507292406548098437687919_U256
+        );
+
+        assert_eq!(hash, expected);
+    }
+
+    #[test]
+    fn splice_is_deterministic() {
+        let mut tree = crate::merkle_tree::MerkleTree::new();
+
+        let leaves: [U256; 10] = from_fn(|i| U256::from(i + 1));
+        tree.splice(0, &leaves).unwrap();
+
+        let root = tree.root().unwrap();
+        let expected = uint!(
+            15200063891796499502721825879098395282261979630510984497744981505913469850275_U256
+        );
+        assert_eq!(root, expected);
+    }
+}
