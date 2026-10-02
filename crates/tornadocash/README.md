@@ -14,7 +14,7 @@ Rust [Tornadocash](https://tornadocash.eth.limo/) client library, designed to in
 ```rust,no_run
 use rand::RngExt;
 use alloy::providers::{DynProvider, Provider};
-use kohaku_tornadocash::{deposit::Deposit, pool::Pool};
+use kohaku_tornadocash::{Deposit, Pool};
 
 async fn example(
     provider: DynProvider, 
@@ -42,10 +42,10 @@ use alloy::{
 use kohaku_kv_store::Store;
 use kohaku_tornadocash::{
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    note::Note,
-    pool::Pool,
+    Note,
+    Pool,
     syncer::{DynSyncer, Syncer},
-    withdrawal::Withdrawal,
+    Withdrawal,
 };
 
 async fn example(
@@ -76,14 +76,7 @@ async fn example(
 use alloy::{
     primitives::{Address, U256},
     providers::{DynProvider, Provider},
-};
-use kohaku_tornadocash::{
-    merkle_tree::MerkleTree,
-    note::Note,
-    pool::Pool,
-    relayer::Relayer,
-    withdrawal::Withdrawal,
-};
+use kohaku_tornadocash::{merkle_tree::MerkleTree, Note, Pool, Relayer, Withdrawal};
 
 async fn example(
     provider: DynProvider,
@@ -118,10 +111,10 @@ async fn example(
 use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
 use kohaku_tornadocash::{
     merkle_tree::MerkleTree,
-    note::Note,
-    pool::Pool,
+    Note,
+    Pool,
     userop_provider::UserOperationPaymasterExt,
-    withdrawal::Withdrawal,
+    Withdrawal,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
