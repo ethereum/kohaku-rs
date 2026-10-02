@@ -19,6 +19,7 @@ pub mod userop_provider;
 
 pub use asset::Asset;
 pub use deposit::Deposit;
+pub use field::Field;
 pub use note::{Note, NoteString};
 pub use pool::Pool;
 pub use relayer::Relayer;

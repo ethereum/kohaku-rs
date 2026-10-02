@@ -66,7 +66,7 @@ impl TryFrom<B256> for Field {
 
 impl Debug for Field {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{self}")
+        Display::fmt(self, f)
     }
 }
 
@@ -88,5 +88,56 @@ impl<'de> Deserialize<'de> for Field {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let b256 = B256::deserialize(deserializer)?;
         b256.try_into().map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn field_from_u256() {
+        let u256 = U256::from(123456789u64);
+        let field = Field::try_from(u256).unwrap();
+        let back_to_u256: U256 = field.into();
+        assert_eq!(u256, back_to_u256);
+    }
+
+    #[test]
+    fn field_from_b256() {
+        let b256: B256 = U256::from(123456789u64).into();
+        let field = Field::try_from(b256).unwrap();
+        let back_to_b256: B256 = field.into();
+        assert_eq!(b256, back_to_b256);
+    }
+
+    #[test]
+    fn field_from_u256_overflows() {
+        let u256 = U256::MAX;
+        assert!(Field::try_from(u256).is_err());
+    }
+
+    #[test]
+    fn field_from_b256_overflows() {
+        let b256 = B256::from([255u8; 32]);
+        assert!(Field::try_from(b256).is_err());
+    }
+
+    #[test]
+    fn serialize_deserialize_field() {
+        let field = Field::from(123456789usize);
+        let serialized = serde_json::to_string(&field).unwrap();
+        let deserialized: Field = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(field, deserialized);
+    }
+
+    #[test]
+    fn display_field() {
+        let field = Field::from(123456789usize);
+        let display = format!("{}", field);
+        assert_eq!(
+            display,
+            "0x00000000000000000000000000000000000000000000000000000000075bcd15"
+        );
     }
 }
