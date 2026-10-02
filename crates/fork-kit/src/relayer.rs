@@ -21,7 +21,7 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const PREFUND_ETH: u128 = 1_000 * 10_u128.pow(18);
 
-/// Builder for a locally hosted [`RelayerClient`] stack.
+/// Builder for a locally hosted [`Relayer`] stack.
 pub struct RelayerBuilder {
     http_rpc_url: String,
     ws_rpc_url: String,
@@ -31,7 +31,7 @@ pub struct RelayerBuilder {
     reward_account: Address,
 }
 
-/// A running [`RelayerClient`] stack and a connected [`RelayerClient`].
+/// A running relayer stack and a connected [`Relayer`].
 pub struct RelayerInstance {
     redis: Child,
     server: Child,
