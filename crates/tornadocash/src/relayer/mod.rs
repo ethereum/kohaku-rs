@@ -16,15 +16,15 @@ use crate::{
     field::Field,
     pool::Pool,
     provider::TornadoProviderExt,
-    relayer::{
-        status::RelayerStatus,
-        wire::{JobId, JobResponse, JobStatus, WithdrawRequest, WithdrawResponse},
-    },
+    relayer::wire::{JobResponse, WithdrawRequest, WithdrawResponse},
     withdrawal::ProvenWithdrawal,
 };
 
-pub mod status;
-pub mod wire;
+mod status;
+mod wire;
+
+pub use status::{Health, Instance, RelayerStatus};
+pub use wire::{JobId, JobStatus};
 
 /// Tornadocash relayer.
 ///
@@ -236,7 +236,7 @@ impl Relayer {
     /// See <https://github.com/tornado-dao/tornado-relayer/blob/52473197ea49fb70dab8fead01de52545801ca6b/src/contollers/status.js#L32>
     /// for the reference implementation.
     async fn job_status(&self, id: &JobId) -> Result<JobResponse, RelayerError> {
-        let url = format!("{}/v1/jobs/{}", self.url, id.0);
+        let url = format!("{}/v1/jobs/{}", self.url, id);
         let response: JobResponse = self
             .client
             .get(&url)
