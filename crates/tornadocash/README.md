@@ -21,6 +21,7 @@ async fn example(
     rng: &mut impl rand::CryptoRng,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let deposit = Deposit::new(&Pool::SEPOLIA_ETHER_01, rng.random());
+    let note = deposit.note.clone();
     
     // ERC20 pools are pulled with `transferFrom` and require an approval before the deposit.
     if let Some(approval) = deposit.approval() {

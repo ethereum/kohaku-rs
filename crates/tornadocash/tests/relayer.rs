@@ -50,7 +50,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     // Deposit a note
     let deposit = Deposit::new(&pool, rand::random());
-    let note = deposit.note();
+    let note = deposit.note.clone();
     provider
         .send_transaction(deposit.into())
         .await?
