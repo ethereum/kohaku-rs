@@ -7,6 +7,47 @@
 //!
 //! See [tornado-relayer](https://github.com/tornado-dao/tornado-relayer/tree/mainnet-v5) for
 //! the reference implementation.
+//!
+//! # Example
+//! ```no_run
+//! # use alloy::{
+//! #     primitives::{Address, U256},
+//! #     providers::{DynProvider, Provider},
+//! # };
+//! # use kohaku_tornadocash::{
+//! #     merkle_tree::MerkleTree,
+//! #     Note,
+//! #     Pool,
+//! #     relayer::Relayer,
+//! #     Withdrawal,
+//! # };
+//! #
+//! # async fn example(
+//! #     provider: DynProvider,
+//! #     tree: &MerkleTree,
+//! #     pool: Pool,
+//! #     note: Note,
+//! #     recipient: Address,
+//! #     rng: &mut impl rand::CryptoRng,
+//! # ) -> Result<(), Box<dyn std::error::Error>> {
+//! let relayer = Relayer::new("https://mainnet.relayer.com");
+//!
+//! let status = relayer.status().await?;
+//! let gas_price = provider.get_gas_price().await?;
+//! let merkle_proof = tree.leaf_proof(note.commitment())?;
+//!
+//! let withdrawal = Withdrawal::new(&pool, note, recipient)
+//!     .with_payer(status.quote(&pool, gas_price, U256::ZERO)?)
+//!     .prove(&merkle_proof, rng)?;
+//!
+//! // Confirmation is judged by the nullifier being spent on-chain, not by the relayer's report.
+//! let receipt = relayer.withdraw(withdrawal).await?;
+//! let tx_hash = relayer.await_confirmation(&provider, &receipt).await?;
+//! println!("{tx_hash:?}");
+//!
+//! Ok(())
+//! # }
+//! ```
 use std::time::Duration;
 
 use alloy::{primitives::TxHash, providers::Provider};

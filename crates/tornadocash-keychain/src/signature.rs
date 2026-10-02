@@ -8,12 +8,7 @@ use alloy::{
     signers::{Signature, Signer},
     sol_types::eip712_domain,
 };
-use kohaku_tornadocash::{
-    Note, NoteString,
-    field::Field,
-    note::{Nullifier, Secret},
-    pool::Pool,
-};
+use kohaku_tornadocash::{Field, Note, NoteString, Nullifier, Pool, Secret};
 
 use crate::{Keychain, KeychainError};
 

@@ -2,7 +2,7 @@ use alloy::primitives::B256;
 #[cfg(feature = "saga-sync")]
 use kohaku_tornadocash::syncer::saga::SagaSyncer;
 use kohaku_tornadocash::{
-    pool::Pool,
+    Pool,
     syncer::{SyncEvent, Syncer, remote::RemoteSyncer},
 };
 

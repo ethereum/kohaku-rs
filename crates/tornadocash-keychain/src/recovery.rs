@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use kohaku_tornadocash::{
-    field::Field,
-    pool::Pool,
+    Field, Pool,
     syncer::{Deposit, SyncEvent, Withdrawal},
 };
 
@@ -114,10 +113,7 @@ fn withdrawals(events: &[SyncEvent]) -> HashMap<Field, &Withdrawal> {
 #[cfg(test)]
 mod tests {
     use alloy::primitives::{Address, U256};
-    use kohaku_tornadocash::{
-        Note, NoteString,
-        note::{Nullifier, Secret},
-    };
+    use kohaku_tornadocash::{Note, NoteString, Nullifier, Secret};
 
     use super::*;
 

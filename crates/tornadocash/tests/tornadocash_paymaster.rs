@@ -12,13 +12,10 @@ use kohaku_fork_kit::{
     simple_account::deploy_simple_account,
 };
 use kohaku_tornadocash::{
-    deposit::Deposit,
+    Deposit, PaymasterInfo, TornadoProviderExt, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    pool::PaymasterInfo,
-    provider::TornadoProviderExt,
     syncer::{Syncer, rpc::RpcSyncer},
     userop_provider::UserOperationPaymasterExt,
-    withdrawal::Withdrawal,
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,

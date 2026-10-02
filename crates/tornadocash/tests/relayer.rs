@@ -9,10 +9,9 @@ use kohaku_fork_kit::{
     relayer::RelayerBuilder,
 };
 use kohaku_tornadocash::{
-    deposit::Deposit,
+    Deposit, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
     syncer::{Syncer, rpc::RpcSyncer},
-    withdrawal::Withdrawal,
 };
 
 #[tokio::test]
