@@ -2,20 +2,20 @@ use std::sync::OnceLock;
 
 use alloy::primitives::keccak256;
 use ark_bn254::Fr;
-use ark_ff::{BigInt, PrimeField};
+use ark_ff::PrimeField;
 use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
-use ruint::{aliases::U256, uint};
 
 use crate::{
     crypto::mimc::mimc_sponge_hash,
+    field::Field,
     syncer::event::{Deposit, SyncEvent},
 };
 
 /// `MerkleTree` type used in Tornado Cash.
-pub type MerkleTree = kohaku_merkle_tree::MerkleTree<20, 2, U256, TornadoHasher>;
+pub type MerkleTree = kohaku_merkle_tree::MerkleTree<20, 2, Field, TornadoHasher>;
 
 /// `MerkleProof` type used in Tornado Cash.
-pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<20, 2, U256>;
+pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<20, 2, Field>;
 
 /// `MerkleTree` extension trait for Tornado Cash.
 pub trait MerkleTreeExt {
@@ -30,22 +30,16 @@ pub trait MerkleTreeExt {
 #[derive(Copy, Clone)]
 pub struct TornadoHasher;
 
-const FIELD_SIZE: U256 =
-    uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
-
-impl Hasher<2, U256> for TornadoHasher {
-    fn hash(children: [U256; 2]) -> U256 {
-        let l: Fr = BigInt::from(children[0]).into();
-        let r: Fr = BigInt::from(children[1]).into();
-        mimc_sponge_hash(l, r).into_bigint().into()
+impl Hasher<2, Field> for TornadoHasher {
+    fn hash(children: [Field; 2]) -> Field {
+        mimc_sponge_hash(children[0].into(), children[1].into()).into()
     }
 
-    fn zero() -> U256 {
-        static ZERO: OnceLock<U256> = OnceLock::new();
+    fn zero() -> Field {
+        static ZERO: OnceLock<Field> = OnceLock::new();
         *ZERO.get_or_init(|| {
             let hash = keccak256(b"tornado");
-            let hash_u256 = U256::from_be_bytes(*hash);
-            hash_u256 % FIELD_SIZE
+            Fr::from_be_bytes_mod_order(hash.as_slice()).into()
         })
     }
 }
@@ -74,7 +68,7 @@ impl MerkleTreeExt for MerkleTree {
             }
         }
 
-        let commitments: Vec<U256> = deposits.into_iter().map(|d| d.commitment.into()).collect();
+        let commitments: Vec<Field> = deposits.into_iter().map(|d| d.commitment).collect();
         self.splice(first_leaf_index as usize, &commitments)
     }
 }
@@ -83,6 +77,7 @@ impl MerkleTreeExt for MerkleTree {
 mod tests {
     use std::array::from_fn;
 
+    use alloy::primitives::U256;
     use ruint::uint;
 
     use super::*;
@@ -90,7 +85,7 @@ mod tests {
     #[test]
     fn zero_hash_is_deterministic() {
         // https://etherscan.io/address/0x910cbd523d972eb0a6f4cae4618ad62622b39dbf#readContract#F17
-        let zero = TornadoHasher::zero();
+        let zero: U256 = TornadoHasher::zero().into();
         let expected = uint!(
             21663839004416932945382355908790599225266501822907911457504978515578255421292_U256
         );
@@ -101,10 +96,14 @@ mod tests {
     #[test]
     fn hash_is_deterministic() {
         // https://etherscan.io/address/0x910cbd523d972eb0a6f4cae4618ad62622b39dbf#readContract#F3
-        let l = uint!(0x0000000000000000000000000000000000000000000000000000000000000001_U256);
-        let r = uint!(0x0000000000000000000000000000000000000000000000000000000000000002_U256);
+        let l = uint!(0x0000000000000000000000000000000000000000000000000000000000000001_U256)
+            .try_into()
+            .unwrap();
+        let r = uint!(0x0000000000000000000000000000000000000000000000000000000000000002_U256)
+            .try_into()
+            .unwrap();
 
-        let hash = TornadoHasher::hash([l, r]);
+        let hash: U256 = TornadoHasher::hash([l, r]).into();
         let expected = uint!(
             19814528709687996974327303300007262407299502847885145507292406548098437687919_U256
         );
@@ -116,10 +115,10 @@ mod tests {
     fn splice_is_deterministic() {
         let mut tree = crate::merkle_tree::MerkleTree::new();
 
-        let leaves: [U256; 10] = from_fn(|i| U256::from(i + 1));
+        let leaves: [Field; 10] = from_fn(|i| Field::from(i + 1));
         tree.splice(0, &leaves).unwrap();
 
-        let root = tree.root().unwrap();
+        let root: U256 = tree.root().unwrap().into();
         let expected = uint!(
             15200063891796499502721825879098395282261979630510984497744981505913469850275_U256
         );

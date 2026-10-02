@@ -4,6 +4,7 @@ mod abis;
 pub mod asset;
 mod crypto;
 pub mod deposit;
+pub mod field;
 pub mod merkle_tree;
 pub mod note;
 pub mod pool;
