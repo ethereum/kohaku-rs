@@ -194,7 +194,7 @@ mod tests {
 
             Ok(NoteString::from_pool(
                 Note::new(Nullifier::new(bytes), Secret::new(bytes)),
-                pool.clone(),
+                pool,
             ))
         }
     }

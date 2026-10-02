@@ -55,8 +55,8 @@ impl<S: Signer + Send + Sync> SignatureKeychain<S> {
 
         let note = self.note(pool, nonce).await?;
         let d = Derived {
-            commitment: note.commitment().into(),
-            nullifier_hash: note.nullifier_hash().into(),
+            commitment: note.commitment(),
+            nullifier_hash: note.nullifier_hash(),
         };
 
         self.derived.write().unwrap().insert(key, d);
@@ -76,10 +76,7 @@ impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
         let secret = secret_from_signature(&signature);
         let nullifier = nullifier_from_signature(&signature);
 
-        Ok(NoteString::from_pool(
-            Note::new(nullifier, secret),
-            pool.clone(),
-        ))
+        Ok(NoteString::from_pool(Note::new(nullifier, secret), pool))
     }
 
     async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<Field, KeychainError> {
@@ -110,7 +107,7 @@ fn from_signature(domain: &[u8], sig: &Signature) -> [u8; 31] {
 fn payload(pool: &Pool, nonce: u64) -> sol::TornadoCashNote {
     sol::TornadoCashNote {
         symbol: pool.symbol().to_string(),
-        amount: pool.amount().to_string(),
+        amount: pool.amount().clone(),
         chainId: pool.chain_id,
         nonce,
     }

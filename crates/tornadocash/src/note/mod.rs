@@ -93,11 +93,11 @@ impl NoteString {
     }
 
     #[must_use]
-    pub fn from_pool(note: Note, pool: Pool) -> Self {
+    pub fn from_pool(note: Note, pool: &Pool) -> Self {
         Self {
             note,
             symbol: pool.symbol().to_string(),
-            amount: pool.amount().to_string(),
+            amount: pool.amount().clone(),
             chain_id: pool.chain_id,
         }
     }

@@ -93,12 +93,12 @@ impl RemoteSyncer {
         info!("Syncing from {} to {}", range.start, range.end);
 
         let deposits: Vec<SyncEvent> = deposits
-            .into_iter()
+            .iter()
             .filter(|d| range.contains(&d.block_number))
             .map(decode_deposit)
             .collect::<Result<_, _>>()?;
         let withdrawals: Vec<SyncEvent> = withdrawals
-            .into_iter()
+            .iter()
             .filter(|n| range.contains(&n.block_number))
             .map(decode_withdrawal)
             .collect::<Result<_, _>>()?;
@@ -145,7 +145,7 @@ impl RemoteSyncer {
     }
 }
 
-fn decode_deposit(deposit: RemoteDeposit) -> Result<SyncEvent, RemoteSyncerError> {
+fn decode_deposit(deposit: &RemoteDeposit) -> Result<SyncEvent, RemoteSyncerError> {
     Ok(SyncEvent::Deposit(Deposit {
         commitment: deposit.commitment.try_into()?,
         leaf_index: deposit.leaf_index,
@@ -153,7 +153,7 @@ fn decode_deposit(deposit: RemoteDeposit) -> Result<SyncEvent, RemoteSyncerError
     }))
 }
 
-fn decode_withdrawal(withdrawal: RemoteWithdrawal) -> Result<SyncEvent, RemoteSyncerError> {
+fn decode_withdrawal(withdrawal: &RemoteWithdrawal) -> Result<SyncEvent, RemoteSyncerError> {
     Ok(SyncEvent::Withdrawal(Withdrawal {
         to: withdrawal.to,
         nullifier_hash: withdrawal.nullifier.try_into()?,
