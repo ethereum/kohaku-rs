@@ -24,7 +24,7 @@ mod manifest;
 ///   this MVP.
 /// - I don't fully buy the benefits of signature verification. Since invalid chunks would result in
 ///   invalid merkle roots, we can detect and skip invalid chunks regardless.
-pub struct SagaSyncSyncer {
+pub struct SagaSyncer {
     client: reqwest::Client,
     base_url: String,
 }
@@ -51,7 +51,7 @@ pub enum SagaSyncError {
     OutOfRange { block: u64, from: u64, to: u64 },
 }
 
-impl SagaSyncSyncer {
+impl SagaSyncer {
     #[must_use]
     pub fn new(base_url: &str) -> Self {
         Self {
@@ -63,7 +63,7 @@ impl SagaSyncSyncer {
 
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl Syncer for SagaSyncSyncer {
+impl Syncer for SagaSyncer {
     async fn sync_range(
         &self,
         pool: &Pool,
@@ -76,7 +76,7 @@ impl Syncer for SagaSyncSyncer {
     }
 }
 
-impl SagaSyncSyncer {
+impl SagaSyncer {
     async fn sync(
         &self,
         pool: &Pool,

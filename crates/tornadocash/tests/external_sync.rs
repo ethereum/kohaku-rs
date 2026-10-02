@@ -1,6 +1,6 @@
 use alloy::primitives::B256;
 #[cfg(feature = "saga-sync")]
-use kohaku_tornadocash::syncer::saga_sync::SagaSyncSyncer;
+use kohaku_tornadocash::syncer::saga_sync::SagaSyncer;
 use kohaku_tornadocash::{
     pool::Pool,
     syncer::{Syncer, event::SyncEvent, remote::RemoteSyncer},
@@ -23,7 +23,7 @@ async fn test_remote_sync_matches_snapshot() -> Result<(), anyhow::Error> {
 #[cfg(feature = "saga-sync")]
 #[ignore = "run with `cargo test --release -- --ignored`"]
 async fn test_saga_sync_matches_snapshot() -> Result<(), anyhow::Error> {
-    assert_matches_snapshot(&SagaSyncSyncer::new(SAGA_SYNC_BASE_URL)).await
+    assert_matches_snapshot(&SagaSyncer::new(SAGA_SYNC_BASE_URL)).await
 }
 
 /// Syncs `target_syncer` over [`FROM_BLOCK`, `TO_BLOCK`) and asserts its reported event log
