@@ -14,7 +14,6 @@ pub mod syncer;
 pub mod withdrawal;
 
 #[cfg(feature = "paymaster")]
-#[cfg_attr(feature = "paymaster", doc = "[`paymaster`]: crate::userop_provider")]
 pub mod userop_provider;
 
 pub use asset::Asset;
