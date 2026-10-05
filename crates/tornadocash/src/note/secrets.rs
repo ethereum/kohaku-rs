@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 macro_rules! bytes31_newtype {
     ($name:ident) => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
         pub struct $name([u8; 31]);
 
         impl $name {
