@@ -45,6 +45,7 @@ pub struct Withdrawal {
 }
 
 impl Snapshot {
+    #[must_use]
     pub fn new(pool: Pool, range: Range<u64>, events: Vec<SyncEvent>) -> Self {
         Self {
             pool,
