@@ -1,20 +1,12 @@
 use std::time::Duration;
 
-use alloy::{
-    providers::Provider,
-    rpc::types::{Filter, Log},
-    sol_types::SolEvent,
-};
+use alloy::{providers::Provider, rpc::types::Filter};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::{
-    abis::tornado::Tornado,
     pool::Pool,
-    syncer::{
-        Snapshot, SyncEvent, Syncer, SyncerError,
-        event::{Deposit, Withdrawal},
-    },
+    syncer::{Snapshot, SyncEvent, Syncer, SyncerError},
 };
 
 /// A syncer that reads from an Ethereum JSON-RPC provider
@@ -31,12 +23,6 @@ enum RpcSyncerError {
     LogDecodeError(#[from] alloy::sol_types::Error),
     #[error("RPC error: {0}")]
     RpcError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
-    #[error("Unknown event with topics {topics:?}")]
-    UnknownEvent {
-        topics: Vec<alloy::primitives::B256>,
-    },
-    #[error("Missing block number in log")]
-    MissingBlockNumber,
     #[error("Field conversion error: {0}")]
     Field(#[from] crate::field::NotInRangeError),
 }
