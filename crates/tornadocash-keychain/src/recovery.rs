@@ -85,7 +85,7 @@ pub async fn recover(
                 deposit: deposit.clone(),
                 withdrawal: withdrawals.get(&nullifier_hash).copied().cloned(),
             });
-            // break;
+            break;
         }
     }
 
