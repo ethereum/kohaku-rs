@@ -35,6 +35,7 @@ pub struct NoteHashes {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum KeychainError {
     #[error("signer error: {0}")]
     Signer(#[from] alloy::signers::Error),
@@ -57,7 +58,10 @@ impl<S: Signer + Send + Sync> Keychain<S> {
         Self { signer }
     }
 
-    /// Derives the commitment and nullifier hash for a given pool and nonce.
+    /// Derives the commitment and nullifier hash for `nonce` in each of `pools` from a single
+    /// signature.
+    ///
+    /// The resulting Vector will match the order of the pools provided.
     pub async fn note_hashes(
         &self,
         nonce: u64,
@@ -73,13 +77,17 @@ impl<S: Signer + Send + Sync> Keychain<S> {
             .collect())
     }
 
-    /// Derives the NoteString for a given pool and nonce.
+    /// Derives the `NoteString` for a given pool and nonce.
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "self.notes always returns an equal number of notes as pool"
+    )]
     pub async fn note(&self, nonce: u64, pool: &Pool) -> Result<NoteString, KeychainError> {
-        let notes = self.notes(nonce, &[pool.clone()]).await?;
+        let notes = self.notes(nonce, std::slice::from_ref(pool)).await?;
         Ok(notes.into_iter().next().unwrap())
     }
 
-    /// Derives the NoteStrings on all pools for a given nonce.
+    /// Derives the `NoteStrings` on all pools for a given nonce.
     ///
     /// The resulting Vector will match the order of the pools provided.
     async fn notes(&self, nonce: u64, pools: &[Pool]) -> Result<Vec<NoteString>, KeychainError> {

@@ -23,16 +23,17 @@ pub struct RecoveredNote {
     pub withdrawal: Option<Withdrawal>,
 }
 
-/// One pool's events
+/// One pool's events, indexed by commitment and nullifier hash.
 struct PoolIndex<'a> {
     pool: &'a Pool,
     deposits: HashMap<Field, &'a Deposit>,
     withdrawals: HashMap<Field, &'a Withdrawal>,
 }
 
-/// Returns the next nonce that should be used for a new note derived from `keychain` for `pool`.
+/// Returns the next nonce that should be used for a new note derived from `keychain`.
 ///
-/// See [`recover`] for details on how the next nonce is determined.
+/// Nonces are shared across all pools, so this is one past the highest nonce recovered in any
+/// pool. See [`recover`] for details on how notes are recovered.
 pub async fn next_nonce<S: Signer + Send + Sync>(
     keychain: &Keychain<S>,
     batches: &[Snapshot],
@@ -45,7 +46,12 @@ pub async fn next_nonce<S: Signer + Send + Sync>(
 /// Recovers every note `keychain` derived for the pools in `batches`.
 ///
 /// Incrementally scans nonces starting from 0, finding deposits and withdrawals in `batches` that
-/// match each derived note. Scanning stops after `gap_limit` consecutive nonces with no deposits.
+/// match each derived note. Scanning stops after `gap_limit` consecutive nonces with no deposits
+/// in any pool.
+///
+/// Each nonce is checked against every pool, so a nonce that was reused across pools recovers a
+/// note for each of them. Batches for the same pool are combined, so a pool's events may be split
+/// across several block ranges.
 ///
 /// Recovery may be incomplete if `batches` do not contain all deposits and withdrawals made by
 /// `keychain` for the pools.
@@ -62,8 +68,8 @@ pub async fn recover<S: Signer + Send + Sync>(
         return Ok(Vec::new());
     }
 
-    let pools: Vec<Pool> = batches.iter().map(|batch| batch.pool.clone()).collect();
     let indexes = index(batches);
+    let pools: Vec<Pool> = indexes.iter().map(|index| index.pool.clone()).collect();
 
     let mut recovered = Vec::new();
     let mut misses = 0;
@@ -142,141 +148,154 @@ fn withdrawals(events: &[SyncEvent]) -> HashMap<Field, &Withdrawal> {
         .collect()
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use alloy::primitives::{Address, U256};
-//     use kohaku_tornadocash::{Note, NoteString, Nullifier, Secret};
+#[cfg(test)]
+mod tests {
+    use alloy::{
+        primitives::{Address, U256},
+        signers::local::PrivateKeySigner,
+    };
+    use kohaku_tornadocash::Note;
 
-//     use super::*;
+    use super::*;
 
-//     const POOL: Pool = Pool::ETHEREUM_ETHER_01;
-//     const POOL2: Pool = Pool::ETHEREUM_ETHER_10;
+    const POOL: Pool = Pool::ETHEREUM_ETHER_01;
+    const POOL2: Pool = Pool::ETHEREUM_ETHER_10;
 
-//     struct TestKeychain;
+    #[tokio::test]
+    async fn recovers_deposits() {
+        let batches = vec![batch(
+            &POOL,
+            vec![
+                deposit(&note(&POOL, 0).await, 0),
+                deposit(&note(&POOL2, 1).await, 1),
+                deposit(&note(&POOL, 1).await, 2),
+            ],
+        )];
 
-//     #[tokio::test]
-//     async fn recovers_deposits() {
-//         let events = vec![
-//             deposit(&note(&POOL, 0).await, 0),
-//             deposit(&note(&POOL2, 1).await, 1),
-//             deposit(&note(&POOL, 1).await, 2),
-//         ];
+        let recovered = recover(&keychain(), &batches, Some(2)).await.unwrap();
 
-//         let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
-//             .await
-//             .unwrap();
+        assert_eq!(recovered.len(), 2);
+        assert_eq!(recovered[0].nonce, 0);
+        assert_eq!(recovered[0].deposit.leaf_index, 0);
+        assert_eq!(recovered[1].nonce, 1);
+        assert_eq!(recovered[1].deposit.leaf_index, 2);
+    }
 
-//         assert_eq!(recovered.len(), 2);
-//         assert_eq!(recovered[0].nonce, 0);
-//         assert_eq!(recovered[0].deposit.leaf_index, 0);
-//         assert_eq!(recovered[1].nonce, 1);
-//         assert_eq!(recovered[1].deposit.leaf_index, 2);
-//     }
+    #[tokio::test]
+    async fn recovers_deposits_from_multiple_pools() {
+        let batches = vec![
+            batch(
+                &POOL,
+                vec![
+                    deposit(&note(&POOL, 0).await, 0),
+                    deposit(&note(&POOL, 2).await, 1),
+                ],
+            ),
+            batch(&POOL2, vec![deposit(&note(&POOL2, 1).await, 0)]),
+        ];
 
-//     #[tokio::test]
-//     async fn recovers_deposits_from_multiple_pools() {
-//         let events = vec![
-//             deposit(&note(&POOL, 0).await, 0),
-//             deposit(&note(&POOL2, 1).await, 1),
-//             deposit(&note(&POOL, 2).await, 2),
-//         ];
+        let recovered = recover(&keychain(), &batches, Some(2)).await.unwrap();
 
-//         let recovered = recover(&TestKeychain, &[POOL, POOL2], &events, Some(2))
-//             .await
-//             .unwrap();
+        assert_eq!(recovered.len(), 3);
+        assert_eq!((recovered[0].pool.clone(), recovered[0].nonce), (POOL, 0));
+        assert_eq!((recovered[1].pool.clone(), recovered[1].nonce), (POOL2, 1));
+        assert_eq!((recovered[2].pool.clone(), recovered[2].nonce), (POOL, 2));
+    }
 
-//         assert_eq!(recovered.len(), 3);
-//         assert_eq!(recovered[0].nonce, 0);
-//         assert_eq!(recovered[0].deposit.leaf_index, 0);
-//         assert_eq!(recovered[1].nonce, 1);
-//         assert_eq!(recovered[1].deposit.leaf_index, 1);
-//         assert_eq!(recovered[2].nonce, 2);
-//         assert_eq!(recovered[2].deposit.leaf_index, 2);
-//     }
+    #[tokio::test]
+    async fn recovers_withdrawals() {
+        let batches = vec![batch(
+            &POOL,
+            vec![
+                deposit(&note(&POOL, 0).await, 0),
+                deposit(&note(&POOL, 1).await, 1),
+                withdrawal(&note(&POOL, 1).await),
+                withdrawal(&note(&POOL2, 0).await),
+            ],
+        )];
 
-//     #[tokio::test]
-//     async fn recovers_withdrawals() {
-//         let events = vec![
-//             deposit(&note(&POOL, 0).await, 0),
-//             deposit(&note(&POOL, 1).await, 1),
-//             withdrawal(&note(&POOL, 1).await),
-//             withdrawal(&note(&POOL2, 3).await),
-//         ];
+        let recovered = recover(&keychain(), &batches, Some(2)).await.unwrap();
 
-//         let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
-//             .await
-//             .unwrap();
+        assert_eq!(recovered.len(), 2);
+        assert_eq!(recovered[0].nonce, 0);
+        assert_eq!(recovered[0].withdrawal, None);
+        assert_eq!(recovered[1].nonce, 1);
+        assert!(recovered[1].withdrawal.is_some());
+    }
 
-//         assert_eq!(recovered.len(), 2);
-//         assert_eq!(recovered[0].nonce, 0);
-//         assert_eq!(recovered[0].withdrawal, None);
-//         assert_eq!(recovered[1].nonce, 1);
-//         assert!(recovered[1].withdrawal.is_some());
-//     }
+    #[tokio::test]
+    async fn recovers_withdrawal_from_separate_batch() {
+        let batches = vec![
+            batch(&POOL, vec![deposit(&note(&POOL, 0).await, 0)]),
+            batch(&POOL, vec![withdrawal(&note(&POOL, 0).await)]),
+        ];
 
-//     #[tokio::test]
-//     async fn stops_at_gap_limit() {
-//         let events = vec![
-//             deposit(&note(&POOL, 0).await, 0),
-//             deposit(&note(&POOL, 3).await, 1),
-//         ];
+        let recovered = recover(&keychain(), &batches, Some(2)).await.unwrap();
 
-//         let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
-//             .await
-//             .unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert!(recovered[0].withdrawal.is_some());
+    }
 
-//         assert_eq!(recovered.len(), 1);
-//         assert_eq!(recovered[0].nonce, 0);
-//     }
+    #[tokio::test]
+    async fn stops_at_gap_limit() {
+        let batches = vec![batch(
+            &POOL,
+            vec![
+                deposit(&note(&POOL, 0).await, 0),
+                deposit(&note(&POOL, 3).await, 1),
+            ],
+        )];
 
-//     #[tokio::test]
-//     async fn next_nonce_is_incremented() {
-//         let events = vec![
-//             deposit(&note(&POOL, 0).await, 0),
-//             deposit(&note(&POOL, 1).await, 1),
-//             withdrawal(&note(&POOL, 1).await),
-//         ];
+        let recovered = recover(&keychain(), &batches, Some(2)).await.unwrap();
 
-//         let next_nonce = next_nonce(&TestKeychain, &[POOL], &events, None)
-//             .await
-//             .unwrap();
-//         assert_eq!(next_nonce, 2);
-//     }
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].nonce, 0);
+    }
 
-//     #[async_trait::async_trait]
-//     impl Keychain for TestKeychain {
-//         async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
-//             let mut bytes = [0u8; 31];
-//             bytes[..8].copy_from_slice(&nonce.to_be_bytes());
-//             bytes[8..16].copy_from_slice(&pool.chain_id.to_be_bytes());
-//             bytes[16..26].copy_from_slice(&pool.address.to_vec()[..10]);
+    #[tokio::test]
+    async fn next_nonce_is_incremented() {
+        let batches = vec![
+            batch(
+                &POOL,
+                vec![
+                    deposit(&note(&POOL, 0).await, 0),
+                    withdrawal(&note(&POOL, 0).await),
+                ],
+            ),
+            batch(&POOL2, vec![deposit(&note(&POOL2, 1).await, 0)]),
+        ];
 
-//             Ok(NoteString::from_pool(
-//                 Note::new(Nullifier::new(bytes), Secret::new(bytes)),
-//                 pool,
-//             ))
-//         }
-//     }
+        let next_nonce = next_nonce(&keychain(), &batches, None).await.unwrap();
+        assert_eq!(next_nonce, 2);
+    }
 
-//     async fn note(pool: &Pool, nonce: u64) -> Note {
-//         TestKeychain.note(pool, nonce).await.unwrap().note
-//     }
+    fn keychain() -> Keychain<PrivateKeySigner> {
+        Keychain::new(PrivateKeySigner::from_bytes(&U256::from(42).into()).unwrap())
+    }
 
-//     fn deposit(note: &Note, leaf_index: u32) -> SyncEvent {
-//         SyncEvent::Deposit(Deposit {
-//             commitment: note.commitment(),
-//             leaf_index,
-//             block_number: 0,
-//         })
-//     }
+    async fn note(pool: &Pool, nonce: u64) -> Note {
+        keychain().note(nonce, pool).await.unwrap().note
+    }
 
-//     fn withdrawal(note: &Note) -> SyncEvent {
-//         SyncEvent::Withdrawal(Withdrawal {
-//             to: Address::ZERO,
-//             nullifier_hash: note.nullifier_hash(),
-//             relayer: Address::ZERO,
-//             fee: U256::ZERO,
-//             block_number: 0,
-//         })
-//     }
-// }
+    fn batch(pool: &Pool, events: Vec<SyncEvent>) -> Snapshot {
+        Snapshot::new(pool.clone(), 0..0, events)
+    }
+
+    fn deposit(note: &Note, leaf_index: u32) -> SyncEvent {
+        SyncEvent::Deposit(Deposit {
+            commitment: note.commitment(),
+            leaf_index,
+            block_number: 0,
+        })
+    }
+
+    fn withdrawal(note: &Note) -> SyncEvent {
+        SyncEvent::Withdrawal(Withdrawal {
+            to: Address::ZERO,
+            nullifier_hash: note.nullifier_hash(),
+            relayer: Address::ZERO,
+            fee: U256::ZERO,
+            block_number: 0,
+        })
+    }
+}

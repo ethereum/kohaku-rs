@@ -3795,10 +3795,8 @@ name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "async-trait",
  "cfg_aliases",
  "kohaku-tornadocash",
- "ruint",
  "thiserror 2.0.20",
  "tokio",
 ]

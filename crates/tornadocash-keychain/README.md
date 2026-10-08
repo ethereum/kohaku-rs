@@ -2,28 +2,30 @@
 
 Deterministic note derivation for [`kohaku-tornadocash`](../tornadocash/).
 
-[`Keychain`]s are used to derive tornadocash note secrets from a single source of entropy. This makes it easier for users to manage their notes, because they only need to backup a single secret (e.g. a mnemonic) instead of each individual note secret. New notes can be derived from the keychain by incrementing a nonce, and notes can be recovered by scanning a pool's synced events against the keychain's derivation scheme.
+[`Keychain`]s are used to derive tornadocash note secrets from a single source of entropy. This makes it easier for users to manage their notes, because they only need to backup a single secret (e.g. a mnemonic) instead of each individual note secret. New notes can be derived from the keychain by incrementing a nonce, and notes can be recovered by scanning pools' synced events against the keychain's derivation scheme.
 
 ## Nonce Hygiene
 
 Nonces are used to derive tornadocash note secrets from a keychain. Nonces should:
 - Be monotonically increasing, generally starting from 0. Increasing the nonce by too much can result in unrecoverable notes if the gap limit is exceeded.
-- Be unique per pool. Because the (pool, nonce) pair uniquely identifies a note, reusing a nonce for the same pool results in an invalid note that cannot be deposited. This may result in compromised privacy, linking multiple addresses to the same note.
+- Be unique across all pools. [`next_nonce`] returns one past the highest nonce used in any pool. Recovery checks every nonce against every pool, so a nonce reused in a different pool is still recovered, but reusing a nonce in the same pool results in an invalid note that cannot be deposited. This may result in compromised privacy, linking multiple addresses to the same note.
 
 ## Examples
 
 ### Deposit
 
 ```rust,no_run
-use kohaku_tornadocash::Pool;
-use kohaku_tornadocash_keychain::{DynKeychain, Keychain};
+use alloy::signers::Signer;
+use kohaku_tornadocash::{Deposit, Pool};
+use kohaku_tornadocash_keychain::Keychain;
 
-async fn example(
-    keychain: &DynKeychain,
+async fn example<S: Signer + Send + Sync>(
+    keychain: &Keychain<S>,
     pool: &Pool,
     nonce: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let deposit = keychain.deposit(pool, nonce).await?;
+    let note = keychain.note(nonce, pool).await?;
+    let deposit = Deposit::new(pool, note.note);
 
     Ok(())
 }
@@ -32,16 +34,17 @@ async fn example(
 ### Withdraw
 
 ```rust,no_run
+use alloy::signers::Signer;
 use kohaku_tornadocash::{Pool, Withdrawal};
-use kohaku_tornadocash_keychain::{DynKeychain, Keychain};
+use kohaku_tornadocash_keychain::Keychain;
 
-async fn example(
-    keychain: &DynKeychain,
+async fn example<S: Signer + Send + Sync>(
+    keychain: &Keychain<S>,
     pool: &Pool,
     nonce: u64,
     recipient: alloy::primitives::Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let note = keychain.note(pool, nonce).await?;
+    let note = keychain.note(nonce, pool).await?;
     let withdrawal = Withdrawal::new(pool, note.note, recipient);
 
     Ok(())
@@ -51,22 +54,26 @@ async fn example(
 ### Note Recovery
 
 ```rust,no_run
+use alloy::signers::Signer;
 use kohaku_tornadocash::{Pool, syncer::{DynSyncer, Syncer}};
-use kohaku_tornadocash_keychain::{DynKeychain, recovery::{recover, next_nonce}};
+use kohaku_tornadocash_keychain::{Keychain, next_nonce, recover};
 
-async fn example(
-    keychain: &DynKeychain,
+async fn example<S: Signer + Send + Sync>(
+    keychain: &Keychain<S>,
     syncer: &DynSyncer,
-    pool: &Pool,
+    pools: &[Pool],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let snapshot = syncer.sync(pool, ..).await?;
-    let notes = recover(keychain, pool, &snapshot.events, None).await?;
-
-    for note in &notes {
-        println!("{}: leaf {}", note.nonce, note.deposit.leaf_index);
+    let mut batches = Vec::new();
+    for pool in pools {
+        batches.push(syncer.sync(pool, ..).await?);
     }
 
-    let next_nonce = next_nonce(keychain, pool, &snapshot.events, None).await?;
+    let notes = recover(keychain, &batches, None).await?;
+    for note in &notes {
+        println!("{} ({}): leaf {}", note.nonce, note.pool, note.deposit.leaf_index);
+    }
+
+    let next_nonce = next_nonce(keychain, &batches, None).await?;
     // Or calculate manually:
     // let next_nonce = notes.last().map(|note| note.nonce + 1).unwrap_or(0);
     Ok(())
