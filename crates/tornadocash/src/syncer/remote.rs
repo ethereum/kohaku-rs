@@ -105,7 +105,7 @@ impl RemoteSyncer {
 
         let events = deposits.into_iter().chain(withdrawals).collect();
 
-        Ok(Snapshot { range, events })
+        Ok(Snapshot::new(pool.clone(), range, events))
     }
 
     async fn deposits(&self, pool: &Pool) -> Result<Vec<RemoteDeposit>, RemoteSyncerError> {

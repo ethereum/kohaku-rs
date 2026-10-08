@@ -106,7 +106,7 @@ impl<P: Provider> RpcSyncer<P> {
             info!("{}/{} ({} events)", current, range.end, events.len());
         }
 
-        Ok(Snapshot { range, events })
+        Ok(Snapshot::new(pool.clone(), range, events))
     }
 
     /// Clamps the requested range to the blocks this syncer can serve: the pool's deployment

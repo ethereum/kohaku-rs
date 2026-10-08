@@ -51,6 +51,8 @@ enum SagaSyncError {
     OutOfRange { block: u64, from: u64, to: u64 },
     #[error("Field conversion error: {0}")]
     Field(#[from] crate::field::NotInRangeError),
+    #[error("Missing manifest entry for pool {0}")]
+    MissingManifestEntry(Pool),
 }
 
 impl SagaSyncer {
@@ -90,10 +92,7 @@ impl SagaSyncer {
 
         let from = from_block.max(pool.deployed_block);
         let Some(entry) = manifest.available_protocols.get(&key) else {
-            return Ok(Snapshot {
-                range: from..from,
-                events: Vec::new(),
-            });
+            return Err(SagaSyncError::MissingManifestEntry(pool.clone()));
         };
 
         //? Chunk bounds are already half-open, so the last chunk's `to_block` is the exclusive
@@ -120,7 +119,7 @@ impl SagaSyncer {
             events.extend(decoded);
         }
 
-        Ok(Snapshot { range, events })
+        Ok(Snapshot::new(pool.clone(), range, events))
     }
 
     async fn fetch_manifest(&self) -> Result<Manifest, SagaSyncError> {

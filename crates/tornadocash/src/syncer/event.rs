@@ -7,11 +7,13 @@ use alloy::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{abis::tornado::Tornado, field::Field};
+use crate::{Pool, abis::tornado::Tornado, field::Field};
 
 /// A set of events emitted by a pool within a given block range.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
+    /// The pool these events belong to.
+    pub pool: Pool,
     /// The half-open block range these events cover.
     pub range: Range<u64>,
     /// The events the pool emitted within `range`.
@@ -40,6 +42,16 @@ pub struct Withdrawal {
     pub relayer: Address,
     pub fee: U256,
     pub block_number: u64,
+}
+
+impl Snapshot {
+    pub fn new(pool: Pool, range: Range<u64>, events: Vec<SyncEvent>) -> Self {
+        Self {
+            pool,
+            range,
+            events,
+        }
+    }
 }
 
 impl SyncEvent {
