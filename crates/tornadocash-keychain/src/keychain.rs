@@ -4,8 +4,6 @@
 //! sig(domain, nonce))`. This way a single signature can be used to derive a nullifier / secret for
 //! any pool, speeding up recovery.
 
-use std::{collections::HashMap, sync::RwLock};
-
 use alloy::{
     dyn_abi::Eip712Domain,
     primitives::{B256, keccak256},
@@ -13,8 +11,6 @@ use alloy::{
     sol_types::eip712_domain,
 };
 use kohaku_tornadocash::{Field, Note, NoteString, Nullifier, Pool, Secret};
-
-use crate::{Keychain, KeychainError};
 
 mod sol {
     use alloy::sol;
@@ -26,16 +22,22 @@ mod sol {
     }
 }
 
-/// Signature-based keychain built on an alloy signer.
-pub struct SignatureKeychain<S: Signer + Send + Sync> {
+/// Keychain built on an alloy signer.
+pub struct Keychain<S: Signer + Send + Sync> {
     signer: S,
-    derived: RwLock<HashMap<(Pool, u64), Derived>>,
 }
 
+/// Public non-spendable values derived from a note
 #[derive(Clone, Copy)]
-struct Derived {
-    commitment: Field,
-    nullifier_hash: Field,
+pub struct NoteHashes {
+    pub commitment: Field,
+    pub nullifier_hash: Field,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum KeychainError {
+    #[error("signer error: {0}")]
+    Signer(#[from] alloy::signers::Error),
 }
 
 const DOMAIN: Eip712Domain = eip712_domain! {
@@ -50,54 +52,53 @@ const DOMAIN: Eip712Domain = eip712_domain! {
     ]),
 };
 
-impl<S: Signer + Send + Sync> SignatureKeychain<S> {
+impl<S: Signer + Send + Sync> Keychain<S> {
     pub fn new(signer: S) -> Self {
-        Self {
-            signer,
-            derived: RwLock::new(HashMap::new()),
-        }
+        Self { signer }
     }
 
-    /// Derives the commitment and nullifier hash for a given pool and nonce, caching
-    /// the results for future calls.
-    async fn derived(&self, pool: &Pool, nonce: u64) -> Result<Derived, KeychainError> {
-        let key = (pool.clone(), nonce);
-        if let Some(d) = self.derived.read().unwrap().get(&key).copied() {
-            return Ok(d);
-        }
-
-        let note = self.note(pool, nonce).await?;
-        let d = Derived {
-            commitment: note.commitment(),
-            nullifier_hash: note.nullifier_hash(),
-        };
-
-        self.derived.write().unwrap().insert(key, d);
-        Ok(d)
+    /// Derives the commitment and nullifier hash for a given pool and nonce.
+    pub async fn note_hashes(
+        &self,
+        nonce: u64,
+        pools: &[Pool],
+    ) -> Result<Vec<NoteHashes>, KeychainError> {
+        let notes = self.notes(nonce, pools).await?;
+        Ok(notes
+            .into_iter()
+            .map(|note| NoteHashes {
+                commitment: note.commitment(),
+                nullifier_hash: note.nullifier_hash(),
+            })
+            .collect())
     }
-}
 
-#[cfg_attr(native, async_trait::async_trait)]
-#[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
-    async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
+    /// Derives the NoteString for a given pool and nonce.
+    pub async fn note(&self, nonce: u64, pool: &Pool) -> Result<NoteString, KeychainError> {
+        let notes = self.notes(nonce, &[pool.clone()]).await?;
+        Ok(notes.into_iter().next().unwrap())
+    }
+
+    /// Derives the NoteStrings on all pools for a given nonce.
+    ///
+    /// The resulting Vector will match the order of the pools provided.
+    async fn notes(&self, nonce: u64, pools: &[Pool]) -> Result<Vec<NoteString>, KeychainError> {
         let signature = self
             .signer
             .sign_typed_data(&sol::TornadoCashNote { nonce }, &DOMAIN)
             .await?;
 
-        let secret = secret_from_signature(pool, &signature);
-        let nullifier = nullifier_from_signature(pool, &signature);
+        let notes = pools
+            .iter()
+            .map(|pool| {
+                let secret = secret_from_signature(pool, &signature);
+                let nullifier = nullifier_from_signature(pool, &signature);
 
-        Ok(NoteString::from_pool(Note::new(nullifier, secret), pool))
-    }
+                NoteString::from_pool(Note::new(nullifier, secret), pool)
+            })
+            .collect();
 
-    async fn commitment(&self, pool: &Pool, nonce: u64) -> Result<Field, KeychainError> {
-        Ok(self.derived(pool, nonce).await?.commitment)
-    }
-
-    async fn nullifier_hash(&self, pool: &Pool, nonce: u64) -> Result<Field, KeychainError> {
-        Ok(self.derived(pool, nonce).await?.nullifier_hash)
+        Ok(notes)
     }
 }
 
@@ -125,12 +126,6 @@ fn from_signature(domain: &[u8], pool: &Pool, sig: &Signature) -> [u8; 31] {
     nullifier_bytes
 }
 
-impl From<alloy::signers::Error> for KeychainError {
-    fn from(err: alloy::signers::Error) -> Self {
-        Self::other(err)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use alloy::{primitives::U256, signers::local::LocalSigner};
@@ -149,9 +144,9 @@ mod tests {
     async fn note_deterministic() {
         //? Hackery to get deterministic signer for testing.
         let signer = LocalSigner::from_bytes(&U256::from(42).into()).unwrap();
-        let keychain = SignatureKeychain::new(signer);
+        let keychain = Keychain::new(signer);
 
-        let note = keychain.note(&POOL, 0).await.unwrap();
+        let note = keychain.note(0, &POOL).await.unwrap();
         let expected = "tornado-eth-1-1-0x6e7b680a434a94f58ab3191a2db353a8b7de420c5d99d411392f1fc8b91e00547f137f1bce7ee67a7a46c3d4e884cf71fcd50dc0e5f1f238ed3f94e8d335";
         assert_eq!(expected, note.to_string());
     }
@@ -159,11 +154,11 @@ mod tests {
     #[tokio::test]
     async fn nonce_and_pool_different() {
         let signer = LocalSigner::from_bytes(&U256::from(42).into()).unwrap();
-        let keychain = SignatureKeychain::new(signer);
+        let keychain = Keychain::new(signer);
 
-        let note1 = keychain.note(&POOL, 0).await.unwrap();
-        let note2 = keychain.note(&POOL, 1).await.unwrap();
-        let note3 = keychain.note(&Pool::ETHEREUM_ETHER_10, 0).await.unwrap();
+        let note1 = keychain.note(0, &POOL).await.unwrap();
+        let note2 = keychain.note(1, &POOL).await.unwrap();
+        let note3 = keychain.note(0, &Pool::ETHEREUM_ETHER_10).await.unwrap();
 
         assert_ne!(note1, note2);
         assert_ne!(note1, note3);
