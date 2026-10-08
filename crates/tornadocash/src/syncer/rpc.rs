@@ -108,12 +108,11 @@ impl<P: Provider> RpcSyncer<P> {
             sleep(self.batch_delay).await;
 
             for log in logs {
-                match decode_log(&log) {
-                    Ok(decoded) => events.push(decoded),
-                    Err(RpcSyncerError::UnknownEvent { topics }) => {
-                        warn!("Unknown event with topics {topics:?}");
+                match SyncEvent::try_from_log(&log) {
+                    Some(decoded) => events.push(decoded),
+                    None => {
+                        warn!("Unknown event with topic {:?}", log.topic0());
                     }
-                    Err(e) => return Err(e),
                 }
             }
 
@@ -138,31 +137,5 @@ impl<P: Provider> RpcSyncer<P> {
         let to = to_block.min(latest).max(from);
 
         Ok(from..to)
-    }
-}
-
-fn decode_log(log: &Log) -> Result<SyncEvent, RpcSyncerError> {
-    match log.topics().first() {
-        Some(&Tornado::Deposit::SIGNATURE_HASH) => {
-            let decoded = Tornado::Deposit::decode_log(&log.inner)?.data;
-            Ok(SyncEvent::Deposit(Deposit {
-                commitment: decoded.commitment.try_into()?,
-                leaf_index: decoded.leafIndex,
-                block_number: log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
-            }))
-        }
-        Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
-            let decoded = Tornado::Withdrawal::decode_log(&log.inner)?.data;
-            Ok(SyncEvent::Withdrawal(Withdrawal {
-                to: decoded.to,
-                nullifier_hash: decoded.nullifierHash.try_into()?,
-                relayer: decoded.relayer,
-                fee: decoded.fee,
-                block_number: log.block_number.ok_or(RpcSyncerError::MissingBlockNumber)?,
-            }))
-        }
-        _ => Err(RpcSyncerError::UnknownEvent {
-            topics: log.topics().to_vec(),
-        }),
     }
 }
