@@ -98,16 +98,26 @@ pub async fn recover<S: Signer + Send + Sync>(
     Ok(recovered)
 }
 
-/// Indexes the snapshots in `batches` by pool.
-fn index<'a>(batches: &'a [Snapshot]) -> Vec<PoolIndex<'a>> {
-    batches
-        .iter()
-        .map(|batch| PoolIndex {
+/// Indexes the snapshots in `batches` by pool, combining batches that share a pool.
+fn index(batches: &[Snapshot]) -> Vec<PoolIndex<'_>> {
+    let mut indexes: Vec<PoolIndex> = Vec::new();
+    for batch in batches {
+        let deposits = deposits(&batch.events);
+        let withdrawals = withdrawals(&batch.events);
+
+        if let Some(index) = indexes.iter_mut().find(|index| *index.pool == batch.pool) {
+            index.deposits.extend(deposits);
+            index.withdrawals.extend(withdrawals);
+            continue;
+        }
+
+        indexes.push(PoolIndex {
             pool: &batch.pool,
-            deposits: deposits(&batch.events),
-            withdrawals: withdrawals(&batch.events),
-        })
-        .collect()
+            deposits,
+            withdrawals,
+        });
+    }
+    indexes
 }
 
 /// Indexes the deposits in `events` by commitment.
