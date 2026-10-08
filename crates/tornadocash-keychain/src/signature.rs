@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use alloy::{
     dyn_abi::Eip712Domain,
-    primitives::keccak256,
+    primitives::{B256, keccak256},
     signers::{Signature, Signer},
     sol_types::eip712_domain,
 };
@@ -17,9 +17,6 @@ mod sol {
 
     sol! {
         struct TornadoCashNote {
-            string symbol;
-            string amount;
-            uint64 chainId;
             uint64 nonce;
         }
     }
@@ -36,6 +33,18 @@ struct Derived {
     commitment: Field,
     nullifier_hash: Field,
 }
+
+const DOMAIN: Eip712Domain = eip712_domain! {
+    name: "TornadoCash Keychain",
+    version: "1",
+    // keccak256(b"tornado")
+    salt: B256::new([
+        0xc1, 0x12, 0x37, 0xb9, 0x77, 0x41, 0x8c, 0x70,
+        0x5d, 0x2b, 0x06, 0xda, 0x70, 0x25, 0x66, 0xcb,
+        0xfa, 0xb6, 0xec, 0xe8, 0xe4, 0x13, 0x93, 0x95,
+        0xf0, 0x3c, 0x66, 0xa9, 0x18, 0x99, 0xaf, 0x6f
+    ]),
+};
 
 impl<S: Signer + Send + Sync> SignatureKeychain<S> {
     pub fn new(signer: S) -> Self {
@@ -70,11 +79,11 @@ impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
     async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
         let signature = self
             .signer
-            .sign_typed_data(&payload(pool, nonce), &domain(pool))
+            .sign_typed_data(&sol::TornadoCashNote { nonce }, &DOMAIN)
             .await?;
 
-        let secret = secret_from_signature(&signature);
-        let nullifier = nullifier_from_signature(&signature);
+        let secret = secret_from_signature(pool, &signature);
+        let nullifier = nullifier_from_signature(pool, &signature);
 
         Ok(NoteString::from_pool(Note::new(nullifier, secret), pool))
     }
@@ -88,39 +97,28 @@ impl<S: Signer + Send + Sync> Keychain for SignatureKeychain<S> {
     }
 }
 
-fn secret_from_signature(sig: &Signature) -> Secret {
-    Secret::new(from_signature(b"secret", sig))
+fn secret_from_signature(pool: &Pool, sig: &Signature) -> Secret {
+    Secret::new(from_signature(b"secret", pool, sig))
 }
 
-fn nullifier_from_signature(sig: &Signature) -> Nullifier {
-    Nullifier::new(from_signature(b"nullifier", sig))
+fn nullifier_from_signature(pool: &Pool, sig: &Signature) -> Nullifier {
+    Nullifier::new(from_signature(b"nullifier", pool, sig))
 }
 
-fn from_signature(domain: &[u8], sig: &Signature) -> [u8; 31] {
-    let bytes = keccak256([domain, sig.as_bytes().as_slice()].concat());
+fn from_signature(domain: &[u8], pool: &Pool, sig: &Signature) -> [u8; 31] {
+    let bytes = keccak256(
+        [
+            domain,
+            pool.chain_id.to_le_bytes().as_slice(),
+            pool.address.as_slice(),
+            sig.as_bytes().as_slice(),
+        ]
+        .concat(),
+    );
     let mut nullifier_bytes = [0u8; 31];
     nullifier_bytes.copy_from_slice(&bytes[..31]);
 
     nullifier_bytes
-}
-
-fn payload(pool: &Pool, nonce: u64) -> sol::TornadoCashNote {
-    sol::TornadoCashNote {
-        symbol: pool.symbol().to_string(),
-        amount: pool.amount().clone(),
-        chainId: pool.chain_id,
-        nonce,
-    }
-}
-
-fn domain(pool: &Pool) -> Eip712Domain {
-    eip712_domain! {
-        name: "TornadoCash Keychain",
-        version: "1",
-        chain_id: pool.chain_id,
-        verifying_contract: pool.address,
-        salt: keccak256("kohaku"),
-    }
 }
 
 impl From<alloy::signers::Error> for KeychainError {
@@ -137,6 +135,12 @@ mod tests {
 
     const POOL: Pool = Pool::ETHEREUM_ETHER_1;
 
+    #[test]
+    fn note_salt_is_tornado() {
+        let expected = keccak256(b"tornado");
+        assert_eq!(Some(expected), DOMAIN.salt);
+    }
+
     #[tokio::test]
     async fn note_deterministic() {
         //? Hackery to get deterministic signer for testing.
@@ -144,7 +148,7 @@ mod tests {
         let keychain = SignatureKeychain::new(signer);
 
         let note = keychain.note(&POOL, 0).await.unwrap();
-        let expected = "tornado-eth-1-1-0x57097d3444b76cb0523228d4b26c805daf1af6fcebebf7564dd21a57ba7b37bcf98dcd3960d3519373dd127890f87205f8f42ba75c3c82cc13904b98d97a";
+        let expected = "tornado-eth-1-1-0x6e7b680a434a94f58ab3191a2db353a8b7de420c5d99d411392f1fc8b91e00547f137f1bce7ee67a7a46c3d4e884cf71fcd50dc0e5f1f238ed3f94e8d335";
         assert_eq!(expected, note.to_string());
     }
 
