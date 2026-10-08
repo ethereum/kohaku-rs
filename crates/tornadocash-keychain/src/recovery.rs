@@ -27,11 +27,11 @@ pub struct RecoveredNote {
 /// See [`recover`] for details on how the next nonce is determined.
 pub async fn next_nonce(
     keychain: &impl Keychain,
-    pool: &Pool,
+    pools: &[Pool],
     events: &[SyncEvent],
     gap_limit: Option<u64>,
 ) -> Result<u64, KeychainError> {
-    let recovered = recover(keychain, pool, events, gap_limit).await?;
+    let recovered = recover(keychain, pools, events, gap_limit).await?;
     Ok(recovered.last().map_or(0, |note| note.nonce + 1))
 }
 
@@ -50,7 +50,7 @@ pub async fn next_nonce(
 /// Returns an error if the keychain cannot derive a nonce's material.
 pub async fn recover(
     keychain: &impl Keychain,
-    pool: &Pool,
+    pools: &[Pool],
     events: &[SyncEvent],
     gap_limit: Option<u64>,
 ) -> Result<Vec<RecoveredNote>, KeychainError> {
@@ -70,19 +70,23 @@ pub async fn recover(
         }
         misses += 1;
 
-        let commitment = keychain.commitment(pool, nonce).await?;
-        let Some(deposit) = deposits.get(&commitment).copied() else {
-            continue;
-        };
+        for pool in pools {
+            let commitment = keychain.commitment(pool, nonce).await?;
+            let Some(deposit) = deposits.get(&commitment).copied() else {
+                continue;
+            };
 
-        misses = 0;
-        let nullifier_hash = keychain.nullifier_hash(pool, nonce).await?;
-        recovered.push(RecoveredNote {
-            pool: pool.clone(),
-            nonce,
-            deposit: deposit.clone(),
-            withdrawal: withdrawals.get(&nullifier_hash).copied().cloned(),
-        });
+            misses = 0;
+
+            let nullifier_hash = keychain.nullifier_hash(pool, nonce).await?;
+            recovered.push(RecoveredNote {
+                pool: pool.clone(),
+                nonce,
+                deposit: deposit.clone(),
+                withdrawal: withdrawals.get(&nullifier_hash).copied().cloned(),
+            });
+            // break;
+        }
     }
 
     Ok(recovered)
@@ -118,18 +122,19 @@ mod tests {
     use super::*;
 
     const POOL: Pool = Pool::ETHEREUM_ETHER_01;
+    const POOL2: Pool = Pool::ETHEREUM_ETHER_10;
 
     struct TestKeychain;
 
     #[tokio::test]
     async fn recovers_deposits() {
         let events = vec![
-            deposit(&note(0).await, 0),
-            deposit(&foreign_note(), 1),
-            deposit(&note(1).await, 2),
+            deposit(&note(&POOL, 0).await, 0),
+            deposit(&note(&POOL2, 1).await, 1),
+            deposit(&note(&POOL, 1).await, 2),
         ];
 
-        let recovered = recover(&TestKeychain, &POOL, &events, Some(2))
+        let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
             .await
             .unwrap();
 
@@ -141,15 +146,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn recovers_withdrawals() {
+    async fn recovers_deposits_from_multiple_pools() {
         let events = vec![
-            deposit(&note(0).await, 0),
-            deposit(&note(1).await, 1),
-            withdrawal(&note(1).await),
-            withdrawal(&foreign_note()),
+            deposit(&note(&POOL, 0).await, 0),
+            deposit(&note(&POOL2, 1).await, 1),
+            deposit(&note(&POOL, 2).await, 2),
         ];
 
-        let recovered = recover(&TestKeychain, &POOL, &events, Some(2))
+        let recovered = recover(&TestKeychain, &[POOL, POOL2], &events, Some(2))
+            .await
+            .unwrap();
+
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(recovered[0].nonce, 0);
+        assert_eq!(recovered[0].deposit.leaf_index, 0);
+        assert_eq!(recovered[1].nonce, 1);
+        assert_eq!(recovered[1].deposit.leaf_index, 1);
+        assert_eq!(recovered[2].nonce, 2);
+        assert_eq!(recovered[2].deposit.leaf_index, 2);
+    }
+
+    #[tokio::test]
+    async fn recovers_withdrawals() {
+        let events = vec![
+            deposit(&note(&POOL, 0).await, 0),
+            deposit(&note(&POOL, 1).await, 1),
+            withdrawal(&note(&POOL, 1).await),
+            withdrawal(&note(&POOL2, 3).await),
+        ];
+
+        let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
             .await
             .unwrap();
 
@@ -162,9 +188,12 @@ mod tests {
 
     #[tokio::test]
     async fn stops_at_gap_limit() {
-        let events = vec![deposit(&note(0).await, 0), deposit(&note(3).await, 1)];
+        let events = vec![
+            deposit(&note(&POOL, 0).await, 0),
+            deposit(&note(&POOL, 3).await, 1),
+        ];
 
-        let recovered = recover(&TestKeychain, &POOL, &events, Some(2))
+        let recovered = recover(&TestKeychain, &[POOL], &events, Some(2))
             .await
             .unwrap();
 
@@ -175,12 +204,12 @@ mod tests {
     #[tokio::test]
     async fn next_nonce_is_incremented() {
         let events = vec![
-            deposit(&note(0).await, 0),
-            deposit(&note(1).await, 1),
-            withdrawal(&note(1).await),
+            deposit(&note(&POOL, 0).await, 0),
+            deposit(&note(&POOL, 1).await, 1),
+            withdrawal(&note(&POOL, 1).await),
         ];
 
-        let next_nonce = next_nonce(&TestKeychain, &POOL, &events, None)
+        let next_nonce = next_nonce(&TestKeychain, &[POOL], &events, None)
             .await
             .unwrap();
         assert_eq!(next_nonce, 2);
@@ -191,6 +220,8 @@ mod tests {
         async fn note(&self, pool: &Pool, nonce: u64) -> Result<NoteString, KeychainError> {
             let mut bytes = [0u8; 31];
             bytes[..8].copy_from_slice(&nonce.to_be_bytes());
+            bytes[8..16].copy_from_slice(&pool.chain_id.to_be_bytes());
+            bytes[16..26].copy_from_slice(&pool.address.to_vec()[..10]);
 
             Ok(NoteString::from_pool(
                 Note::new(Nullifier::new(bytes), Secret::new(bytes)),
@@ -199,12 +230,8 @@ mod tests {
         }
     }
 
-    async fn note(nonce: u64) -> Note {
-        TestKeychain.note(&POOL, nonce).await.unwrap().note
-    }
-
-    fn foreign_note() -> Note {
-        Note::new([9u8; 31], [9u8; 31])
+    async fn note(pool: &Pool, nonce: u64) -> Note {
+        TestKeychain.note(pool, nonce).await.unwrap().note
     }
 
     fn deposit(note: &Note, leaf_index: u32) -> SyncEvent {

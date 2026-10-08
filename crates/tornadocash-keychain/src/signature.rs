@@ -1,4 +1,8 @@
 //! Signature-based keychain built.
+//!
+//! Uses the schema `nullifier = keccak256(b"nullifier" || pool.chain_id || pool.address ||
+//! sig(domain, nonce))`. This way a single signature can be used to derive a nullifier / secret for
+//! any pool, speeding up recovery.
 
 use std::{collections::HashMap, sync::RwLock};
 
