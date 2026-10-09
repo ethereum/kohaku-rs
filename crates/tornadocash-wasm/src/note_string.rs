@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 /// formatting in the standard tornado format.
 #[wasm_bindgen]
 pub struct NoteString {
-    inner: CoreNoteString,
+    pub(crate) inner: CoreNoteString,
 }
 
 #[wasm_bindgen]
