@@ -7,23 +7,20 @@
 //! circuit per RPC. Call `isolated_client` again for the next unlinkable group.
 //!
 //! - [`TorRpc::shared_rpc_client`], [`TorRpc::shared_provider`], [`TorRpc::send_shared`],
-//!   [`TorRpc::get`], [`TorRpc::post`] — the bootstrapped client. Keep one for traffic
-//!   that is safe to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST
-//!   basically any request that does not contain privacy-sensitive data e.g. specific user accounts
-//! - [`TorRpc::isolated_rpc_client`], [`TorRpc::isolated_provider`] — one fresh
-//!   `isolated_client`, reused for every RPC on that client. Hold it for a session
-//!   (the calls about one address). Construct another when the next session must
-//!   not share circuits with it.
+//!   [`TorRpc::get`], [`TorRpc::post`] — the bootstrapped client. Keep one for traffic that is safe
+//!   to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST basically any
+//!   request that does not contain privacy-sensitive data e.g. specific user accounts
+//! - [`TorRpc::isolated_rpc_client`], [`TorRpc::isolated_provider`] — one fresh `isolated_client`,
+//!   reused for every RPC on that client. Hold it for a session (the calls about one address).
+//!   Construct another when the next session must not share circuits with it.
 //! - [`TorRpc::with_isolated`] — that same client for one closure, then drop it.
-//! - [`TorRpc::send_isolated`] — one JSON-RPC packet on a new `isolated_client`, then
-//!   drop it. Calls packed into that packet share the group. The next call is a new group.
+//! - [`TorRpc::send_isolated`] — one JSON-RPC packet on a new `isolated_client`, then drop it.
+//!   Calls packed into that packet share the group. The next call is a new group.
 
 use std::{
-    fmt::Write as _,
     future::Future,
-    io,
-    sync::Arc,
-    task::{self, Poll},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 use alloy::{
@@ -32,13 +29,23 @@ use alloy::{
         client::RpcClient,
         json_rpc::{RequestPacket, ResponsePacket},
     },
-    transports::{TransportError, TransportErrorKind, TransportFut},
+    transports::{
+        TransportError,
+        http::{
+            Http, HyperClient,
+            hyper::{self, body::Bytes},
+            hyper_util::{
+                self,
+                client::legacy::connect::{Connected, Connection},
+                rt::{TokioExecutor, TokioIo},
+            },
+        },
+    },
 };
-use anyhow::{Context, Result, bail};
-use arti_client::{TorClient, TorClientConfig};
-use rustls::pki_types::ServerName;
-use tokio_rustls::TlsConnector;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use anyhow::{Context as _, Result, bail};
+use arti_client::{DataStream, TorClient, TorClientConfig};
+use http_body_util::{BodyExt, Full};
+use hyper_rustls::HttpsConnectorBuilder;
 use tor_rtcompat::PreferredRuntime;
 use tower::Service;
 use url::Url;
@@ -65,10 +72,15 @@ impl TorHttpResponse {
     }
 }
 
-/// A bootstrapped Tor client. Cloning is cheap and shares the directory state.
+/// A bootstrapped Tor client. Cloning is cheap and shares the directory state
+/// and the shared HTTP connection pool.
+///
+/// Arti refuses local addresses by default. That error happens when a request
+/// is sent, not when one of these clients is built.
 #[derive(Clone)]
 pub struct TorRpc {
     client: TorClient<PreferredRuntime>,
+    http: Pool,
 }
 
 impl TorRpc {
@@ -80,59 +92,52 @@ impl TorRpc {
         let client = TorClient::create_bootstrapped(TorClientConfig::default())
             .await
             .context("bootstrap Tor")?;
-        Ok(Self { client })
+        let http = pool(client.clone());
+        Ok(Self { client, http })
     }
 
     /// Long-lived JSON-RPC client that reuses the shared Tor client (and its circuits).
-    ///
-    /// # Errors
-    /// Returns when `url` is a local address an exit cannot reach.
-    pub fn shared_rpc_client(&self, url: Url) -> Result<RpcClient> {
-        self.rpc_client(url, self.client.clone())
+    #[must_use]
+    pub fn shared_rpc_client(&self, url: Url) -> RpcClient {
+        rpc_client(self.http.clone(), url)
     }
 
     /// JSON-RPC client pinned to a fresh [`TorClient::isolated_client`].
     ///
     /// All requests on this client share one isolation token / circuit family.
-    ///
-    /// # Errors
-    /// Returns when `url` is a local address an exit cannot reach.
-    pub fn isolated_rpc_client(&self, url: Url) -> Result<RpcClient> {
-        self.rpc_client(url, self.client.isolated_client())
+    #[must_use]
+    pub fn isolated_rpc_client(&self, url: Url) -> RpcClient {
+        rpc_client(pool(self.client.isolated_client()), url)
     }
 
     /// Run `f` with an [`isolated_rpc_client`](Self::isolated_rpc_client), then drop it.
     ///
     /// # Errors
-    /// Returns when the client cannot be built or `f` fails.
+    /// Returns when `f` fails.
     pub async fn with_isolated<F, Fut, T>(&self, url: Url, f: F) -> Result<T>
     where
         F: FnOnce(RpcClient) -> Fut,
         Fut: Future<Output = Result<T>>,
     {
-        f(self.isolated_rpc_client(url)?).await
+        f(self.isolated_rpc_client(url)).await
     }
 
     /// Shared-circuit Alloy provider (pool sync).
-    ///
-    /// # Errors
-    /// Returns when `url` is local.
-    pub fn shared_provider(&self, url: Url) -> Result<RootProvider> {
-        Ok(RootProvider::new(self.shared_rpc_client(url)?))
+    #[must_use]
+    pub fn shared_provider(&self, url: Url) -> RootProvider {
+        RootProvider::new(self.shared_rpc_client(url))
     }
 
     /// Isolated-session Alloy provider.
-    ///
-    /// # Errors
-    /// Returns when `url` is local.
-    pub fn isolated_provider(&self, url: Url) -> Result<RootProvider> {
-        Ok(RootProvider::new(self.isolated_rpc_client(url)?))
+    #[must_use]
+    pub fn isolated_provider(&self, url: Url) -> RootProvider {
+        RootProvider::new(self.isolated_rpc_client(url))
     }
 
     /// `GET url` over the shared Tor client.
     ///
     /// # Errors
-    /// Returns when the download fails or the host is local.
+    /// Returns when the download fails or the status is not 2xx.
     pub async fn get(&self, url: &Url) -> Result<Vec<u8>> {
         self.request_shared(url, "GET", &[], &[]).await
     }
@@ -142,7 +147,7 @@ impl TorRpc {
     /// Used by e.g. PIR that must reach a PIR HTTP API without clearnet.
     ///
     /// # Errors
-    /// Returns when the upload fails or the host is local.
+    /// Returns when the upload fails or the status is not 2xx.
     pub async fn post(
         &self,
         url: &Url,
@@ -155,7 +160,7 @@ impl TorRpc {
     /// Arbitrary HTTP request over the shared Tor client.
     ///
     /// # Errors
-    /// Returns when the exchange fails, the host is local, or the status is not 2xx.
+    /// Returns when the exchange fails or the status is not 2xx.
     pub async fn request_shared(
         &self,
         url: &Url,
@@ -181,12 +186,7 @@ impl TorRpc {
         headers: &[(String, String)],
         body: &[u8],
     ) -> Result<TorHttpResponse> {
-        let status = exchange(&self.client, url, method, headers, body).await?;
-        Ok(TorHttpResponse {
-            status: status.code,
-            headers: status.headers,
-            body: status.body,
-        })
+        exchange(&self.http, url, method, headers, body).await
     }
 
     /// Send a JSON-RPC packet over the shared Tor client (one HTTP POST).
@@ -198,14 +198,7 @@ impl TorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        reject_local(&url)
-            .map_err(|err| TransportErrorKind::custom(io::Error::other(err.to_string())))?;
-        TorTransport {
-            client: self.client.clone(),
-            url,
-        }
-        .post_packet(packet)
-        .await
+        send(self.http.clone(), url, packet).await
     }
 
     /// Send a JSON-RPC packet on a fresh [`TorClient::isolated_client`].
@@ -219,289 +212,167 @@ impl TorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        reject_local(&url)
-            .map_err(|err| TransportErrorKind::custom(io::Error::other(err.to_string())))?;
-        TorTransport {
-            client: self.client.isolated_client(),
-            url,
-        }
-        .post_packet(packet)
-        .await
-    }
-
-    #[allow(clippy::unused_self)]
-    fn rpc_client(&self, url: Url, client: TorClient<PreferredRuntime>) -> Result<RpcClient> {
-        reject_local(&url)?;
-        Ok(RpcClient::new(TorTransport { client, url }, false))
+        send(pool(self.client.isolated_client()), url, packet).await
     }
 }
 
-#[derive(Clone)]
-struct TorTransport {
-    client: TorClient<PreferredRuntime>,
+type Pool =
+    hyper_util::client::legacy::Client<hyper_rustls::HttpsConnector<TorConnector>, Full<Bytes>>;
+
+fn pool(client: TorClient<PreferredRuntime>) -> Pool {
+    // `ClientConfig::builder` panics unless a process-wide provider is installed.
+    // Arti may already have installed ring; a second attempt returns `Err`.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let https = HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .wrap_connector(TorConnector(client));
+    hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(https)
+}
+
+fn rpc_client(http: Pool, url: Url) -> RpcClient {
+    RpcClient::new(
+        Http::with_client(HyperClient::with_service(http), url),
+        false,
+    )
+}
+
+async fn send(
+    http: Pool,
     url: Url,
-}
-
-impl Service<RequestPacket> for TorTransport {
-    type Response = ResponsePacket;
-    type Error = TransportError;
-    type Future = TransportFut<'static>;
-
-    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: RequestPacket) -> Self::Future {
-        let this = self.clone();
-        Box::pin(async move { this.post_packet(req).await })
-    }
-}
-
-impl TorTransport {
-    async fn post_packet(self, req: RequestPacket) -> Result<ResponsePacket, TransportError> {
-        let body = serde_json::to_vec(&req).map_err(TransportError::ser_err)?;
-        let mut extra = vec![("content-type".to_string(), "application/json".to_string())];
-        for (name, value) in &req.headers() {
-            extra.push((
-                name.as_str().to_string(),
-                value.to_str().unwrap_or("").to_string(),
-            ));
-        }
-        let status = exchange(&self.client, &self.url, "POST", &extra, &body)
-            .await
-            .map_err(|err| TransportErrorKind::custom(io::Error::other(err.to_string())))?;
-        if !(200..300).contains(&status.code) {
-            return Err(TransportErrorKind::http_error(
-                status.code,
-                String::from_utf8_lossy(&status.body).into_owned(),
-            ));
-        }
-        serde_json::from_slice(&status.body)
-            .map_err(|err| TransportError::deser_err(err, String::from_utf8_lossy(&status.body)))
-    }
-}
-
-struct HttpStatus {
-    code: u16,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
+    packet: RequestPacket,
+) -> Result<ResponsePacket, TransportError> {
+    let mut transport = Http::with_client(HyperClient::with_service(http), url);
+    Service::call(&mut transport, packet).await
 }
 
 async fn exchange(
-    client: &TorClient<PreferredRuntime>,
+    http: &Pool,
     url: &Url,
     method: &str,
     headers: &[(String, String)],
     body: &[u8],
-) -> Result<HttpStatus> {
-    reject_local(url)?;
-    let host = url.host_str().context("url host")?.to_string();
-    let port = url.port_or_known_default().context("url port")?;
-    let https = url.scheme() == "https";
-    if url.scheme() != "http" && !https {
-        bail!("Tor RPC only supports http and https, got {}", url.scheme());
-    }
-    match exchange_once(client, &host, port, https, url, method, headers, body).await {
-        Ok(status) => Ok(status),
-        Err(_) => exchange_once(client, &host, port, https, url, method, headers, body).await,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn exchange_once(
-    client: &TorClient<PreferredRuntime>,
-    host: &str,
-    port: u16,
-    https: bool,
-    url: &Url,
-    method: &str,
-    headers: &[(String, String)],
-    body: &[u8],
-) -> Result<HttpStatus> {
-    let stream = client
-        .connect((host, port))
-        .await
-        .with_context(|| format!("Tor connect {host}:{port}"))?;
-    let path = match url.query() {
-        Some(q) => format!("{}?{q}", url.path()),
-        None => url.path().to_string(),
-    };
-    let path = if path.is_empty() {
-        "/".to_string()
-    } else {
-        path
-    };
-    let mut request =
-        format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nAccept: */*\r\n");
-    if !body.is_empty() {
-        let _ = write!(request, "Content-Length: {}\r\n", body.len());
-    }
+) -> Result<TorHttpResponse> {
+    let mut builder = hyper::Request::builder().method(method).uri(url.as_str());
     for (name, value) in headers {
-        request.push_str(name);
-        request.push_str(": ");
-        request.push_str(value);
-        request.push_str("\r\n");
+        builder = builder.header(name.as_str(), value.as_str());
     }
-    request.push_str("\r\n");
-
-    if https {
-        let tls = tls_connector();
-        let name = ServerName::try_from(host.to_string()).context("tls server name")?;
-        let mut stream = tls
-            .connect(name, stream.compat())
-            .await
-            .context("tls through Tor")?;
-        write_and_read(&mut stream, request.as_bytes(), body).await
-    } else {
-        let mut stream = stream.compat();
-        write_and_read(&mut stream, request.as_bytes(), body).await
-    }
-}
-
-fn tls_connector() -> TlsConnector {
-    let mut roots = rustls::RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = rustls::ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    TlsConnector::from(Arc::new(config))
-}
-
-async fn write_and_read(
-    stream: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin),
-    head: &[u8],
-    body: &[u8],
-) -> Result<HttpStatus> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    stream.write_all(head).await?;
-    stream.write_all(body).await?;
-    stream.flush().await?;
-    let mut raw = Vec::new();
-    stream.read_to_end(&mut raw).await?;
-    parse_http(&raw)
-}
-
-fn parse_http(raw: &[u8]) -> Result<HttpStatus> {
-    let split = raw
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .context("http headers")?;
-    let header = std::str::from_utf8(&raw[..split]).context("http header utf8")?;
-    let mut lines = header.split("\r\n");
-    let status = lines.next().context("http status")?;
-    let code: u16 = status
-        .split_whitespace()
-        .nth(1)
-        .context("http status code")?
-        .parse()
-        .context("http status code")?;
-    let mut length = None;
-    let mut chunked = false;
-    let mut headers = Vec::new();
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        let name = name.trim();
-        let value = value.trim();
-        headers.push((name.to_string(), value.to_string()));
-        if name.eq_ignore_ascii_case("content-length") {
-            length = value.parse().ok();
-        } else if name.eq_ignore_ascii_case("transfer-encoding")
-            && value.to_ascii_lowercase().contains("chunked")
-        {
-            chunked = true;
-        }
-    }
-    let rest = &raw[split + 4..];
-    let body = if chunked {
-        decode_chunks(rest)?
-    } else if let Some(n) = length {
-        rest.get(..n).context("short http body")?.to_vec()
-    } else {
-        rest.to_vec()
-    };
-    Ok(HttpStatus {
-        code,
+    let request = builder
+        .body(Full::new(Bytes::copy_from_slice(body)))
+        .context("build http request")?;
+    let mut client = http.clone();
+    let response = Service::call(&mut client, request)
+        .await
+        .context("http through Tor")?;
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.as_str().to_owned(),
+                String::from_utf8_lossy(value.as_bytes()).into_owned(),
+            )
+        })
+        .collect();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .context("http body")?
+        .to_bytes()
+        .to_vec();
+    Ok(TorHttpResponse {
+        status,
         headers,
         body,
     })
 }
 
-fn decode_chunks(mut rest: &[u8]) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    loop {
-        let line_end = rest
-            .windows(2)
-            .position(|w| w == b"\r\n")
-            .context("chunk size")?;
-        let size = std::str::from_utf8(&rest[..line_end]).context("chunk size")?;
-        let size = usize::from_str_radix(size.trim().split(';').next().unwrap_or("0"), 16)
-            .context("chunk size")?;
-        rest = &rest[line_end + 2..];
-        if size == 0 {
-            break;
-        }
-        if rest.len() < size + 2 {
-            bail!("short chunk");
-        }
-        out.extend_from_slice(&rest[..size]);
-        rest = &rest[size + 2..];
+/// Dial `(host, port)` through Arti. hyper-rustls wraps the stream in TLS for `https`.
+#[derive(Clone)]
+struct TorConnector(TorClient<PreferredRuntime>);
+
+type TorConnectFut =
+    Pin<Box<dyn Future<Output = Result<TokioIo<TorStream>, anyhow::Error>> + Send>>;
+
+impl Service<hyper::Uri> for TorConnector {
+    type Response = TokioIo<TorStream>;
+    type Error = anyhow::Error;
+    type Future = TorConnectFut;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
-    Ok(out)
+
+    fn call(&mut self, uri: hyper::Uri) -> Self::Future {
+        let client = self.0.clone();
+        Box::pin(async move {
+            let host = uri.host().context("url host")?.to_owned();
+            let port = uri
+                .port_u16()
+                .unwrap_or(if uri.scheme_str() == Some("https") {
+                    443
+                } else {
+                    80
+                });
+            let stream = client
+                .connect((host.as_str(), port))
+                .await
+                .with_context(|| format!("Tor connect {host}:{port}"))?;
+            Ok(TokioIo::new(TorStream(stream)))
+        })
+    }
 }
 
-fn reject_local(url: &Url) -> Result<()> {
-    let host = url.host_str().unwrap_or("");
-    let local = host.eq_ignore_ascii_case("localhost")
-        || host == "127.0.0.1"
-        || host == "::1"
-        || host.to_ascii_lowercase().ends_with(".local")
-        || host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host.starts_with("172.16.")
-        || host.is_empty();
-    if local {
-        bail!("{host} is not reachable through a Tor exit");
+/// `DataStream` does not implement hyper's [`Connection`](Connection) metadata trait.
+struct TorStream(DataStream);
+
+impl Connection for TorStream {
+    fn connected(&self) -> Connected {
+        Connected::new()
     }
-    Ok(())
+}
+
+impl tokio::io::AsyncRead for TorStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+}
+
+impl tokio::io::AsyncWrite for TorStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn localhost_is_rejected() {
-        let url: Url = "http://127.0.0.1:8545".parse().unwrap();
-        assert!(reject_local(&url).is_err());
-    }
-
-    #[test]
-    fn parses_content_length() {
-        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhelloTRAIL";
-        let status = parse_http(raw).unwrap();
-        assert_eq!(status.code, 200);
-        assert_eq!(status.body, b"hello");
-    }
-
-    #[test]
-    fn shared_and_isolated_clients_build_for_remote_url() {
-        // Construction does not need a live Tor bootstrap: we only check reject_local
-        // via the public builders once a TorRpc exists. Without bootstrap, assert URL
-        // policy on reject_local alone (method-name isolation is gone).
-        let remote: Url = "https://ethereum.publicnode.com".parse().unwrap();
-        assert!(reject_local(&remote).is_ok());
-        let local: Url = "http://localhost:8545".parse().unwrap();
-        assert!(reject_local(&local).is_err());
-    }
-
     #[tokio::test]
     #[ignore = "bootstraps Tor and times shared vs isolated JSON-RPC calls"]
     async fn circuit_session_latency() {
         let tor = TorRpc::connect().await.unwrap();
         let url: Url = "https://ethereum.publicnode.com".parse().unwrap();
-        let shared = tor.shared_provider(url.clone()).unwrap();
+        let shared = tor.shared_provider(url.clone());
         let started = std::time::Instant::now();
         let head = alloy::providers::Provider::get_block_number(&shared)
             .await
