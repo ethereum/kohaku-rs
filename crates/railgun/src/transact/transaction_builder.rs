@@ -19,7 +19,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::{Address, U256};
+use alloy::primitives::{Address, B256, U256};
 use rand::{CryptoRng, RngExt};
 use thiserror::Error;
 use tracing::info;
@@ -41,7 +41,7 @@ use crate::{
         unshield::UnshieldNote,
         utxo::UtxoNote,
     },
-    transact::proved_transaction::ProvedOperation,
+    transact::{proved_transaction::ProvedOperation, relay_adapt::RelayAction},
 };
 
 /// Basic builder for constructing railgun transactions. Transactions are sets
@@ -57,6 +57,9 @@ pub struct TransactionBuilder {
 
     adapt_contract: Option<Address>,
     adapt_params: Option<[u8; 32]>,
+    /// Calls RelayAdapt runs after the transaction. Sets the adapt contract and derives the
+    /// adapt params from the built operations, see [`Self::relay`].
+    relay: Option<RelayAction>,
 }
 
 #[derive(Debug, Error)]
@@ -74,6 +77,8 @@ pub enum TransactionBuilderError {
         asset: AssetId,
         value: u128,
     },
+    #[error("adapt() and relay() both bind the adapt contract; use one of them")]
+    ConflictingAdapt,
     #[error("Encryption error: {0}")]
     Encryption(#[from] EncryptError),
     #[error("Prover error: {0}")]
@@ -109,6 +114,7 @@ impl TransactionBuilder {
             unshields: HashSet::new(),
             adapt_contract: None,
             adapt_params: None,
+            relay: None,
         }
     }
 }
@@ -167,6 +173,21 @@ impl TransactionBuilder {
         self
     }
 
+    /// Runs `action` through RelayAdapt after the transaction. The adapt contract becomes the
+    /// RelayAdapt contract and the adapt params are derived from the operations' nullifiers at
+    /// build time, so they are always consistent with what is proved. The transaction must then
+    /// be submitted as `RelayAdapt.relay(transactions, actionData)`, which
+    /// [`super::ProvedTx::relay`] encodes.
+    pub fn relay(mut self, action: RelayAction) -> Self {
+        self.relay = Some(action);
+        self
+    }
+
+    /// The RelayAdapt action set with [`Self::relay`], if any.
+    pub fn relay_action(&self) -> Option<&RelayAction> {
+        self.relay.as_ref()
+    }
+
     /// Builds and proves a set of operations for railgun, without packaging into a transaction.
     pub(crate) async fn build(
         &self,
@@ -176,17 +197,44 @@ impl TransactionBuilder {
         utxo_trees: &BTreeMap<u32, UtxoMerkleTree>,
         rng: &mut impl CryptoRng,
     ) -> Result<Vec<ProvedOperation>, TransactionBuilderError> {
+        let operations = self.operations(in_notes, rng)?;
+        let proved = prove_operations(prover, utxo_trees, chain_id, &operations, rng).await?;
+        Ok(proved)
+    }
+
+    fn operations(
+        &self,
+        in_notes: &[UtxoNote],
+        rng: &mut impl CryptoRng,
+    ) -> Result<Vec<Operation>, TransactionBuilderError> {
         let groups = self.group_intents();
         let mut operations = build_groups(in_notes, groups, rng)?;
 
+        let (adapt_contract, adapt_params) = match &self.relay {
+            Some(action) => {
+                if self.adapt_contract.is_some() || self.adapt_params.is_some() {
+                    return Err(TransactionBuilderError::ConflictingAdapt);
+                }
+                // Nullifiers are fixed once the input notes are chosen, before proving, so the
+                // params bound here are exactly what RelayAdapt recomputes on-chain.
+                let nullifiers: Vec<Vec<B256>> = operations
+                    .iter()
+                    .map(|op| op.in_notes().iter().map(|n| n.nullifier.into()).collect())
+                    .collect();
+                (
+                    Some(action.relay_adapt),
+                    Some(action.adapt_params(&nullifiers)),
+                )
+            }
+            None => (self.adapt_contract, self.adapt_params),
+        };
+
         for op in &mut operations {
-            op.adapt_contract = self.adapt_contract;
-            op.adapt_params = self.adapt_params;
+            op.adapt_contract = adapt_contract;
+            op.adapt_params = adapt_params;
             op.verify()?;
         }
-
-        let proved = prove_operations(prover, utxo_trees, chain_id, &operations, rng).await?;
-        Ok(proved)
+        Ok(operations)
     }
 
     /// Group intents with the following rules:
@@ -428,8 +476,9 @@ async fn prove_operation(
         .map(|n| n.encrypt(rng))
         .collect::<Result<_, _>>()?;
 
-    //? min_gas_price, adapt_contract, and adapt_input are all vestigial fields for
-    //? railgun relayers.
+    //? min_gas_price is a vestigial field for railgun relayers. adapt_contract and adapt_params
+    //? are bound into the proof and checked by the Railgun contract
+    //? (`adaptContract == msg.sender`), see `relay_adapt`.
     let bound_params = abis::railgun::BoundParams::new(
         utxo_tree.number() as u16,
         0,
@@ -469,4 +518,75 @@ async fn prove_operation(
     );
 
     Ok(ProvedOperation::new(operation.clone(), inputs, transaction))
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::address;
+    use rand::random;
+
+    use super::*;
+    use crate::{account::signer::PrivateKeySigner, poi::types::BlindedCommitmentType};
+
+    const WETH: AssetId = AssetId::Erc20(address!("0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"));
+
+    fn note(
+        signer: &Arc<PrivateKeySigner>,
+        tree: u32,
+        leaf: u32,
+        asset: AssetId,
+        value: u128,
+    ) -> UtxoNote {
+        UtxoNote::new(
+            tree,
+            leaf,
+            signer.clone(),
+            asset,
+            value,
+            random(),
+            "",
+            BlindedCommitmentType::Shield,
+        )
+    }
+
+    /// RelayAdapt: the adapt params are derived from the nullifiers of the operations actually
+    /// built, and bound into each of them, so the submitter cannot change the calls.
+    #[test]
+    fn relay_binds_the_action_to_the_built_operations() {
+        let me = PrivateKeySigner::new_evm(random(), random(), 1);
+        let other = PrivateKeySigner::new_evm(random(), random(), 1);
+        let relay_adapt = address!("0x7e3d929EbD5bDC84d02Bd3205c777578f33A214D");
+        let recipient = address!("0x000000000000000000000000000000000000bEEF");
+        let notes = [note(&me, 0, 0, WETH, 100), note(&me, 0, 1, WETH, 50)];
+        let action = RelayAction::unshield_base_token(relay_adapt, recipient, &mut rand::rng());
+
+        let builder = TransactionBuilder::new()
+            .unshield(me.clone(), relay_adapt, WETH, 120)
+            .unwrap()
+            .transfer(me.clone(), other.address(), WETH, 5, "")
+            .relay(action.clone());
+        let ops = builder.operations(&notes, &mut rand::rng()).unwrap();
+
+        let nullifiers: Vec<Vec<B256>> = ops
+            .iter()
+            .map(|op| op.in_notes().iter().map(|n| n.nullifier.into()).collect())
+            .collect();
+        assert_eq!(nullifiers[0].len(), 2);
+        for op in &ops {
+            assert_eq!(op.adapt_contract, Some(relay_adapt));
+            assert_eq!(op.adapt_params, Some(action.adapt_params(&nullifiers)));
+        }
+
+        // adapt() and relay() would bind two different contracts.
+        let both = TransactionBuilder::new()
+            .unshield(me.clone(), relay_adapt, WETH, 10)
+            .unwrap()
+            .adapt(relay_adapt, [0u8; 32])
+            .relay(action)
+            .operations(&notes, &mut rand::rng());
+        assert!(matches!(
+            both,
+            Err(TransactionBuilderError::ConflictingAdapt)
+        ));
+    }
 }

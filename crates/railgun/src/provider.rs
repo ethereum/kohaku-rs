@@ -29,7 +29,7 @@ use crate::{
         types::{BlindedCommitmentType, PoiStatus},
     },
     transact::{
-        ShieldBuilder, TransactionBuilder, TransactionBuilderError,
+        RelayAction, ShieldBuilder, TransactionBuilder, TransactionBuilderError,
         proved_transaction::{ProvedOperation, ProvedTx},
     },
 };
@@ -206,13 +206,21 @@ impl RailgunProvider {
         builder: TransactionBuilder,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvedTx, RailgunProviderError> {
+        let relay = builder.relay_action().cloned();
         let operations = self.build_operation(builder, rng).await?;
         if let Some(poi_provider) = &mut self.poi_provider {
             poi_provider.register_ops(&operations).await?;
         }
 
-        let proved_tx = ProvedTx::new(self.chain.railgun_smart_wallet, operations);
-        Ok(proved_tx)
+        Ok(self.package(operations, relay))
+    }
+
+    /// `transact` on the smart wallet, or `relay` on RelayAdapt when the builder asked for it.
+    fn package(&self, operations: Vec<ProvedOperation>, relay: Option<RelayAction>) -> ProvedTx {
+        match relay {
+            Some(action) => ProvedTx::relay(operations, action),
+            None => ProvedTx::new(self.chain.railgun_smart_wallet, operations),
+        }
     }
 
     /// Build a transaction builder into a broadcastable 7702 UserOperation.
