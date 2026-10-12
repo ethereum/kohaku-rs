@@ -92,6 +92,9 @@ impl TorRpc {
         let client = TorClient::create_bootstrapped(TorClientConfig::default())
             .await
             .context("bootstrap Tor")?;
+        // `ClientConfig::builder` panics unless a process-wide provider is installed.
+        // Arti may already have installed ring; a second attempt returns `Err`.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let http = pool(client.clone());
         Ok(Self { client, http })
     }
@@ -99,7 +102,7 @@ impl TorRpc {
     /// Long-lived JSON-RPC client that reuses the shared Tor client (and its circuits).
     #[must_use]
     pub fn shared_rpc_client(&self, url: Url) -> RpcClient {
-        rpc_client(self.http.clone(), url)
+        RpcClient::new(transport(self.http.clone(), url), false)
     }
 
     /// JSON-RPC client pinned to a fresh [`TorClient::isolated_client`].
@@ -107,7 +110,7 @@ impl TorRpc {
     /// All requests on this client share one isolation token / circuit family.
     #[must_use]
     pub fn isolated_rpc_client(&self, url: Url) -> RpcClient {
-        rpc_client(pool(self.client.isolated_client()), url)
+        RpcClient::new(transport(pool(self.client.isolated_client()), url), false)
     }
 
     /// Run `f` with an [`isolated_rpc_client`](Self::isolated_rpc_client), then drop it.
@@ -198,7 +201,7 @@ impl TorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        send(self.http.clone(), url, packet).await
+        Service::call(&mut transport(self.http.clone(), url), packet).await
     }
 
     /// Send a JSON-RPC packet on a fresh [`TorClient::isolated_client`].
@@ -212,7 +215,11 @@ impl TorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        send(pool(self.client.isolated_client()), url, packet).await
+        Service::call(
+            &mut transport(pool(self.client.isolated_client()), url),
+            packet,
+        )
+        .await
     }
 }
 
@@ -220,9 +227,6 @@ type Pool =
     hyper_util::client::legacy::Client<hyper_rustls::HttpsConnector<TorConnector>, Full<Bytes>>;
 
 fn pool(client: TorClient<PreferredRuntime>) -> Pool {
-    // `ClientConfig::builder` panics unless a process-wide provider is installed.
-    // Arti may already have installed ring; a second attempt returns `Err`.
-    let _ = rustls::crypto::ring::default_provider().install_default();
     let https = HttpsConnectorBuilder::new()
         .with_webpki_roots()
         .https_or_http()
@@ -231,20 +235,8 @@ fn pool(client: TorClient<PreferredRuntime>) -> Pool {
     hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(https)
 }
 
-fn rpc_client(http: Pool, url: Url) -> RpcClient {
-    RpcClient::new(
-        Http::with_client(HyperClient::with_service(http), url),
-        false,
-    )
-}
-
-async fn send(
-    http: Pool,
-    url: Url,
-    packet: RequestPacket,
-) -> Result<ResponsePacket, TransportError> {
-    let mut transport = Http::with_client(HyperClient::with_service(http), url);
-    Service::call(&mut transport, packet).await
+fn transport(pool: Pool, url: Url) -> Http<HyperClient<Full<Bytes>, Pool>> {
+    Http::with_client(HyperClient::with_service(pool), url)
 }
 
 async fn exchange(
