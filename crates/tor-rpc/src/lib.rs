@@ -1,9 +1,22 @@
-//! Alloy JSON-RPC through Arti.
+//! Alloy JSON-RPC through Arti (Tor network)
 //!
-//! Callers choose circuit policy explicitly:
-//! - [`TorRpc::shared_rpc_client`] — reuse the bootstrapped client (pool sync, cache GET).
-//! - [`TorRpc::isolated_rpc_client`] / [`TorRpc::with_isolated`] — one
-//!   [`TorClient::isolated_client`] for a short-lived session (all RPCs about one address).
+//! [`TorRpc::connect`] bootstraps one client. Cloning [`TorRpc`] shares it.
+//! Requests on one [`TorClient`] handle may share circuits with each other.
+//! A new [`TorClient::isolated_client`] is a new group: its streams do not share
+//! circuits with the parent or with any other isolated client. It is not one
+//! circuit per RPC. Call `isolated_client` again for the next unlinkable group.
+//!
+//! - [`TorRpc::shared_rpc_client`], [`TorRpc::shared_provider`], [`TorRpc::send_shared`],
+//!   [`TorRpc::get`], [`TorRpc::post`] — the bootstrapped client. Keep one for traffic
+//!   that is safe to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST
+//!   basically any request that does not contain privacy-sensitive data e.g. specific user accounts
+//! - [`TorRpc::isolated_rpc_client`], [`TorRpc::isolated_provider`] — one fresh
+//!   `isolated_client`, reused for every RPC on that client. Hold it for a session
+//!   (the calls about one address). Construct another when the next session must
+//!   not share circuits with it.
+//! - [`TorRpc::with_isolated`] — that same client for one closure, then drop it.
+//! - [`TorRpc::send_isolated`] — one JSON-RPC packet on a new `isolated_client`, then
+//!   drop it. Calls packed into that packet share the group. The next call is a new group.
 
 use std::{
     fmt::Write as _,
@@ -124,9 +137,9 @@ impl TorRpc {
         self.request_shared(url, "GET", &[], &[]).await
     }
 
-    /// `POST url` with `body` over the shared Tor client.
+    /// Arbitrary `POST` request with `body` over the shared Tor client.
     ///
-    /// Used by PIR backends that must reach a PIR HTTP API without clearnet.
+    /// Used by e.g. PIR that must reach a PIR HTTP API without clearnet.
     ///
     /// # Errors
     /// Returns when the upload fails or the host is local.
