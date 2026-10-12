@@ -1,10 +1,41 @@
 /// Which PIR server / key space an op targets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PirLane {
-    /// Account table (`eth_getBalance` / `eth_getTransactionCount`).
+    /// Account table (`eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`).
     Account,
     /// Contract storage table (ERC-20 `balanceOf` for PIR tokens).
     TokenStorage,
+    /// Primary names (ENS / GNS / WNS), keyed by address.
+    Names,
+}
+
+/// Where one JSON-RPC call was answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallPath {
+    /// Account, token, or names PIR.
+    Pir,
+    /// Public Ethereum JSON-RPC.
+    Fallback,
+    /// Computed locally (`computeId`). No server.
+    Local,
+}
+
+/// One call and the path that actually answered it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallTrace {
+    /// JSON-RPC method (`eth_call`, `eth_getLogs`, …).
+    pub method: String,
+    /// Final path, after a too-long name is replayed to fallback.
+    pub path: CallPath,
+}
+
+/// PIR bytes turned into a JSON-RPC result, or a signal to use fallback RPC.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Decoded {
+    /// JSON-RPC result value.
+    Value(serde_json::Value),
+    /// The name exists but did not fit in the table. Send the original call to RPC.
+    NeedsFallback,
 }
 
 /// How to decode PIR value bytes into a JSON-RPC result.
@@ -14,9 +45,13 @@ pub enum PirDecode {
     AccountBalance,
     /// 40-byte account blob → nonce quantity hex.
     AccountNonce,
-    /// Reserved: account blob → code (not served by PIR yet).
-    #[allow(dead_code)]
+    /// 40-byte account blob → `eth_getCode` (`0xef0100 ‖ delegate`, or `0x`).
     AccountCode,
+    /// Names-table value → one system's reverse record.
+    NameReverse {
+        /// ENS, GNS, or WNS.
+        system: crate::names::NameSystem,
+    },
     /// 40-byte storage cell → ABI `uint256` (optional top-bit clear).
     TokenBalance {
         /// Clear bit 255 of the storage word (USDC blacklist).
@@ -45,10 +80,12 @@ pub struct PirOp {
 }
 
 /// Result of classifying one JSON-RPC method against the PIR allowlist.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PlannedOp {
     /// Answer via PIR lookup.
     Pir(PirOp),
     /// Forward to the fallback Ethereum JSON-RPC endpoint.
     Fallback,
+    /// Answer locally, with no PIR lookup and no RPC.
+    Local(serde_json::Value),
 }

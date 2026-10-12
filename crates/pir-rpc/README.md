@@ -5,13 +5,17 @@ methods is answered via a [`LookupBackend`] (private PIR lookup). Everything
 else is forwarded to a normal Ethereum node.
 
 ```text
-get_balance / get_transaction_count
-        → account LookupBackend (inspire accounts table)
+get_balance / get_transaction_count / get_code
+        → account LookupBackend (one lookup; delegate ‖ balance ‖ nonce)
 balanceOf(USDC|USDT|DAI|WETH)
         → token LookupBackend (inspire storage table), if configured
+primary name reverse (ENS / GNS / WNS)
+        → names LookupBackend, if configured
+computeId
+        → local namehash
 matched eth_call (manifest)
         → account LookupBackend
-everything else (eth_getLogs, eth_getCode, other eth_call, …)
+everything else (eth_getLogs, other eth_call, …)
         → fallback JSON-RPC
 ```
 

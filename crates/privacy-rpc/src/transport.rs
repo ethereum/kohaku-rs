@@ -16,8 +16,8 @@ use alloy::{
 };
 use futures::future::try_join_all;
 use kohaku_pir_rpc::{
-    PIR_TOKENS, PirLane, PirOp, PirProviderError, PirRouter, PlannedOp, decode_pir, dedupe_keys,
-    token_balance_op,
+    CallPath, CallTrace, Decoded, PIR_TOKENS, PirLane, PirOp, PirProviderError, PirRouter,
+    PlannedOp, dedupe_keys, token_balance_op,
 };
 use serde_json::{Value, value::RawValue};
 use tower::Service;
@@ -38,6 +38,8 @@ pub struct PrivacyTransport {
     accounts_lookup: Option<Arc<dyn AsyncLookupBackend>>,
     /// Token-storage PIR (optional; without it, token `balanceOf` falls back).
     tokens_lookup: Option<Arc<dyn AsyncLookupBackend>>,
+    /// Primary-name PIR (optional; without it, name `eth_call`s fall back).
+    names_lookup: Option<Arc<dyn AsyncLookupBackend>>,
     tor: Arc<dyn TorRpcBackend>,
     rpc_url: Url,
     isolation: Arc<dyn IsolationPolicy>,
@@ -47,10 +49,12 @@ pub struct PrivacyTransport {
 impl PrivacyTransport {
     /// Construct from already-wired parts.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         router: Arc<PirRouter>,
         accounts_lookup: Option<Arc<dyn AsyncLookupBackend>>,
         tokens_lookup: Option<Arc<dyn AsyncLookupBackend>>,
+        names_lookup: Option<Arc<dyn AsyncLookupBackend>>,
         tor: Arc<dyn TorRpcBackend>,
         rpc_url: Url,
         isolation: Arc<dyn IsolationPolicy>,
@@ -60,6 +64,7 @@ impl PrivacyTransport {
             router,
             accounts_lookup,
             tokens_lookup,
+            names_lookup,
             tor,
             rpc_url,
             isolation,
@@ -67,7 +72,9 @@ impl PrivacyTransport {
         }
     }
 
-    /// Backward-compatible constructor: one lookup for all PIR lanes.
+    /// Backward-compatible constructor: one lookup for account and token lanes.
+    ///
+    /// Name calls stay on fallback RPC.
     #[must_use]
     pub fn new_single_lookup(
         router: Arc<PirRouter>,
@@ -81,6 +88,7 @@ impl PrivacyTransport {
             router,
             async_lookup.clone(),
             async_lookup,
+            None,
             tor,
             rpc_url,
             isolation,
@@ -94,30 +102,47 @@ impl PrivacyTransport {
         &self.router
     }
 
-    async fn handle(self, req: RequestPacket) -> Result<ResponsePacket, TransportError> {
+    /// Dispatch a packet and report the path that answered each call.
+    ///
+    /// # Errors
+    ///
+    /// Returns when PIR or fallback RPC fails.
+    pub async fn call_logged(
+        &self,
+        req: RequestPacket,
+    ) -> Result<(ResponsePacket, Vec<CallTrace>), TransportError> {
+        self.clone().handle(req).await
+    }
+
+    async fn handle(
+        self,
+        req: RequestPacket,
+    ) -> Result<(ResponsePacket, Vec<CallTrace>), TransportError> {
         let reqs: Vec<SerializedRequest> = match req {
             RequestPacket::Single(r) => vec![r],
             RequestPacket::Batch(rs) => rs,
         };
-        let responses = self.dispatch(reqs).await?;
-        if responses.len() == 1 {
-            Ok(ResponsePacket::Single(
-                responses.into_iter().next().expect("len checked"),
-            ))
+        let (responses, traces) = self.dispatch(reqs).await?;
+        let packet = if responses.len() == 1 {
+            ResponsePacket::Single(responses.into_iter().next().expect("len checked"))
         } else {
-            Ok(ResponsePacket::Batch(responses))
-        }
+            ResponsePacket::Batch(responses)
+        };
+        Ok((packet, traces))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn dispatch(
         &self,
         reqs: Vec<SerializedRequest>,
-    ) -> Result<Vec<Response>, TransportError> {
+    ) -> Result<(Vec<Response>, Vec<CallTrace>), TransportError> {
         let n = reqs.len();
-        let mut pir_jobs: Vec<(usize, Id, PirOp)> = Vec::new();
+        let mut pir_jobs: Vec<PendingPir> = Vec::new();
         let mut fallback_jobs: Vec<FallbackJob> = Vec::new();
         let mut early: HashMap<usize, Response> = HashMap::new();
         let mut meta: HashMap<usize, (String, Value)> = HashMap::new();
+        let mut paths = vec![CallPath::Fallback; n];
+        let mut methods = vec![String::new(); n];
         let pir_enabled = self.accounts_lookup.is_some();
 
         for (idx, req) in reqs.into_iter().enumerate() {
@@ -129,6 +154,7 @@ impl PrivacyTransport {
                 .map_err(TransportErrorKind::custom)?
                 .unwrap_or(Value::Array(Vec::new()));
             let id = req.id().clone();
+            methods[idx] = method.clone();
             meta.insert(idx, (method.clone(), params.clone()));
             if !pir_enabled {
                 fallback_jobs.push(FallbackJob {
@@ -140,18 +166,28 @@ impl PrivacyTransport {
                 continue;
             }
             match self.router.plan_request(&method, &params) {
+                Ok(PlannedOp::Local(value)) => {
+                    paths[idx] = CallPath::Local;
+                    early.insert(idx, success_response(id, &value)?);
+                }
+                Ok(PlannedOp::Pir(op)) if lane_unavailable(&op, self) => {
+                    fallback_jobs.push(FallbackJob {
+                        idx,
+                        req,
+                        method,
+                        params,
+                    });
+                }
                 Ok(PlannedOp::Pir(op)) => {
-                    // Token PIR without a tokens backend → fallback RPC.
-                    if op.lane == PirLane::TokenStorage && self.tokens_lookup.is_none() {
-                        fallback_jobs.push(FallbackJob {
-                            idx,
-                            req,
-                            method,
-                            params,
-                        });
-                    } else {
-                        pir_jobs.push((idx, id, op));
-                    }
+                    paths[idx] = CallPath::Pir;
+                    pir_jobs.push(PendingPir {
+                        idx,
+                        id,
+                        op,
+                        method,
+                        params,
+                        req,
+                    });
                 }
                 Ok(PlannedOp::Fallback) => {
                     fallback_jobs.push(FallbackJob {
@@ -167,20 +203,33 @@ impl PrivacyTransport {
             }
         }
 
-        // Privacy pad: any holder with ≥1 of the four tokens → look up all four.
-        let pad_ops = pad_token_lookups(&pir_jobs);
+        let pir_for_pad: Vec<(usize, Id, PirOp)> = pir_jobs
+            .iter()
+            .map(|job| (job.idx, job.id.clone(), job.op.clone()))
+            .collect();
+        let pad_ops = pad_token_lookups(&pir_for_pad);
 
-        let (pir_results, rpc_results) = tokio::try_join!(
+        let (pir_results, mut rpc_results) = tokio::try_join!(
             self.run_pir(&pir_jobs, &pad_ops),
             self.run_fallback_rpc(fallback_jobs)
         )?;
 
+        let mut replay = Vec::new();
         let mut slots: Vec<Option<Response>> = (0..n).map(|_| None).collect();
         for (idx, resp) in early {
             slots[idx] = Some(resp);
         }
-        for (idx, resp) in pir_results {
-            slots[idx] = Some(resp);
+        for hit in pir_results {
+            match hit {
+                PirHit::Answered { idx, response } => slots[idx] = Some(response),
+                PirHit::Replay(job) => {
+                    paths[job.idx] = CallPath::Fallback;
+                    replay.push(job);
+                }
+            }
+        }
+        if !replay.is_empty() {
+            rpc_results.extend(self.run_fallback_rpc(replay).await?);
         }
         for (idx, resp) in rpc_results {
             slots[idx] = Some(resp);
@@ -221,26 +270,32 @@ impl PrivacyTransport {
             }
         }
 
-        Ok(out)
+        let traces = methods
+            .into_iter()
+            .zip(paths)
+            .map(|(method, path)| CallTrace { method, path })
+            .collect();
+        Ok((out, traces))
     }
 
     async fn run_pir(
         &self,
-        jobs: &[(usize, Id, PirOp)],
+        jobs: &[PendingPir],
         pad_ops: &[PirOp],
-    ) -> Result<Vec<(usize, Response)>, TransportError> {
+    ) -> Result<Vec<PirHit>, TransportError> {
         if jobs.is_empty() && pad_ops.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Physical lookups = client jobs + padding (padding has no response index).
-        let mut all_ops: Vec<PirOp> = jobs.iter().map(|(_, _, op)| op.clone()).collect();
+        let mut all_ops: Vec<PirOp> = jobs.iter().map(|job| job.op.clone()).collect();
         all_ops.extend(pad_ops.iter().cloned());
 
         let mut account_ops = Vec::new();
         let mut token_ops = Vec::new();
-        let mut account_job_map = Vec::new(); // all_ops index
+        let mut name_ops = Vec::new();
+        let mut account_job_map = Vec::new();
         let mut token_job_map = Vec::new();
+        let mut name_job_map = Vec::new();
 
         for (i, op) in all_ops.iter().enumerate() {
             match op.lane {
@@ -252,12 +307,17 @@ impl PrivacyTransport {
                     token_job_map.push(i);
                     token_ops.push(op.clone());
                 }
+                PirLane::Names => {
+                    name_job_map.push(i);
+                    name_ops.push(op.clone());
+                }
             }
         }
 
-        let (account_values, token_values) = tokio::try_join!(
+        let (account_values, token_values, name_values) = tokio::try_join!(
             self.lookup_lane(self.accounts_lookup.as_ref(), &account_ops, "account"),
             self.lookup_lane(self.tokens_lookup.as_ref(), &token_ops, "token"),
+            self.lookup_lane(self.names_lookup.as_ref(), &name_ops, "names"),
         )?;
 
         let mut raw_by_all: Vec<Option<Vec<u8>>> = vec![None; all_ops.len()];
@@ -267,9 +327,10 @@ impl PrivacyTransport {
         for (j, &i) in token_job_map.iter().enumerate() {
             raw_by_all[i] = token_values[j].clone();
         }
+        for (j, &i) in name_job_map.iter().enumerate() {
+            raw_by_all[i] = name_values[j].clone();
+        }
 
-        // Only emit responses for client jobs (first `jobs.len()` entries of all_ops).
-        // PIR `None` is proven non-membership → decode as zero (never silent RPC fallback).
         let present = raw_by_all.iter().filter(|v| v.is_some()).count();
         let absent = raw_by_all.len() - present;
         if !all_ops.is_empty() {
@@ -283,22 +344,34 @@ impl PrivacyTransport {
         }
 
         let mut out = Vec::with_capacity(jobs.len());
-        for (job_i, (idx, id, op)) in jobs.iter().enumerate() {
-            let raw = raw_by_all[job_i].clone();
+        for (job_i, job) in jobs.iter().enumerate() {
+            let raw = raw_by_all[job_i].as_deref();
             if raw.is_none() {
                 debug!(
-                    lane = ?op.lane,
-                    decode = ?op.decode,
+                    lane = ?job.op.lane,
+                    decode = ?job.op.decode,
                     "PIR miss decoded as zero"
                 );
             }
-            out.push((
-                *idx,
-                match decode_pir(op, raw) {
-                    Ok(value) => success_response(id.clone(), &value)?,
-                    Err(e) => failure_response(id.clone(), &e),
-                },
-            ));
+            match self.router.decode_op(&job.op, raw) {
+                Ok(Decoded::Value(value)) => out.push(PirHit::Answered {
+                    idx: job.idx,
+                    response: success_response(job.id.clone(), &value)?,
+                }),
+                Ok(Decoded::NeedsFallback) => {
+                    debug!(method = %job.method, "name did not fit; fallback RPC");
+                    out.push(PirHit::Replay(FallbackJob {
+                        idx: job.idx,
+                        req: job.req.clone(),
+                        method: job.method.clone(),
+                        params: job.params.clone(),
+                    }));
+                }
+                Err(e) => out.push(PirHit::Answered {
+                    idx: job.idx,
+                    response: failure_response(job.id.clone(), &e),
+                }),
+            }
         }
         Ok(out)
     }
@@ -351,7 +424,11 @@ impl PrivacyTransport {
             async move {
                 let count = items.len();
                 let (packet, packed) = pack_circuit_group(items)?;
-                debug!(?choice, jobs = count, "fallback RPC Tor lane (multicall-packed)");
+                debug!(
+                    ?choice,
+                    jobs = count,
+                    "fallback RPC Tor lane (multicall-packed)"
+                );
                 let resp_packet = match choice {
                     CircuitChoice::Shared => tor.send_shared(url, packet).await?,
                     CircuitChoice::Isolated { .. } => tor.send_isolated(url, packet).await?,
@@ -362,6 +439,28 @@ impl PrivacyTransport {
 
         let nested = try_join_all(futs).await?;
         Ok(nested.into_iter().flatten().collect())
+    }
+}
+
+struct PendingPir {
+    idx: usize,
+    id: Id,
+    op: PirOp,
+    method: String,
+    params: Value,
+    req: SerializedRequest,
+}
+
+enum PirHit {
+    Answered { idx: usize, response: Response },
+    Replay(FallbackJob),
+}
+
+fn lane_unavailable(op: &PirOp, transport: &PrivacyTransport) -> bool {
+    match op.lane {
+        PirLane::TokenStorage => transport.tokens_lookup.is_none(),
+        PirLane::Names => transport.names_lookup.is_none(),
+        PirLane::Account => false,
     }
 }
 
@@ -422,7 +521,8 @@ impl Service<RequestPacket> for PrivacyTransport {
     }
 
     fn call(&mut self, req: RequestPacket) -> Self::Future {
-        Box::pin(self.clone().handle(req))
+        let transport = self.clone();
+        Box::pin(async move { transport.handle(req).await.map(|(packet, _)| packet) })
     }
 }
 

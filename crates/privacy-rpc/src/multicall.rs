@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use alloy::transports::{TransportError, TransportErrorKind};
 use alloy::{
     primitives::{Address, Bytes, U256, address, hex},
     rpc::json_rpc::{
@@ -12,7 +13,6 @@ use alloy::{
     sol_types::SolCall,
 };
 use serde_json::{Value, json};
-use alloy::transports::{TransportError, TransportErrorKind};
 
 use crate::PrivacyError;
 
@@ -83,9 +83,7 @@ pub fn pack_circuit_group(
                 calls.push(Multicall3::Call3 {
                     target: MULTICALL3,
                     allowFailure: true,
-                    callData: Bytes::from(
-                        Multicall3::getEthBalanceCall { addr }.abi_encode(),
-                    ),
+                    callData: Bytes::from(Multicall3::getEthBalanceCall { addr }.abi_encode()),
                 });
             }
             None => siblings.push(WirePart::Sibling {
@@ -131,10 +129,7 @@ pub fn pack_circuit_group(
         RequestPacket::Batch(wire)
     };
 
-    Ok((
-        packet,
-        PackedGroup { parts },
-    ))
+    Ok((packet, PackedGroup { parts }))
 }
 
 /// Mapping from a Tor response packet back to original job indices.
@@ -153,11 +148,13 @@ impl PackedGroup {
             ResponsePacket::Batch(rs) => rs,
         };
         if responses.len() != self.parts.len() {
-            return Err(TransportErrorKind::custom(PrivacyError::Transport(format!(
-                "RPC returned {} responses for {} packed parts",
-                responses.len(),
-                self.parts.len()
-            ))));
+            return Err(TransportErrorKind::custom(PrivacyError::Transport(
+                format!(
+                    "RPC returned {} responses for {} packed parts",
+                    responses.len(),
+                    self.parts.len()
+                ),
+            )));
         }
 
         let mut out = Vec::new();
@@ -246,11 +243,13 @@ fn unpack_multicall(
                 )))
             })?;
             if decoded.len() != indices.len() {
-                return Err(TransportErrorKind::custom(PrivacyError::Transport(format!(
-                    "multicall returned {} results for {} calls",
-                    decoded.len(),
-                    indices.len()
-                ))));
+                return Err(TransportErrorKind::custom(PrivacyError::Transport(
+                    format!(
+                        "multicall returned {} results for {} calls",
+                        decoded.len(),
+                        indices.len()
+                    ),
+                )));
             }
             let mut out = Vec::with_capacity(indices.len());
             for (i, result) in decoded.into_iter().enumerate() {
@@ -303,13 +302,19 @@ fn quantity_from_word(word: &[u8]) -> String {
 }
 
 fn parse_address(s: &str) -> Option<[u8; 20]> {
-    let raw = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let raw = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     let bytes = hex::decode(raw).ok()?;
     bytes.try_into().ok()
 }
 
 fn parse_bytes(s: &str) -> Option<Vec<u8>> {
-    let raw = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let raw = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     if raw.is_empty() {
         return Some(Vec::new());
     }

@@ -1,6 +1,6 @@
-use async_trait::async_trait;
 use alloy::rpc::json_rpc::{RequestPacket, ResponsePacket};
 use alloy::transports::TransportError;
+use async_trait::async_trait;
 use url::Url;
 
 use kohaku_tor_rpc::TorRpc;

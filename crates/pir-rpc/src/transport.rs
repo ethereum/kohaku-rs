@@ -11,7 +11,7 @@ use alloy::{
 use serde_json::{Value, value::RawValue};
 use tower::Service;
 
-use crate::{PirProviderError, PirRouter};
+use crate::{CallPath, CallTrace, PirProviderError, PirRouter};
 
 /// Alloy transport that dispatches each JSON-RPC item through [`PirRouter`].
 #[derive(Clone)]
@@ -32,23 +32,45 @@ impl PirTransport {
         &self.router
     }
 
-    async fn handle(self, req: RequestPacket) -> Result<ResponsePacket, TransportError> {
+    /// Dispatch a packet and report the path that answered each call.
+    ///
+    /// # Errors
+    ///
+    /// Returns when a request cannot be serialized into a transport response.
+    pub async fn call_logged(
+        &self,
+        req: RequestPacket,
+    ) -> Result<(ResponsePacket, Vec<CallTrace>), alloy::transports::TransportError> {
+        self.clone().handle(req).await
+    }
+
+    async fn handle(
+        self,
+        req: RequestPacket,
+    ) -> Result<(ResponsePacket, Vec<CallTrace>), alloy::transports::TransportError> {
         match req {
             RequestPacket::Single(req) => {
-                let resp = self.map_request(req).await?;
-                Ok(ResponsePacket::Single(resp))
+                let (resp, trace) = self.map_request(req).await?;
+                Ok((ResponsePacket::Single(resp), vec![trace]))
             }
             RequestPacket::Batch(reqs) => {
                 let mut out = Vec::with_capacity(reqs.len());
+                let mut traces = Vec::with_capacity(reqs.len());
                 for req in reqs {
-                    out.push(self.map_request(req).await?);
+                    let (resp, trace) = self.map_request(req).await?;
+                    out.push(resp);
+                    traces.push(trace);
                 }
-                Ok(ResponsePacket::Batch(out))
+                Ok((ResponsePacket::Batch(out), traces))
             }
         }
     }
 
-    async fn map_request(&self, req: SerializedRequest) -> Result<Response, TransportError> {
+    async fn map_request(
+        &self,
+        req: SerializedRequest,
+    ) -> Result<(alloy::rpc::json_rpc::Response, CallTrace), alloy::transports::TransportError>
+    {
         let method = req.method().to_string();
         let params = req
             .params()
@@ -57,27 +79,46 @@ impl PirTransport {
             .map_err(TransportErrorKind::custom)?
             .unwrap_or(Value::Array(Vec::new()));
         let id = req.id().clone();
-        match self.router.request(&method, params).await {
-            Ok(value) => Ok(Response {
-                id,
-                payload: ResponsePayload::Success(to_raw(&value)?),
-            }),
-            Err(PirProviderError::Rpc { code, message }) => Ok(Response {
-                id,
-                payload: ResponsePayload::Failure(ErrorPayload {
-                    code,
-                    message: Cow::Owned(message),
-                    data: None,
-                }),
-            }),
-            Err(e) => Ok(Response {
-                id,
-                payload: ResponsePayload::Failure(ErrorPayload {
-                    code: e.rpc_code(),
-                    message: Cow::Owned(e.to_string()),
-                    data: None,
-                }),
-            }),
+        let trace_method = method.clone();
+        match self.router.request_with_path(&method, params).await {
+            Ok((value, path)) => Ok((
+                Response {
+                    id,
+                    payload: ResponsePayload::Success(to_raw(&value)?),
+                },
+                CallTrace {
+                    method: trace_method,
+                    path,
+                },
+            )),
+            Err(PirProviderError::Rpc { code, message }) => Ok((
+                Response {
+                    id,
+                    payload: ResponsePayload::Failure(ErrorPayload {
+                        code,
+                        message: Cow::Owned(message),
+                        data: None,
+                    }),
+                },
+                CallTrace {
+                    method: trace_method,
+                    path: CallPath::Fallback,
+                },
+            )),
+            Err(e) => Ok((
+                Response {
+                    id,
+                    payload: ResponsePayload::Failure(ErrorPayload {
+                        code: e.rpc_code(),
+                        message: Cow::Owned(e.to_string()),
+                        data: None,
+                    }),
+                },
+                CallTrace {
+                    method: trace_method,
+                    path: CallPath::Fallback,
+                },
+            )),
         }
     }
 }
@@ -97,7 +138,8 @@ impl Service<RequestPacket> for PirTransport {
     }
 
     fn call(&mut self, req: RequestPacket) -> Self::Future {
-        Box::pin(self.clone().handle(req))
+        let transport = self.clone();
+        Box::pin(async move { transport.handle(req).await.map(|(packet, _)| packet) })
     }
 }
 
@@ -161,7 +203,8 @@ mod tests {
 
     fn account_bytes(balance: u128, nonce: u64) -> Vec<u8> {
         let mut v = vec![0u8; 40];
-        v[16..32].copy_from_slice(&balance.to_be_bytes());
+        let be = balance.to_be_bytes();
+        v[20..32].copy_from_slice(&be[4..]);
         v[32..40].copy_from_slice(&nonce.to_be_bytes());
         v
     }

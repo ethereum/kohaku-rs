@@ -22,10 +22,7 @@ pub trait LookupBackend: Send + Sync {
     /// # Errors
     ///
     /// Returns [`PirProviderError::Client`] when the batch lookup fails.
-    fn lookup_batch(
-        &self,
-        keys: &[Vec<u8>],
-    ) -> Result<Vec<Option<Vec<u8>>>, PirProviderError> {
+    fn lookup_batch(&self, keys: &[Vec<u8>]) -> Result<Vec<Option<Vec<u8>>>, PirProviderError> {
         keys.iter().map(|k| self.lookup(k)).collect()
     }
 }

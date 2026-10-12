@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 
-use async_trait::async_trait;
 use alloy::{
     primitives::{U256, hex},
     rpc::json_rpc::{
@@ -12,6 +11,7 @@ use alloy::{
     sol_types::SolCall,
     transports::{TransportError, TransportErrorKind},
 };
+use async_trait::async_trait;
 use serde_json::{Value, json};
 use url::Url;
 
@@ -98,7 +98,8 @@ impl MockTorRpc {
                     .cloned()
                     .unwrap_or_else(|| json!("0xmock"))
             };
-            let raw = serde_json::value::to_raw_value(&value).map_err(TransportErrorKind::custom)?;
+            let raw =
+                serde_json::value::to_raw_value(&value).map_err(TransportErrorKind::custom)?;
             out.push(Response {
                 id,
                 payload: ResponsePayload::Success(raw),
@@ -146,7 +147,10 @@ fn is_multicall3(params: &Value) -> bool {
     let Some(to) = obj.get("to").and_then(Value::as_str) else {
         return false;
     };
-    let raw = to.strip_prefix("0x").or_else(|| to.strip_prefix("0X")).unwrap_or(to);
+    let raw = to
+        .strip_prefix("0x")
+        .or_else(|| to.strip_prefix("0X"))
+        .unwrap_or(to);
     let Ok(bytes) = hex::decode(raw) else {
         return false;
     };
@@ -212,7 +216,10 @@ fn answer_multicall(
 }
 
 fn word_from_quantity(qty: &str) -> Vec<u8> {
-    let raw = qty.strip_prefix("0x").or_else(|| qty.strip_prefix("0X")).unwrap_or(qty);
+    let raw = qty
+        .strip_prefix("0x")
+        .or_else(|| qty.strip_prefix("0X"))
+        .unwrap_or(qty);
     let n = U256::from_str_radix(raw, 16).unwrap_or(U256::ZERO);
     n.to_be_bytes::<32>().to_vec()
 }
@@ -278,7 +285,8 @@ pub fn serialize_req(method: &'static str, id: u64, params: Value) -> Serialized
 
 pub fn account_bytes(balance: u128, nonce: u64) -> Vec<u8> {
     let mut v = vec![0u8; 40];
-    v[16..32].copy_from_slice(&balance.to_be_bytes());
+    let be = balance.to_be_bytes();
+    v[20..32].copy_from_slice(&be[4..]);
     v[32..40].copy_from_slice(&nonce.to_be_bytes());
     v
 }

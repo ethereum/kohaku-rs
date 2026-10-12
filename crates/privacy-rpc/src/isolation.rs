@@ -71,7 +71,10 @@ fn extract_address(method: &str, params: &Value) -> Option<String> {
 }
 
 fn normalize_address(s: &str) -> Option<String> {
-    let raw = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let raw = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     let bytes = hex::decode(raw).ok()?;
     if bytes.len() != 20 {
         return None;

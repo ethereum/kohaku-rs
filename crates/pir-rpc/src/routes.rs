@@ -2,6 +2,7 @@ use alloy::primitives::keccak256;
 use serde_json::Value;
 
 use crate::DatasetManifest;
+use crate::names::{ClassifiedName, NameForward, NameSystem, match_name_call};
 use crate::tokens::{BALANCE_OF_SELECTOR, PirToken, balance_of_calldata, pir_token_by_contract};
 
 /// Where a JSON-RPC method should be answered.
@@ -15,6 +16,22 @@ pub enum Route {
     TokenBalance(TokenBalanceMatch),
     /// `eth_call` matched to a manifest dataset.
     Call(CallMatch),
+    /// `eth_getCode` against the account table.
+    AccountCode,
+    /// Reverse primary name. One names-table lookup keyed by the address.
+    NameReverse {
+        /// ENS, GNS, or WNS.
+        system: NameSystem,
+        /// Address the call is about.
+        address: [u8; 20],
+    },
+    /// `computeId(string)`, answered by a local namehash.
+    Namehash {
+        /// Name argument.
+        name: String,
+    },
+    /// Forward resolution. The router answers from the name cache or falls back.
+    NameForward(NameForward),
     /// Forward to the fallback Ethereum node.
     Fallback,
 }
@@ -71,9 +88,8 @@ impl RouteTable {
         match method {
             "eth_getBalance" => Route::AccountBalance,
             "eth_getTransactionCount" => Route::AccountNonce,
-            "eth_call" => self
-                .classify_call(params)
-                .map_or(Route::Fallback, |r| r),
+            "eth_getCode" => Route::AccountCode,
+            "eth_call" => self.classify_call(params).map_or(Route::Fallback, |r| r),
             _ => Route::Fallback,
         }
     }
@@ -96,6 +112,15 @@ impl RouteTable {
                 holder,
                 key,
             }));
+        }
+        if let Some(name) = match_name_call(&to, &data) {
+            return Some(match name {
+                ClassifiedName::Reverse { system, address } => {
+                    Route::NameReverse { system, address }
+                }
+                ClassifiedName::Namehash { name } => Route::Namehash { name },
+                ClassifiedName::Forward(forward) => Route::NameForward(forward),
+            });
         }
         for ds in &self.datasets {
             if ds.selectors.is_empty() {

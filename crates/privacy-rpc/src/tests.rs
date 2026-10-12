@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use alloy::rpc::json_rpc::{RequestPacket, ResponsePacket, ResponsePayload};
 use kohaku_pir_rpc::{
-    MapFallback, MapLookup, PIR_TOKENS, PirRouter, balance_of_data_hex,
+    LookupBackend, MapFallback, MapLookup, PIR_TOKENS, PirProviderError, PirRouter,
+    balance_of_data_hex,
 };
 use serde_json::{Value, json};
 use tower::Service;
@@ -29,6 +30,7 @@ fn transport_with_sync_pir(lookup: MapLookup, tor: Arc<MockTorRpc>) -> PrivacyTr
         router(),
         Some(async_lookup.clone()),
         Some(async_lookup),
+        None,
         tor,
         Url::parse("https://eth.example").unwrap(),
         Arc::new(DefaultIsolationPolicy),
@@ -45,6 +47,7 @@ fn transport_with_dual_sync(
         router(),
         Some(Arc::new(SyncLookupAdapter::new(Arc::new(accounts)))),
         Some(Arc::new(SyncLookupAdapter::new(Arc::new(tokens)))),
+        None,
         tor,
         Url::parse("https://eth.example").unwrap(),
         Arc::new(DefaultIsolationPolicy),
@@ -58,6 +61,7 @@ fn transport_with_tor_pir(tor: Arc<MockTorRpc>) -> PrivacyTransport {
         router(),
         Some(lookup.clone()),
         Some(lookup),
+        None,
         tor,
         Url::parse("https://eth.example").unwrap(),
         Arc::new(DefaultIsolationPolicy),
@@ -130,16 +134,8 @@ async fn account_balance_and_nonce_dedupe_one_lookup() {
     let tor = Arc::new(MockTorRpc::default());
     let t = transport_with_sync_pir(lookup, Arc::clone(&tor));
     let packet = RequestPacket::Batch(vec![
-        serialize_req(
-            "eth_getBalance",
-            1,
-            json!([addr_hex(1), "latest"]),
-        ),
-        serialize_req(
-            "eth_getTransactionCount",
-            2,
-            json!([addr_hex(1), "latest"]),
-        ),
+        serialize_req("eth_getBalance", 1, json!([addr_hex(1), "latest"])),
+        serialize_req("eth_getTransactionCount", 2, json!([addr_hex(1), "latest"])),
     ]);
     let values = success_values(call(t, packet).await);
     assert_eq!(values[0], json!("0xa"));
@@ -153,21 +149,17 @@ async fn pir_over_tor_batches_keys_in_one_post() {
     tor.set_pir(addr(2), account_bytes(20, 2));
     let t = transport_with_tor_pir(Arc::clone(&tor));
     let packet = RequestPacket::Batch(vec![
-        serialize_req(
-            "eth_getBalance",
-            1,
-            json!([addr_hex(1), "latest"]),
-        ),
-        serialize_req(
-            "eth_getTransactionCount",
-            2,
-            json!([addr_hex(2), "latest"]),
-        ),
+        serialize_req("eth_getBalance", 1, json!([addr_hex(1), "latest"])),
+        serialize_req("eth_getTransactionCount", 2, json!([addr_hex(2), "latest"])),
     ]);
     let values = success_values(call(t, packet).await);
     assert_eq!(values[0], json!("0xa"));
     assert_eq!(values[1], json!("0x2"));
-    assert_eq!(tor.http_post_count(), 1, "one shared Tor POST for the batch");
+    assert_eq!(
+        tor.http_post_count(),
+        1,
+        "one shared Tor POST for the batch"
+    );
 }
 
 #[tokio::test]
@@ -243,11 +235,7 @@ async fn mixed_batch_preserves_order_with_tor_pir() {
     tor.set("eth_call", json!("0xabcdef"));
     let t = transport_with_tor_pir(Arc::clone(&tor));
     let packet = RequestPacket::Batch(vec![
-        serialize_req(
-            "eth_getBalance",
-            1,
-            json!([addr_hex(7), "latest"]),
-        ),
+        serialize_req("eth_getBalance", 1, json!([addr_hex(7), "latest"])),
         serialize_req("eth_getLogs", 2, json!([{}])),
         serialize_req(
             "eth_call",
@@ -270,6 +258,7 @@ async fn without_pir_all_methods_use_tor_rpc() {
     tor.set("eth_getBalance", json!("0xabc"));
     let t = PrivacyTransport::new(
         router(),
+        None,
         None,
         None,
         Arc::clone(&tor) as Arc<dyn crate::TorRpcBackend>,
@@ -313,27 +302,71 @@ async fn usdc_balance_of_uses_token_pir_and_pads_four() {
     let values = success_values(call(t, packet).await);
     let mut expected = [0u8; 32];
     expected[31] = 7;
-    assert_eq!(
-        values[0],
-        json!(format!("0x{}", hex::encode(expected)))
-    );
+    assert_eq!(values[0], json!(format!("0x{}", hex::encode(expected))));
     // No fallback Tor RPC — padding stays on PIR
     assert!(tor.isolated_batches().is_empty());
     assert!(tor.shared_batches().is_empty());
 }
 
 #[tokio::test]
-async fn get_code_stays_on_fallback() {
+async fn get_code_comes_from_the_account_lookup() {
+    let lookup = MapLookup::default();
+    let delegate = [0x11; 20];
+    let mut value = account_bytes(4, 2);
+    value[..20].copy_from_slice(&delegate);
+    lookup.insert(addr(1), value);
     let tor = Arc::new(MockTorRpc::default());
     tor.set("eth_getCode", json!("0x6080"));
-    let t = transport_with_sync_pir(MapLookup::default(), Arc::clone(&tor));
-    let packet = RequestPacket::Single(serialize_req(
-        "eth_getCode",
-        1,
-        json!([addr_hex(1), "latest"]),
-    ));
+    let batches = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recording = Arc::new(CountingLookup {
+        inner: lookup,
+        batches: Arc::clone(&batches),
+    });
+    let t = PrivacyTransport::new(
+        router(),
+        Some(Arc::new(SyncLookupAdapter::new(recording))),
+        None,
+        None,
+        Arc::clone(&tor) as Arc<dyn crate::TorRpcBackend>,
+        Url::parse("https://eth.example").unwrap(),
+        Arc::new(DefaultIsolationPolicy),
+        None,
+    );
+    let packet = RequestPacket::Batch(vec![
+        serialize_req("eth_getBalance", 1, json!([addr_hex(1), "latest"])),
+        serialize_req("eth_getTransactionCount", 2, json!([addr_hex(1), "latest"])),
+        serialize_req("eth_getCode", 3, json!([addr_hex(1), "latest"])),
+    ]);
     let values = success_values(call(t, packet).await);
-    assert_eq!(values[0], json!("0x6080"));
-    assert_eq!(tor.isolated_batches().len(), 1);
-    assert_eq!(tor.isolated_batches()[0], vec!["eth_getCode".to_string()]);
+    assert_eq!(values[0], json!("0x4"));
+    assert_eq!(values[1], json!("0x2"));
+    let mut code = vec![0xef, 0x01, 0x00];
+    code.extend_from_slice(&delegate);
+    assert_eq!(values[2], json!(format!("0x{}", hex::encode(code))));
+    assert!(tor.isolated_batches().is_empty());
+    assert!(tor.shared_batches().is_empty());
+    assert_eq!(
+        batches.lock().unwrap().as_slice(),
+        &[1],
+        "balance, nonce, and code share one account lookup"
+    );
+}
+
+struct CountingLookup {
+    inner: MapLookup,
+    batches: Arc<std::sync::Mutex<Vec<usize>>>,
+}
+
+impl LookupBackend for CountingLookup {
+    fn lookup(&self, key: &[u8]) -> Result<Option<Vec<u8>>, PirProviderError> {
+        self.inner.lookup(key)
+    }
+
+    fn lookup_batch(&self, keys: &[Vec<u8>]) -> Result<Vec<Option<Vec<u8>>>, PirProviderError> {
+        self.batches
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(keys.len());
+        self.inner.lookup_batch(keys)
+    }
 }

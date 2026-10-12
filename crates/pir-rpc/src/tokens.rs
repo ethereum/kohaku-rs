@@ -80,9 +80,7 @@ impl PirToken {
 /// Look up a hardcoded PIR token by contract address.
 #[must_use]
 pub fn pir_token_by_contract(contract: &[u8; 20]) -> Option<&'static PirToken> {
-    PIR_TOKENS
-        .iter()
-        .find(|t| t.contract() == *contract)
+    PIR_TOKENS.iter().find(|t| t.contract() == *contract)
 }
 
 /// Solidity mapping slot: `keccak256(pad32(key) ‖ pad32(mapping))`.

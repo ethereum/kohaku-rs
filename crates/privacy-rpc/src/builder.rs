@@ -19,6 +19,7 @@ pub struct PrivacyBuilder {
     tor: Option<Arc<dyn TorRpcBackend>>,
     accounts_lookup: Option<Arc<dyn AsyncLookupBackend>>,
     tokens_lookup: Option<Arc<dyn AsyncLookupBackend>>,
+    names_lookup: Option<Arc<dyn AsyncLookupBackend>>,
     /// When set, build [`TorPirLookup`] for accounts at `build_transport` time.
     pir_accounts_url: Option<String>,
     /// Optional token-storage PIR URL.
@@ -41,6 +42,7 @@ impl PrivacyBuilder {
             tor: None,
             accounts_lookup: None,
             tokens_lookup: None,
+            names_lookup: None,
             pir_accounts_url: None,
             pir_tokens_url: None,
             datasets: Vec::new(),
@@ -88,10 +90,12 @@ impl PrivacyBuilder {
         mut self,
         accounts: Arc<dyn AsyncLookupBackend>,
         tokens: Option<Arc<dyn AsyncLookupBackend>>,
+        names: Option<Arc<dyn AsyncLookupBackend>>,
         datasets: Vec<DatasetManifest>,
     ) -> Self {
         self.accounts_lookup = Some(accounts);
         self.tokens_lookup = tokens;
+        self.names_lookup = names;
         self.pir_accounts_url = None;
         self.pir_tokens_url = None;
         self.datasets = datasets;
@@ -122,20 +126,21 @@ impl PrivacyBuilder {
             .tor
             .ok_or_else(|| PrivacyError::Builder("tor backend is required".into()))?;
 
-        let (accounts_lookup, tokens_lookup) = if let Some(accounts_url) = self.pir_accounts_url {
-            let accounts = Arc::new(TorPirLookup::new(Arc::clone(&tor), &accounts_url)?)
-                as Arc<dyn AsyncLookupBackend>;
-            let tokens = self
-                .pir_tokens_url
-                .map(|u| {
-                    TorPirLookup::new(Arc::clone(&tor), &u)
-                        .map(|l| Arc::new(l) as Arc<dyn AsyncLookupBackend>)
-                })
-                .transpose()?;
-            (Some(accounts), tokens)
-        } else {
-            (self.accounts_lookup, self.tokens_lookup)
-        };
+        let (accounts_lookup, tokens_lookup, names_lookup) =
+            if let Some(accounts_url) = self.pir_accounts_url {
+                let accounts = Arc::new(TorPirLookup::new(Arc::clone(&tor), &accounts_url)?)
+                    as Arc<dyn AsyncLookupBackend>;
+                let tokens = self
+                    .pir_tokens_url
+                    .map(|u| {
+                        TorPirLookup::new(Arc::clone(&tor), &u)
+                            .map(|l| Arc::new(l) as Arc<dyn AsyncLookupBackend>)
+                    })
+                    .transpose()?;
+                (Some(accounts), tokens, self.names_lookup)
+            } else {
+                (self.accounts_lookup, self.tokens_lookup, self.names_lookup)
+            };
 
         // Router is used for plan/classify only; its sync LookupBackend is inert.
         let router = Arc::new(PirRouter::from_parts(
@@ -147,6 +152,7 @@ impl PrivacyBuilder {
             router,
             accounts_lookup,
             tokens_lookup,
+            names_lookup,
             tor,
             self.rpc_url,
             self.isolation,
@@ -190,6 +196,8 @@ pub async fn connect_tor_pir(
 
 /// Test helper: sync [`MapLookup`](kohaku_pir_rpc::MapLookup) as async PIR (no Tor HTTP).
 #[must_use]
-pub fn sync_pir_lookup(lookup: Arc<dyn kohaku_pir_rpc::LookupBackend>) -> Arc<dyn AsyncLookupBackend> {
+pub fn sync_pir_lookup(
+    lookup: Arc<dyn kohaku_pir_rpc::LookupBackend>,
+) -> Arc<dyn AsyncLookupBackend> {
     Arc::new(SyncLookupAdapter::new(lookup))
 }

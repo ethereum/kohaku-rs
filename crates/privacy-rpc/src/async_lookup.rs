@@ -49,7 +49,10 @@ impl CachingAsyncLookup {
     /// Wrap with [`DEFAULT_PIR_CACHE_TTL`].
     #[must_use]
     pub fn with_default_ttl(inner: Arc<dyn AsyncLookupBackend>) -> Arc<Self> {
-        info!(ttl_secs = DEFAULT_PIR_CACHE_TTL.as_secs(), "PIR result cache enabled");
+        info!(
+            ttl_secs = DEFAULT_PIR_CACHE_TTL.as_secs(),
+            "PIR result cache enabled"
+        );
         Arc::new(Self::new(inner, DEFAULT_PIR_CACHE_TTL))
     }
 }
@@ -83,11 +86,7 @@ impl AsyncLookupBackend for CachingAsyncLookup {
 
         let hits = keys.len() - miss_keys.len();
         if !miss_keys.is_empty() {
-            info!(
-                hits,
-                misses = miss_keys.len(),
-                "PIR cache: fetching misses"
-            );
+            info!(hits, misses = miss_keys.len(), "PIR cache: fetching misses");
             let fetched = self.inner.lookup_batch(&miss_keys).await?;
             let mut map = self.entries.lock().await;
             for (j, idx) in miss_at.into_iter().enumerate() {
@@ -100,8 +99,10 @@ impl AsyncLookupBackend for CachingAsyncLookup {
             info!(hits, "PIR cache: all hits");
         }
 
-        let out: Vec<Option<Vec<u8>>> =
-            cached.into_iter().map(|slot| slot.expect("filled")).collect();
+        let out: Vec<Option<Vec<u8>>> = cached
+            .into_iter()
+            .map(|slot| slot.expect("filled"))
+            .collect();
         let pir_absent = out.iter().filter(|v| v.is_none()).count();
         if pir_absent > 0 {
             debug!(
@@ -297,8 +298,14 @@ mod tests {
         });
         let cached = CachingAsyncLookup::new(counting.clone(), Duration::from_secs(60));
         let key = vec![1u8; 20];
-        let a = cached.lookup_batch(std::slice::from_ref(&key)).await.unwrap();
-        let b = cached.lookup_batch(std::slice::from_ref(&key)).await.unwrap();
+        let a = cached
+            .lookup_batch(std::slice::from_ref(&key))
+            .await
+            .unwrap();
+        let b = cached
+            .lookup_batch(std::slice::from_ref(&key))
+            .await
+            .unwrap();
         assert_eq!(a, b);
         assert_eq!(counting.hits.load(Ordering::SeqCst), 1);
     }
