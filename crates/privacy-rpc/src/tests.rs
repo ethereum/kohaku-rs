@@ -128,6 +128,24 @@ async fn pir_over_tor_uses_shared_http_post() {
 }
 
 #[tokio::test]
+async fn one_item_batch_stays_a_json_array() {
+    let lookup = MapLookup::default();
+    lookup.insert(addr(1), account_bytes(99, 1));
+    let tor = Arc::new(MockTorRpc::default());
+    let t = transport_with_sync_pir(lookup, tor);
+    let packet = RequestPacket::Batch(vec![serialize_req(
+        "eth_getBalance",
+        1,
+        json!([addr_hex(1), "latest"]),
+    )]);
+    let out = call(t, packet).await;
+    let ResponsePacket::Batch(items) = out else {
+        panic!("one-item batch was returned as a single object");
+    };
+    assert_eq!(items.len(), 1);
+}
+
+#[tokio::test]
 async fn account_balance_and_nonce_dedupe_one_lookup() {
     let lookup = MapLookup::default();
     lookup.insert(addr(1), account_bytes(10, 3));

@@ -118,15 +118,18 @@ impl PrivacyTransport {
         self,
         req: RequestPacket,
     ) -> Result<(ResponsePacket, Vec<CallTrace>), TransportError> {
+        // A one-element JSON-RPC batch must stay an array. viem indexes
+        // `data[i]` and then reads `.error`; an object makes that `undefined`.
+        let request_batch = matches!(req, RequestPacket::Batch(_));
         let reqs: Vec<SerializedRequest> = match req {
             RequestPacket::Single(r) => vec![r],
             RequestPacket::Batch(rs) => rs,
         };
         let (responses, traces) = self.dispatch(reqs).await?;
-        let packet = if responses.len() == 1 {
-            ResponsePacket::Single(responses.into_iter().next().expect("len checked"))
-        } else {
+        let packet = if request_batch {
             ResponsePacket::Batch(responses)
+        } else {
+            ResponsePacket::Single(responses.into_iter().next().expect("len checked"))
         };
         Ok((packet, traces))
     }
