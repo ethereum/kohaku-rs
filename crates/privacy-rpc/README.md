@@ -12,8 +12,10 @@ Batch-aware privacy orchestrator that composes **Tor** (`kohaku-tor-rpc`) and
    - Token storage table: `balanceOf` for USDC / USDT / DAI / WETH
    - Names table: ENS / GNS / WNS reverse reads, plus the forward check of a
      name just returned. `computeId` is local. A name that did not fit falls
-     back to RPC.
-3. **Fallback clear RPC** — everything else (logs, chain metadata, text
+     back to RPC. Each names response also carries the ERC-6538 stealth
+     registry and every `stealth-address-scheme-1` text record, and those
+     `eth_call`s are answered from that list.
+3. **Fallback clear RPC** — everything else (logs, chain metadata, other text
    records, typed names) is plaintext JSON-RPC to the node, still over Tor.
 4. **Selective isolation** — bulk/metadata methods share a Tor circuit;
    address-bearing fallbacks are grouped by EOA onto isolated circuits.
@@ -56,7 +58,11 @@ One Alloy `RequestPacket` (single or batch) is classified once:
    cache so sequential per-token HTTP calls reuse the padded results instead of
    re-fetching four Tor PIR lookups each time.
 3. **Names PIR** — reverse reads for one address share one lookup. A name that
-   did not fit is replayed to fallback RPC.
+   did not fit is replayed to fallback RPC. `stealthMetaAddressOf` and
+   `stealth-address-scheme-1` text reads use the registry and text list from
+   the last names response (one names lookup loads them if none is cached).
+   Any other text key, and a name this process did not return and that is not
+   in the text list, stays on fallback RPC.
 4. **Fallback** — group by isolation policy; each group is one Tor POST with
    Multicall3 + sibling RPCs. Groups run concurrently with the PIR lanes.
 

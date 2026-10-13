@@ -317,7 +317,7 @@ impl PrivacyTransport {
         let (account_values, token_values, name_values) = tokio::try_join!(
             self.lookup_lane(self.accounts_lookup.as_ref(), &account_ops, "account"),
             self.lookup_lane(self.tokens_lookup.as_ref(), &token_ops, "token"),
-            self.lookup_lane(self.names_lookup.as_ref(), &name_ops, "names"),
+            self.lookup_names(&name_ops),
         )?;
 
         let mut raw_by_all: Vec<Option<Vec<u8>>> = vec![None; all_ops.len()];
@@ -374,6 +374,29 @@ impl PrivacyTransport {
             }
         }
         Ok(out)
+    }
+
+    async fn lookup_names(&self, ops: &[PirOp]) -> Result<Vec<Option<Vec<u8>>>, TransportError> {
+        if ops.is_empty() {
+            return Ok(Vec::new());
+        }
+        let lookup = self.names_lookup.as_ref().ok_or_else(|| {
+            TransportErrorKind::custom(PrivacyError::Transport(
+                "PIR names jobs planned but no lookup configured".into(),
+            ))
+        })?;
+        let (unique_keys, remap) = dedupe_keys(ops);
+        debug!(
+            ops = ops.len(),
+            unique = unique_keys.len(),
+            "names PIR lane over Tor-backed lookup"
+        );
+        let batch = lookup
+            .lookup_names_batch(&unique_keys)
+            .await
+            .map_err(TransportError::from)?;
+        self.router.store_stealth(batch.stealth);
+        Ok(remap.into_iter().map(|i| batch.values[i].clone()).collect())
     }
 
     async fn lookup_lane(

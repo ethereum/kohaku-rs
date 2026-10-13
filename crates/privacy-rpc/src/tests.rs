@@ -4,16 +4,16 @@ use std::sync::Arc;
 
 use alloy::rpc::json_rpc::{RequestPacket, ResponsePacket, ResponsePayload};
 use kohaku_pir_rpc::{
-    LookupBackend, MapFallback, MapLookup, PIR_TOKENS, PirProviderError, PirRouter,
-    balance_of_data_hex,
+    CallPath, LookupBackend, MapFallback, MapLookup, PIR_TOKENS, PirProviderError, PirRouter,
+    StealthBroadcast, StealthEntry, balance_of_data_hex,
 };
 use serde_json::{Value, json};
 use tower::Service;
 use url::Url;
 
-use crate::mock::{MockTorRpc, account_bytes, addr, addr_hex, serialize_req, storage_cell};
 use crate::{
     DefaultIsolationPolicy, PrivacyBuilder, PrivacyTransport, SyncLookupAdapter, TorPirLookup,
+    mock::{MockTorRpc, account_bytes, addr, addr_hex, serialize_req, storage_cell},
 };
 
 fn router() -> Arc<PirRouter> {
@@ -350,6 +350,64 @@ async fn get_code_comes_from_the_account_lookup() {
         &[1],
         "balance, nonce, and code share one account lookup"
     );
+}
+
+#[tokio::test]
+async fn stealth_meta_stays_off_fallback_rpc() {
+    let names = MapLookup::default();
+    let meta = vec![0x02, 0xab];
+    *names.stealth.lock().unwrap() = Some(StealthBroadcast {
+        registry: vec![StealthEntry {
+            registrant: addr(4),
+            scheme_id: 1,
+            meta: meta.clone(),
+        }],
+        texts: vec![],
+    });
+    let tor = Arc::new(MockTorRpc::default());
+    tor.set("eth_call", json!("0xdead"));
+    let t = PrivacyTransport::new(
+        router(),
+        Some(Arc::new(SyncLookupAdapter::new(Arc::new(
+            MapLookup::default(),
+        )))),
+        None,
+        Some(Arc::new(SyncLookupAdapter::new(Arc::new(names)))),
+        Arc::clone(&tor) as Arc<dyn crate::TorRpcBackend>,
+        Url::parse("https://eth.example").unwrap(),
+        Arc::new(DefaultIsolationPolicy),
+        None,
+    );
+    let mut data = vec![0x7a, 0xa8, 0xb5, 0xad];
+    let mut registrant = [0u8; 32];
+    registrant[12..].copy_from_slice(&addr(4));
+    data.extend_from_slice(&registrant);
+    let mut scheme = [0u8; 32];
+    scheme[31] = 1;
+    data.extend_from_slice(&scheme);
+    let params = json!([{
+        "to": "0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538",
+        "data": format!("0x{}", hex::encode(&data))
+    }, "latest"]);
+    let (first, traces) = t
+        .call_logged(RequestPacket::Single(serialize_req(
+            "eth_call",
+            1,
+            params.clone(),
+        )))
+        .await
+        .unwrap();
+    assert_eq!(traces[0].path, CallPath::Pir);
+    let (second, traces) = t
+        .call_logged(RequestPacket::Single(serialize_req("eth_call", 2, params)))
+        .await
+        .unwrap();
+    assert_eq!(traces[0].path, CallPath::Local);
+    let first_values = success_values(first);
+    assert_eq!(first_values, success_values(second));
+    assert_ne!(first_values[0], json!("0xdead"));
+    assert!(tor.isolated_batches().is_empty());
+    assert!(tor.shared_batches().is_empty());
 }
 
 struct CountingLookup {

@@ -31,6 +31,20 @@ const COMPUTE_ID: [u8; 4] = [0xfb, 0x02, 0x19, 0x39];
 const RESOLVE: [u8; 4] = [0x4f, 0x89, 0x6d, 0x4f];
 /// `addr(bytes32)` inside `resolveWithGateways` calldata.
 const ADDR_SELECTOR: [u8; 4] = [0x3b, 0x3b, 0x57, 0xde];
+/// `text(bytes32,string)` inside `resolveWithGateways`, and the same selector
+/// is not used on GNS/WNS (`text(uint256,string)` is [`TEXT_UINT`]).
+const TEXT_BYTES32: [u8; 4] = [0x59, 0xd1, 0xd4, 0x3c];
+/// `text(uint256,string)` on GNS and WNS.
+const TEXT_UINT: [u8; 4] = [0x30, 0x8e, 0x33, 0x86];
+/// `stealthMetaAddressOf(address,uint256)` on the ERC-6538 registry.
+const STEALTH_META: [u8; 4] = [0x7a, 0xa8, 0xb5, 0xad];
+/// ERC-6538 registry.
+const ERC6538: [u8; 20] = [
+    0x65, 0x38, 0xe6, 0xbf, 0x4b, 0x0e, 0xbd, 0x30, 0xa8, 0xea, 0x09, 0x30, 0x27, 0xac, 0x24, 0x22,
+    0xce, 0x5d, 0x65, 0x38,
+];
+/// Only this text key is answered from the names sidecar.
+const STEALTH_TEXT_KEY: &str = "stealth-address-scheme-1";
 
 const TOO_LONG: u8 = 0x80;
 
@@ -148,6 +162,23 @@ pub enum ClassifiedName {
     },
     /// Forward resolution of a name this middleware already served.
     Forward(NameForward),
+    /// `stealthMetaAddressOf(registrant, schemeId)` on the ERC-6538 registry.
+    ///
+    /// `scheme_id` is `None` when the calldata integer does not fit in `u64`
+    /// and therefore cannot be in the registry.
+    StealthMeta {
+        /// Registrant argument.
+        registrant: [u8; 20],
+        /// Scheme id, when it fits in `u64`.
+        scheme_id: Option<u64>,
+    },
+    /// `text(..., "stealth-address-scheme-1")` on ENS, GNS, or WNS.
+    StealthText {
+        /// Which resolver the call is on.
+        system: NameSystem,
+        /// Namehash (ENS node or GNS/WNS token id).
+        node: [u8; 32],
+    },
 }
 
 /// A real name found in a value, remembered so the follow-up forward call
@@ -182,16 +213,15 @@ pub fn match_name_call(to: &[u8; 20], data: &[u8]) -> Option<ClassifiedName> {
         });
     }
     if selector == RESOLVE_WITH_GATEWAYS && *to == UNIVERSAL_RESOLVER {
-        let inner = abi_dyn_bytes(data, 1)?;
-        if inner.len() < 4 || inner[..4] != ADDR_SELECTOR {
-            return None;
-        }
-        let packet = abi_dyn_bytes(data, 0)?;
-        let name = dns_name(&packet)?.to_ascii_lowercase();
-        if name.is_empty() {
-            return None;
-        }
-        return Some(ClassifiedName::Forward(NameForward::EnsName { name }));
+        return match_resolve_gateways(data);
+    }
+    if selector == STEALTH_META && *to == ERC6538 {
+        let registrant = arg0_address(data)?;
+        let scheme_word = abi_word(data, 1)?;
+        return Some(ClassifiedName::StealthMeta {
+            registrant,
+            scheme_id: word_as_u64(&scheme_word),
+        });
     }
     let system = if *to == GNS {
         NameSystem::Gns
@@ -214,6 +244,36 @@ pub fn match_name_call(to: &[u8; 20], data: &[u8]) -> Option<ClassifiedName> {
             system,
             token_id,
         }));
+    }
+    if selector == TEXT_UINT {
+        if abi_string_at(data, 1)?.as_str() != STEALTH_TEXT_KEY {
+            return None;
+        }
+        let node = abi_word(data, 0)?;
+        return Some(ClassifiedName::StealthText { system, node });
+    }
+    None
+}
+
+fn match_resolve_gateways(data: &[u8]) -> Option<ClassifiedName> {
+    let inner = abi_dyn_bytes(data, 1)?;
+    if inner.len() < 4 {
+        return None;
+    }
+    if inner[..4] == ADDR_SELECTOR {
+        let packet = abi_dyn_bytes(data, 0)?;
+        let name = dns_name(&packet)?.to_ascii_lowercase();
+        if name.is_empty() {
+            return None;
+        }
+        return Some(ClassifiedName::Forward(NameForward::EnsName { name }));
+    }
+    if inner[..4] == TEXT_BYTES32 && abi_string_at(&inner, 1)?.as_str() == STEALTH_TEXT_KEY {
+        let node = abi_word(&inner, 0)?;
+        return Some(ClassifiedName::StealthText {
+            system: NameSystem::Ens,
+            node,
+        });
     }
     None
 }
@@ -307,6 +367,40 @@ fn encode_hex(bytes: &[u8]) -> Value {
     Value::String(format!("0x{}", hex::encode(bytes)))
 }
 
+/// ABI `bytes` result for `stealthMetaAddressOf`.
+#[must_use]
+pub(crate) fn encode_stealth_meta_result(meta: &[u8]) -> Value {
+    encode_hex(&encode_dynamic_bytes(meta))
+}
+
+/// ABI result for a `stealth-address-scheme-1` text call.
+#[must_use]
+pub(crate) fn encode_stealth_text_result(system: NameSystem, value: &str) -> Value {
+    let bytes = match system {
+        NameSystem::Ens => encode_gateway_text(value),
+        NameSystem::Gns | NameSystem::Wns => encode_abi_string(value),
+    };
+    encode_hex(&bytes)
+}
+
+fn encode_dynamic_bytes(raw: &[u8]) -> Vec<u8> {
+    let mut out = u256_word(32);
+    out.extend_from_slice(&u256_word(raw.len() as u64));
+    out.extend_from_slice(raw);
+    out.extend(std::iter::repeat_n(0, pad32(raw.len())));
+    out
+}
+
+fn encode_gateway_text(value: &str) -> Vec<u8> {
+    let inner = encode_abi_string(value);
+    let mut out = u256_word(0x40);
+    out.extend_from_slice(&address_word(&[0u8; 20]));
+    out.extend_from_slice(&u256_word(inner.len() as u64));
+    out.extend_from_slice(&inner);
+    out.extend(std::iter::repeat_n(0, pad32(inner.len())));
+    out
+}
+
 fn encode_abi_string(s: &str) -> Vec<u8> {
     let raw = s.as_bytes();
     let mut out = u256_word(32);
@@ -365,7 +459,14 @@ fn word_as_usize(word: &[u8; 32]) -> Option<usize> {
 }
 
 fn word_is_u64(word: &[u8; 32], n: u64) -> bool {
-    word_as_usize(word).and_then(|v| u64::try_from(v).ok()) == Some(n)
+    word_as_u64(word) == Some(n)
+}
+
+fn word_as_u64(word: &[u8; 32]) -> Option<u64> {
+    if word[..24].iter().any(|b| *b != 0) {
+        return None;
+    }
+    Some(u64::from_be_bytes(word[24..].try_into().ok()?))
 }
 
 fn abi_dyn_bytes(data: &[u8], head_index: usize) -> Option<Vec<u8>> {
@@ -376,7 +477,11 @@ fn abi_dyn_bytes(data: &[u8], head_index: usize) -> Option<Vec<u8>> {
 }
 
 fn abi_string(data: &[u8]) -> Option<String> {
-    let bytes = abi_dyn_bytes(data, 0)?;
+    abi_string_at(data, 0)
+}
+
+fn abi_string_at(data: &[u8], head_index: usize) -> Option<String> {
+    let bytes = abi_dyn_bytes(data, head_index)?;
     String::from_utf8(bytes).ok()
 }
 
@@ -431,6 +536,53 @@ pub(crate) fn gns_reverse_calldata(address: &[u8; 20]) -> Vec<u8> {
 pub(crate) fn gns_resolve_calldata(token_id: &[u8; 32]) -> Vec<u8> {
     let mut data = RESOLVE.to_vec();
     data.extend_from_slice(token_id);
+    data
+}
+
+#[cfg(test)]
+pub(crate) fn stealth_meta_calldata(registrant: &[u8; 20], scheme_id: u64) -> Vec<u8> {
+    let mut data = STEALTH_META.to_vec();
+    data.extend_from_slice(&address_word(registrant));
+    data.extend_from_slice(&u256_word(scheme_id));
+    data
+}
+
+#[cfg(test)]
+pub(crate) fn gns_text_calldata(token_id: &[u8; 32], key: &str) -> Vec<u8> {
+    let raw = key.as_bytes();
+    let mut data = TEXT_UINT.to_vec();
+    data.extend_from_slice(token_id);
+    data.extend_from_slice(&u256_word(0x40));
+    data.extend_from_slice(&u256_word(raw.len() as u64));
+    data.extend_from_slice(raw);
+    data.extend(std::iter::repeat_n(0, pad32(raw.len())));
+    data
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_gateways_text_calldata(name: &str, node: &[u8; 32], key: &str) -> Vec<u8> {
+    let raw = key.as_bytes();
+    let mut inner = TEXT_BYTES32.to_vec();
+    inner.extend_from_slice(node);
+    inner.extend_from_slice(&u256_word(0x40));
+    inner.extend_from_slice(&u256_word(raw.len() as u64));
+    inner.extend_from_slice(raw);
+    inner.extend(std::iter::repeat_n(0, pad32(raw.len())));
+    let packet = dns_packet(name);
+    let name_off = 0x60u64;
+    let data_off = name_off + 32 + padded_len(packet.len()) as u64;
+    let gw_off = data_off + 32 + padded_len(inner.len()) as u64;
+    let mut data = RESOLVE_WITH_GATEWAYS.to_vec();
+    data.extend_from_slice(&u256_word(name_off));
+    data.extend_from_slice(&u256_word(data_off));
+    data.extend_from_slice(&u256_word(gw_off));
+    data.extend_from_slice(&u256_word(packet.len() as u64));
+    data.extend_from_slice(&packet);
+    data.extend(std::iter::repeat_n(0, pad32(packet.len())));
+    data.extend_from_slice(&u256_word(inner.len() as u64));
+    data.extend_from_slice(&inner);
+    data.extend(std::iter::repeat_n(0, pad32(inner.len())));
+    data.extend_from_slice(&u256_word(0));
     data
 }
 
@@ -532,5 +684,34 @@ mod tests {
             }
             other => panic!("expected ENS forward, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn stealth_meta_extracts_registrant_and_scheme() {
+        let mut registrant = [0u8; 20];
+        registrant[19] = 4;
+        let data = stealth_meta_calldata(&registrant, 1);
+        match match_name_call(&ERC6538, &data) {
+            Some(ClassifiedName::StealthMeta {
+                registrant: got,
+                scheme_id: Some(1),
+            }) => assert_eq!(got, registrant),
+            other => panic!("expected stealth meta, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn gns_text_matches_only_the_stealth_key() {
+        let node = namehash("banteg.gwei");
+        let data = gns_text_calldata(&node, STEALTH_TEXT_KEY);
+        match match_name_call(&GNS, &data) {
+            Some(ClassifiedName::StealthText {
+                system: NameSystem::Gns,
+                node: got,
+            }) => assert_eq!(got, node),
+            other => panic!("expected GNS text, got {other:?}"),
+        }
+        let other = gns_text_calldata(&node, "avatar");
+        assert!(match_name_call(&GNS, &other).is_none());
     }
 }

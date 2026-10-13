@@ -1,9 +1,10 @@
-use alloy::rpc::json_rpc::{RequestPacket, ResponsePacket};
-use alloy::transports::TransportError;
+use alloy::{
+    rpc::json_rpc::{RequestPacket, ResponsePacket},
+    transports::TransportError,
+};
 use async_trait::async_trait;
-use url::Url;
-
 use kohaku_tor_rpc::TorRpc;
+use url::Url;
 
 /// Planner-facing Tor egress (JSON-RPC + generic HTTP).
 ///
@@ -60,7 +61,7 @@ impl TorRpcBackend for LiveTorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        self.inner.send_shared(url, packet).await
+        self.inner.send(url, packet).await
     }
 
     async fn send_isolated(
@@ -68,7 +69,7 @@ impl TorRpcBackend for LiveTorRpc {
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
-        self.inner.send_isolated(url, packet).await
+        self.inner.isolated().send(url, packet).await
     }
 
     async fn http_post(

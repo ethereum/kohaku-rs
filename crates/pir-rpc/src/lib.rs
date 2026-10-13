@@ -18,7 +18,9 @@ mod transport;
 pub use dataset::DatasetManifest;
 pub use error::PirProviderError;
 pub use fallback::{FallbackRpc, HttpFallback, MapFallback};
-pub use lookup::{LookupBackend, MapLookup};
+pub use lookup::{
+    LookupBackend, MapLookup, NamesLookupBatch, StealthBroadcast, StealthEntry, StealthText,
+};
 pub use names::{ClassifiedName, NameForward, NameSystem};
 pub use plan::{CallPath, CallTrace, Decoded, PirDecode, PirLane, PirOp, PlannedOp};
 pub use router::{PirRouter, decode_pir, dedupe_keys};

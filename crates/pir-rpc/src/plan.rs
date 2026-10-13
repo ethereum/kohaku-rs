@@ -16,7 +16,7 @@ pub enum CallPath {
     Pir,
     /// Public Ethereum JSON-RPC.
     Fallback,
-    /// Computed locally (`computeId`). No server.
+    /// Computed locally (`computeId`, or a stealth answer from a cached sidecar).
     Local,
 }
 
@@ -61,6 +61,23 @@ pub enum PirDecode {
     Call {
         /// Encoding from the dataset manifest.
         value_encoding: String,
+    },
+    /// `stealthMetaAddressOf` answered from the names sidecar, after a lookup
+    /// of `registrant` when the sidecar is not cached yet.
+    StealthMeta {
+        /// Registrant argument.
+        registrant: [u8; 20],
+        /// Scheme id argument.
+        scheme_id: u64,
+    },
+    /// `stealth-address-scheme-1` text answered from the names sidecar.
+    ///
+    /// The lookup key is the zero address: it only loads the broadcast.
+    StealthText {
+        /// ENS, GNS, or WNS.
+        system: crate::names::NameSystem,
+        /// Namehash carried by the call.
+        node: [u8; 32],
     },
 }
 

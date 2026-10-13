@@ -1,9 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
-use kohaku_pir_rpc::{LookupBackend, PirProviderError};
+use kohaku_pir_rpc::{LookupBackend, NamesLookupBatch, PirProviderError, StealthBroadcast};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
@@ -22,6 +24,17 @@ pub trait AsyncLookupBackend: Send + Sync {
         &self,
         keys: &[Vec<u8>],
     ) -> Result<Vec<Option<Vec<u8>>>, PirProviderError>;
+
+    /// Names-lane batch. Default drops the sidecar.
+    async fn lookup_names_batch(
+        &self,
+        keys: &[Vec<u8>],
+    ) -> Result<NamesLookupBatch, PirProviderError> {
+        Ok(NamesLookupBatch {
+            values: self.lookup_batch(keys).await?,
+            stealth: None,
+        })
+    }
 }
 
 /// Default TTL for cached PIR values (covers a sequential balances scan).
@@ -33,6 +46,8 @@ pub struct CachingAsyncLookup {
     inner: Arc<dyn AsyncLookupBackend>,
     ttl: Duration,
     entries: Mutex<HashMap<Vec<u8>, (Instant, Option<Vec<u8>>)>>,
+    /// Sidecar from the last names fetch, reused on a full cache hit.
+    stealth: Mutex<Option<StealthBroadcast>>,
 }
 
 impl CachingAsyncLookup {
@@ -43,6 +58,7 @@ impl CachingAsyncLookup {
             inner,
             ttl,
             entries: Mutex::new(HashMap::new()),
+            stealth: Mutex::new(None),
         }
     }
 
@@ -113,6 +129,51 @@ impl AsyncLookupBackend for CachingAsyncLookup {
         }
         Ok(out)
     }
+
+    async fn lookup_names_batch(
+        &self,
+        keys: &[Vec<u8>],
+    ) -> Result<NamesLookupBatch, PirProviderError> {
+        if keys.is_empty() {
+            return Ok(NamesLookupBatch::default());
+        }
+        let now = Instant::now();
+        let mut cached: Vec<Option<Option<Vec<u8>>>> = vec![None; keys.len()];
+        let mut miss_keys = Vec::new();
+        let mut miss_at = Vec::new();
+        {
+            let mut map = self.entries.lock().await;
+            map.retain(|_, (t, _)| now.duration_since(*t) < self.ttl);
+            for (i, key) in keys.iter().enumerate() {
+                if let Some((_, v)) = map.get(key) {
+                    cached[i] = Some(v.clone());
+                } else {
+                    miss_at.push(i);
+                    miss_keys.push(key.clone());
+                }
+            }
+        }
+        let stealth = if miss_keys.is_empty() {
+            self.stealth.lock().await.clone()
+        } else {
+            let fetched = self.inner.lookup_names_batch(&miss_keys).await?;
+            if fetched.stealth.is_some() {
+                *self.stealth.lock().await = fetched.stealth.clone();
+            }
+            let mut map = self.entries.lock().await;
+            for (j, idx) in miss_at.into_iter().enumerate() {
+                let value = fetched.values[j].clone();
+                map.insert(miss_keys[j].clone(), (now, value.clone()));
+                cached[idx] = Some(value);
+            }
+            self.stealth.lock().await.clone()
+        };
+        let values = cached
+            .into_iter()
+            .map(|slot| slot.expect("filled"))
+            .collect();
+        Ok(NamesLookupBatch { values, stealth })
+    }
 }
 
 /// Bridge a sync [`LookupBackend`] into [`AsyncLookupBackend`] via `spawn_blocking`.
@@ -139,6 +200,15 @@ impl AsyncLookupBackend for SyncLookupAdapter {
         let inner = Arc::clone(&self.inner);
         let keys = keys.to_vec();
         tokio::task::spawn_blocking(move || inner.lookup_batch(&keys)).await?
+    }
+
+    async fn lookup_names_batch(
+        &self,
+        keys: &[Vec<u8>],
+    ) -> Result<NamesLookupBatch, PirProviderError> {
+        let inner = Arc::clone(&self.inner);
+        let keys = keys.to_vec();
+        tokio::task::spawn_blocking(move || inner.lookup_names_batch(&keys)).await?
     }
 }
 
@@ -252,10 +322,11 @@ fn parse_lookup_response(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use kohaku_pir_rpc::MapLookup;
+
+    use super::*;
 
     #[test]
     fn lookup_url_appends_path() {

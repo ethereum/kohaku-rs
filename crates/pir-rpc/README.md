@@ -13,9 +13,11 @@ primary name reverse (ENS / GNS / WNS)
         → names LookupBackend, if configured
 computeId
         → local namehash
+stealthMetaAddressOf / stealth-address-scheme-1 text
+        → last names sidecar (one names lookup if it is not cached yet)
 matched eth_call (manifest)
         → account LookupBackend
-everything else (eth_getLogs, other eth_call, …)
+everything else (eth_getLogs, other eth_call, other text records, …)
         → fallback JSON-RPC
 ```
 

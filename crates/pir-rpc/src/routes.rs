@@ -1,9 +1,11 @@
 use alloy::primitives::keccak256;
 use serde_json::Value;
 
-use crate::DatasetManifest;
-use crate::names::{ClassifiedName, NameForward, NameSystem, match_name_call};
-use crate::tokens::{BALANCE_OF_SELECTOR, PirToken, balance_of_calldata, pir_token_by_contract};
+use crate::{
+    DatasetManifest,
+    names::{ClassifiedName, NameForward, NameSystem, match_name_call},
+    tokens::{BALANCE_OF_SELECTOR, PirToken, balance_of_calldata, pir_token_by_contract},
+};
 
 /// Where a JSON-RPC method should be answered.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,6 +34,20 @@ pub enum Route {
     },
     /// Forward resolution. The router answers from the name cache or falls back.
     NameForward(NameForward),
+    /// `stealthMetaAddressOf` on the ERC-6538 registry.
+    StealthMeta {
+        /// Registrant argument.
+        registrant: [u8; 20],
+        /// Scheme id. `None` cannot appear in the registry.
+        scheme_id: Option<u64>,
+    },
+    /// `stealth-address-scheme-1` text on ENS, GNS, or WNS.
+    StealthText {
+        /// Which resolver the call is on.
+        system: NameSystem,
+        /// Namehash carried by the call.
+        node: [u8; 32],
+    },
     /// Forward to the fallback Ethereum node.
     Fallback,
 }
@@ -120,6 +136,14 @@ impl RouteTable {
                 }
                 ClassifiedName::Namehash { name } => Route::Namehash { name },
                 ClassifiedName::Forward(forward) => Route::NameForward(forward),
+                ClassifiedName::StealthMeta {
+                    registrant,
+                    scheme_id,
+                } => Route::StealthMeta {
+                    registrant,
+                    scheme_id,
+                },
+                ClassifiedName::StealthText { system, node } => Route::StealthText { system, node },
             });
         }
         for ds in &self.datasets {
@@ -289,9 +313,10 @@ pub(crate) fn encode_zero(encoding: &str) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::tokens::PIR_TOKENS;
-    use serde_json::json;
 
     #[test]
     fn historical_block_falls_back() {

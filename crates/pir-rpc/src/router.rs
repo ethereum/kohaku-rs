@@ -1,16 +1,20 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
 
 use serde_json::Value;
 use tracing::debug;
 
-use crate::names::{
-    RememberedName, decode_name_reverse, encode_forward, encode_namehash_result, namehash,
-};
 use crate::{
     CallPath, DatasetManifest, Decoded, FallbackRpc, LookupBackend, MapFallback, MapLookup,
     PirDecode, PirLane, PirOp, PirProviderError, PlannedOp, Route, RouteTable,
+    lookup::StealthBroadcast,
+    names::{
+        RememberedName, decode_name_reverse, encode_forward, encode_namehash_result,
+        encode_stealth_meta_result, encode_stealth_text_result, namehash,
+    },
     routes::{encode_bytes, encode_qty, encode_uint256, encode_zero, parse_address_param},
     tokens::parse_storage_value,
 };
@@ -58,6 +62,13 @@ pub struct PirRouter {
     routes: RouteTable,
     /// Names returned from PIR, so the next forward `eth_call` stays off the RPC.
     name_cache: Mutex<NameCache>,
+    /// ERC-6538 registry and stealth text records from the last names lookup.
+    stealth_cache: Mutex<Option<StealthSnapshot>>,
+}
+
+struct StealthSnapshot {
+    broadcast: StealthBroadcast,
+    at: Instant,
 }
 
 impl PirRouter {
@@ -155,6 +166,39 @@ impl PirRouter {
             fallback,
             routes: RouteTable::from_datasets(datasets),
             name_cache: Mutex::new(NameCache::new()),
+            stealth_cache: Mutex::new(None),
+        }
+    }
+
+    /// Remember the stealth lists from a names lookup. `None` leaves the cache.
+    pub fn store_stealth(&self, stealth: Option<StealthBroadcast>) {
+        let Some(broadcast) = stealth else {
+            return;
+        };
+        let mut cache = self
+            .stealth_cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        *cache = Some(StealthSnapshot {
+            broadcast,
+            at: Instant::now(),
+        });
+    }
+
+    fn fresh_stealth(&self) -> Option<StealthBroadcast> {
+        let mut cache = self
+            .stealth_cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let now = Instant::now();
+        match cache.as_ref() {
+            Some(snapshot) if now.duration_since(snapshot.at) < NAME_CACHE_TTL => {
+                Some(snapshot.broadcast.clone())
+            }
+            _ => {
+                *cache = None;
+                None
+            }
         }
     }
 
@@ -228,6 +272,11 @@ impl PirRouter {
                     Ok(PlannedOp::Fallback)
                 }
             }
+            Route::StealthMeta {
+                registrant,
+                scheme_id,
+            } => Ok(self.plan_stealth_meta(registrant, scheme_id)),
+            Route::StealthText { system, node } => Ok(self.plan_stealth_text(system, node)),
             Route::TokenBalance(m) => {
                 let token_index = crate::tokens::PIR_TOKENS
                     .iter()
@@ -329,8 +378,7 @@ impl PirRouter {
                     "name PIR ops planned but no names lookup configured".into(),
                 )
             })?;
-            self.lookup_lane_blocking(Arc::clone(names), &name_ops)
-                .await?
+            self.lookup_names_lane(Arc::clone(names), &name_ops).await?
         };
 
         let mut raw: Vec<Option<Vec<u8>>> = vec![None; ops.len()];
@@ -424,17 +472,135 @@ impl PirRouter {
         Ok(remap.into_iter().map(|i| values[i].clone()).collect())
     }
 
+    async fn lookup_names_lane(
+        &self,
+        lookup: Arc<dyn LookupBackend>,
+        ops: &[PirOp],
+    ) -> Result<Vec<Option<Vec<u8>>>, PirProviderError> {
+        if ops.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (unique_keys, remap) = dedupe_keys(ops);
+        let batch =
+            tokio::task::spawn_blocking(move || lookup.lookup_names_batch(&unique_keys)).await??;
+        self.store_stealth(batch.stealth);
+        Ok(remap.into_iter().map(|i| batch.values[i].clone()).collect())
+    }
+
     /// Decode one op and remember any real names for a later forward check.
     ///
     /// # Errors
     ///
     /// Returns [`PirProviderError::Client`] when the value bytes cannot be parsed.
     pub fn decode_op(&self, op: &PirOp, value: Option<&[u8]>) -> Result<Decoded, PirProviderError> {
+        if let Some(decoded) = self.decode_stealth(op, value) {
+            return Ok(decoded);
+        }
         let (decoded, remember) = decode_with_names(op, value)?;
         if !remember.is_empty() {
             self.remember_names(&remember);
         }
         Ok(decoded)
+    }
+
+    /// Stealth answers read the sidecar, not the PIR value. `None` means this
+    /// op is not a stealth call.
+    fn decode_stealth(&self, op: &PirOp, value: Option<&[u8]>) -> Option<Decoded> {
+        match op.decode {
+            PirDecode::StealthMeta {
+                registrant,
+                scheme_id,
+            } => {
+                if let Ok((_, remember)) =
+                    decode_name_reverse(crate::names::NameSystem::Ens, registrant, value)
+                    && !remember.is_empty()
+                {
+                    self.remember_names(&remember);
+                }
+                let meta = self
+                    .fresh_stealth()
+                    .map(|bc| meta_bytes(&bc, &registrant, scheme_id))
+                    .unwrap_or_default();
+                Some(Decoded::Value(encode_stealth_meta_result(&meta)))
+            }
+            PirDecode::StealthText { system, node } => {
+                Some(self.stealth_text_decoded(system, node))
+            }
+            _ => None,
+        }
+    }
+
+    fn plan_stealth_meta(&self, registrant: [u8; 20], scheme_id: Option<u64>) -> PlannedOp {
+        let Some(scheme_id) = scheme_id else {
+            return PlannedOp::Local(encode_stealth_meta_result(&[]));
+        };
+        if let Some(bc) = self.fresh_stealth() {
+            PlannedOp::Local(encode_stealth_meta_result(&meta_bytes(
+                &bc,
+                &registrant,
+                scheme_id,
+            )))
+        } else {
+            PlannedOp::Pir(PirOp {
+                lane: PirLane::Names,
+                key: registrant.to_vec(),
+                decode: PirDecode::StealthMeta {
+                    registrant,
+                    scheme_id,
+                },
+                holder: None,
+                token_index: None,
+            })
+        }
+    }
+
+    fn plan_stealth_text(&self, system: crate::names::NameSystem, node: [u8; 32]) -> PlannedOp {
+        if self.fresh_stealth().is_some() {
+            match self.stealth_text_decoded(system, node) {
+                Decoded::Value(value) => PlannedOp::Local(value),
+                Decoded::NeedsFallback => PlannedOp::Fallback,
+            }
+        } else {
+            PlannedOp::Pir(PirOp {
+                lane: PirLane::Names,
+                key: vec![0u8; 20],
+                decode: PirDecode::StealthText { system, node },
+                holder: None,
+                token_index: None,
+            })
+        }
+    }
+
+    fn stealth_text_decoded(&self, system: crate::names::NameSystem, node: [u8; 32]) -> Decoded {
+        let Some(bc) = self.fresh_stealth() else {
+            return if self.name_is_remembered(system, &node) {
+                Decoded::Value(encode_stealth_text_result(system, ""))
+            } else {
+                Decoded::NeedsFallback
+            };
+        };
+        if let Some(value) = bc
+            .texts
+            .iter()
+            .find(|t| t.node == node)
+            .map(|t| t.value.clone())
+        {
+            Decoded::Value(encode_stealth_text_result(system, &value))
+        } else if self.name_is_remembered(system, &node) {
+            Decoded::Value(encode_stealth_text_result(system, ""))
+        } else {
+            Decoded::NeedsFallback
+        }
+    }
+
+    fn name_is_remembered(&self, system: crate::names::NameSystem, node: &[u8; 32]) -> bool {
+        let mut cache = self
+            .name_cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let now = Instant::now();
+        cache.prune(now);
+        cache.by_hash.contains_key(&(system as u8, *node))
     }
 
     fn remember_names(&self, names: &[RememberedName]) {
@@ -577,7 +743,19 @@ fn decode_with_names(
             }))
         }
         (PirDecode::Call { value_encoding }, None) => value_json(Ok(encode_zero(value_encoding))),
+        (PirDecode::StealthMeta { .. } | PirDecode::StealthText { .. }, _) => Err(
+            PirProviderError::Client("stealth decode is handled by the router".into()),
+        ),
     }
+}
+
+fn meta_bytes(broadcast: &StealthBroadcast, registrant: &[u8; 20], scheme_id: u64) -> Vec<u8> {
+    broadcast
+        .registry
+        .iter()
+        .find(|entry| entry.scheme_id == scheme_id && entry.registrant == *registrant)
+        .map(|entry| entry.meta.clone())
+        .unwrap_or_default()
 }
 
 fn account_code(delegate: Option<[u8; 20]>) -> Vec<u8> {
@@ -634,12 +812,14 @@ impl LookupBackend for RecordingLookup {
 
 #[cfg(test)]
 mod tests {
-    use crate::DatasetManifest;
-    use crate::tokens::{PIR_TOKENS, parse_storage_value};
     use serde_json::json;
 
     use super::*;
-    use crate::routes::encode_uint256;
+    use crate::{
+        DatasetManifest,
+        routes::encode_uint256,
+        tokens::{PIR_TOKENS, parse_storage_value},
+    };
 
     fn account_bytes(balance: u128, nonce: u64) -> Vec<u8> {
         let mut v = vec![0u8; 40];
@@ -1058,5 +1238,195 @@ mod tests {
                 hex::encode(crate::names::namehash("banteg.gwei"))
             ))
         );
+    }
+
+    fn eth_call(to: &str, data: &[u8]) -> Value {
+        json!([{ "to": to, "data": format!("0x{}", hex::encode(data)) }, "latest"])
+    }
+
+    fn stealth_router(names: MapLookup) -> PirRouter {
+        let fallback = MapFallback::default();
+        fallback.set("eth_call", json!("0xdead"));
+        PirRouter::from_parts_lanes(
+            std::sync::Arc::new(MapLookup::default()),
+            None,
+            Some(std::sync::Arc::new(names)),
+            std::sync::Arc::new(fallback),
+            Vec::new(),
+        )
+    }
+
+    #[tokio::test]
+    async fn stealth_meta_comes_from_the_names_sidecar() {
+        let names = MapLookup::default();
+        let meta = vec![0x02, 0x11, 0x22];
+        *names.stealth.lock().unwrap() = Some(crate::StealthBroadcast {
+            registry: vec![crate::StealthEntry {
+                registrant: addr(4),
+                scheme_id: 1,
+                meta: meta.clone(),
+            }],
+            texts: vec![],
+        });
+        let router = stealth_router(names);
+        let registry = "0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538";
+        let (got, path) = router
+            .request_with_path(
+                "eth_call",
+                eth_call(registry, &crate::names::stealth_meta_calldata(&addr(4), 1)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Pir);
+        assert_eq!(got, encode_stealth_meta_result(&meta));
+
+        let (got, path) = router
+            .request_with_path(
+                "eth_call",
+                eth_call(registry, &crate::names::stealth_meta_calldata(&addr(9), 1)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Local);
+        assert_eq!(got, encode_stealth_meta_result(&[]));
+    }
+
+    #[tokio::test]
+    async fn stealth_text_uses_the_list_or_a_remembered_name() {
+        let mut value = vec![0u8; 40];
+        let name = b"banteg.gwei";
+        value[0] = 2;
+        value[1] = name.len() as u8;
+        value[2..2 + name.len()].copy_from_slice(name);
+        let names = MapLookup::default();
+        names.insert(addr(4), value);
+        let listed = crate::names::namehash("vitalik.eth");
+        let remembered = crate::names::namehash("banteg.gwei");
+        *names.stealth.lock().unwrap() = Some(crate::StealthBroadcast {
+            registry: vec![],
+            texts: vec![crate::StealthText {
+                node: listed,
+                value: "st:eth:0x03".into(),
+            }],
+        });
+        let router = stealth_router(names);
+        let gns = "0x9D51D507BC7264d4fE8Ad1cf7Fe191933A0a81d6";
+        let reverse = crate::names::gns_reverse_calldata(&addr(4));
+        let (_, path) = router
+            .request_with_path("eth_call", eth_call(gns, &reverse))
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Pir);
+
+        let universal = "0xeeeeeeee14d718c2b47d9923deab1335e144eeee";
+        let listed_call = crate::names::resolve_gateways_text_calldata(
+            "vitalik.eth",
+            &listed,
+            "stealth-address-scheme-1",
+        );
+        let (got, path) = router
+            .request_with_path("eth_call", eth_call(universal, &listed_call))
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Local);
+        assert_eq!(
+            got,
+            encode_stealth_text_result(crate::names::NameSystem::Ens, "st:eth:0x03")
+        );
+
+        let missing = crate::names::gns_text_calldata(&remembered, "stealth-address-scheme-1");
+        let (got, path) = router
+            .request_with_path("eth_call", eth_call(gns, &missing))
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Local);
+        assert_eq!(
+            got,
+            encode_stealth_text_result(crate::names::NameSystem::Gns, "")
+        );
+
+        let avatar = crate::names::gns_text_calldata(&remembered, "avatar");
+        let (got, path) = router
+            .request_with_path("eth_call", eth_call(gns, &avatar))
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Fallback);
+        assert_eq!(got, json!("0xdead"));
+
+        let unknown = crate::names::namehash("alice.eth");
+        let unknown_call = crate::names::resolve_gateways_text_calldata(
+            "alice.eth",
+            &unknown,
+            "stealth-address-scheme-1",
+        );
+        let (got, path) = router
+            .request_with_path("eth_call", eth_call(universal, &unknown_call))
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Fallback);
+        assert_eq!(got, json!("0xdead"));
+    }
+
+    #[tokio::test]
+    async fn same_batch_names_lookup_fills_stealth_before_decode() {
+        let mut value = vec![0u8; 40];
+        let name = b"banteg.gwei";
+        value[0] = 2;
+        value[1] = name.len() as u8;
+        value[2..2 + name.len()].copy_from_slice(name);
+        let names = MapLookup::default();
+        names.insert(addr(4), value);
+        let meta = vec![0x02, 0xaa];
+        *names.stealth.lock().unwrap() = Some(crate::StealthBroadcast {
+            registry: vec![crate::StealthEntry {
+                registrant: addr(4),
+                scheme_id: 1,
+                meta: meta.clone(),
+            }],
+            texts: vec![],
+        });
+        let router = stealth_router(names);
+        let ops = vec![
+            PirOp {
+                lane: PirLane::Names,
+                key: addr(4).to_vec(),
+                decode: PirDecode::NameReverse {
+                    system: crate::names::NameSystem::Gns,
+                },
+                holder: None,
+                token_index: None,
+            },
+            PirOp {
+                lane: PirLane::Names,
+                key: addr(4).to_vec(),
+                decode: PirDecode::StealthMeta {
+                    registrant: addr(4),
+                    scheme_id: 1,
+                },
+                holder: None,
+                token_index: None,
+            },
+        ];
+        let out = router.execute_pir(&ops).await.unwrap();
+        let text = pir_value(&out[0]).as_str().unwrap();
+        assert!(text.contains(&hex::encode(b"banteg.gwei")));
+        assert_eq!(pir_value(&out[1]), &encode_stealth_meta_result(&meta));
+    }
+
+    #[tokio::test]
+    async fn stealth_without_names_lane_falls_back() {
+        let fallback = MapFallback::default();
+        fallback.set("eth_call", json!("0xdead"));
+        let router = PirRouter::mock(MapLookup::default(), fallback, Vec::new());
+        let registry = "0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538";
+        let (got, path) = router
+            .request_with_path(
+                "eth_call",
+                eth_call(registry, &crate::names::stealth_meta_calldata(&addr(4), 1)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(path, CallPath::Fallback);
+        assert_eq!(got, json!("0xdead"));
     }
 }
