@@ -148,8 +148,7 @@ struct ExternalSigner {
     calls: AtomicUsize,
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[async_trait::async_trait]
 impl RailgunSigner for ExternalSigner {
     fn chain_id(&self) -> ChainId {
         ChainId::All
@@ -218,9 +217,14 @@ fn engine_txids_match_padding_order_and_bound_parameters() {
             Txid::new(&nullifiers, &commitments, bound + U256::from(1))
         );
         if nullifiers.len() > 1 {
-            let mut reordered = nullifiers;
+            let mut reordered = nullifiers.clone();
             reordered.swap(0, 1);
             assert_ne!(actual, Txid::new(&reordered, &commitments, bound));
+        }
+        if commitments.len() > 1 {
+            let mut reordered = commitments;
+            reordered.swap(0, 1);
+            assert_ne!(actual, Txid::new(&nullifiers, &reordered, bound));
         }
     }
 }
