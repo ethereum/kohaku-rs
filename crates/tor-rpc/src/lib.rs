@@ -258,28 +258,9 @@ async fn exchange(
         .await
         .context("http through Tor")?;
     let status = response.status().as_u16();
-    let headers = response
-        .headers()
-        .iter()
-        .map(|(name, value)| {
-            (
-                name.as_str().to_owned(),
-                String::from_utf8_lossy(value.as_bytes()).into_owned(),
-            )
-        })
-        .collect();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .context("http body")?
-        .to_bytes()
-        .to_vec();
-    Ok(TorHttpResponse {
-        status,
-        headers,
-        body,
-    })
+    let (parts, body) = response.into_parts();
+    let body = body.collect().await.context("http body")?.to_bytes();
+    Ok(hyper::Response::from_parts(parts, body))
 }
 
 /// Dial `(host, port)` through Arti. hyper-rustls wraps the stream in TLS for `https`.
