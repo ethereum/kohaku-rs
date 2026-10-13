@@ -248,7 +248,7 @@ async fn exchange(
 ) -> Result<hyper::Response<Bytes>> {
     let mut builder = hyper::Request::builder().method(method).uri(url.as_str());
     for (name, value) in headers {
-        builder = builder.header(name.as_str(), value.as_str());
+        builder = builder.header(name, value);
     }
     let request = builder
         .body(Full::new(Bytes::copy_from_slice(body)))
