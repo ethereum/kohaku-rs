@@ -1,21 +1,17 @@
 //! Alloy JSON-RPC through Arti (Tor network)
 //!
-//! [`TorRpc::connect`] bootstraps one client. Cloning [`TorRpc`] shares it.
-//! Requests on one [`TorClient`] handle may share circuits with each other.
-//! A new [`TorClient::isolated_client`] is a new group: its streams do not share
-//! circuits with the parent or with any other isolated client. It is not one
-//! circuit per RPC. Call `isolated_client` again for the next unlinkable group.
+//! [`TorRpc::connect`] bootstraps one client. Cloning [`TorRpc`] shares its circuits and its HTTP
+//! connection pool. [`TorRpc::isolated`] returns a new group: its streams do not share circuits
+//! with the parent or with any other isolated client. It is not one circuit per RPC. Call
+//! `isolated` again for the next unlinkable group. Reusing one isolated value shares that group
+//! (`let iso = tor.isolated(); iso.send(...); iso.send(...)`).
 //!
-//! - [`TorRpc::shared_rpc_client`], [`TorRpc::shared_provider`], [`TorRpc::send_shared`],
-//!   [`TorRpc::get`], [`TorRpc::post`] — the bootstrapped client. Keep one for traffic that is safe
-//!   to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST basically any
-//!   request that does not contain privacy-sensitive data e.g. specific user accounts
-//! - [`TorRpc::isolated_rpc_client`], [`TorRpc::isolated_provider`] — one fresh `isolated_client`,
-//!   reused for every RPC on that client. Hold it for a session (the calls about one address).
-//!   Construct another when the next session must not share circuits with it.
-//! - [`TorRpc::with_isolated`] — that same client for one closure, then drop it.
-//! - [`TorRpc::send_isolated`] — one JSON-RPC packet on a new `isolated_client`, then drop it.
-//!   Calls packed into that packet share the group. The next call is a new group.
+//! - [`TorRpc::rpc_client`], [`TorRpc::provider`], [`TorRpc::send`], [`TorRpc::get`],
+//!   [`TorRpc::post`] — whichever client you call them on. On the bootstrapped client, keep traffic
+//!   that is safe to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST
+//!   basically any request that does not contain privacy-sensitive data e.g. specific user accounts
+//! - [`TorRpc::isolated`] — one fresh `isolated_client`. Hold it for a session (the calls about one
+//!   address). Call `isolated` again when the next session must not share circuits with it.
 
 use std::{
     future::Future,
@@ -50,33 +46,15 @@ use tor_rtcompat::PreferredRuntime;
 use tower::Service;
 use url::Url;
 
-/// Raw HTTP response from a Tor exit request (shared client).
-#[derive(Clone, Debug)]
-pub struct TorHttpResponse {
-    /// HTTP status code.
-    pub status: u16,
-    /// Response header lines (name, value).
-    pub headers: Vec<(String, String)>,
-    /// Response body.
-    pub body: Vec<u8>,
-}
-
-impl TorHttpResponse {
-    /// First header value matching `name` (case-insensitive).
-    #[must_use]
-    pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.as_str())
-    }
-}
-
-/// A bootstrapped Tor client. Cloning is cheap and shares the directory state
-/// and the shared HTTP connection pool.
+/// A bootstrapped Tor client. Cloning is cheap and shares the directory state and the HTTP
+/// connection pool.
 ///
-/// Arti refuses local addresses by default. That error happens when a request
-/// is sent, not when one of these clients is built.
+/// [`isolated`](Self::isolated) returns a client whose streams do not share circuits with this
+/// one. Reusing that value shares the new group. Call `isolated` again for the next unlinkable
+/// group.
+///
+/// Arti refuses local addresses by default. That error happens when a request is sent, not when
+/// one of these clients is built.
 #[derive(Clone)]
 pub struct TorRpc {
     client: TorClient<PreferredRuntime>,
@@ -99,53 +77,40 @@ impl TorRpc {
         Ok(Self { client, http })
     }
 
-    /// Long-lived JSON-RPC client that reuses the shared Tor client (and its circuits).
+    /// A new isolation group. Streams on the returned client do not share circuits with `self`.
+    ///
+    /// Cloning the returned value shares that group. Call `isolated` again for the next unlinkable
+    /// group.
     #[must_use]
-    pub fn shared_rpc_client(&self, url: Url) -> RpcClient {
+    pub fn isolated(&self) -> Self {
+        let client = self.client.isolated_client();
+        Self {
+            http: pool(client.clone()),
+            client,
+        }
+    }
+
+    /// JSON-RPC client that reuses this Tor client and its circuits.
+    #[must_use]
+    pub fn rpc_client(&self, url: Url) -> RpcClient {
         RpcClient::new(transport(self.http.clone(), url), false)
     }
 
-    /// JSON-RPC client pinned to a fresh [`TorClient::isolated_client`].
-    ///
-    /// All requests on this client share one isolation token / circuit family.
+    /// Alloy provider that reuses this Tor client and its circuits.
     #[must_use]
-    pub fn isolated_rpc_client(&self, url: Url) -> RpcClient {
-        RpcClient::new(transport(pool(self.client.isolated_client()), url), false)
+    pub fn provider(&self, url: Url) -> RootProvider {
+        RootProvider::new(self.rpc_client(url))
     }
 
-    /// Run `f` with an [`isolated_rpc_client`](Self::isolated_rpc_client), then drop it.
-    ///
-    /// # Errors
-    /// Returns when `f` fails.
-    pub async fn with_isolated<F, Fut, T>(&self, url: Url, f: F) -> Result<T>
-    where
-        F: FnOnce(RpcClient) -> Fut,
-        Fut: Future<Output = Result<T>>,
-    {
-        f(self.isolated_rpc_client(url)).await
-    }
-
-    /// Shared-circuit Alloy provider (pool sync).
-    #[must_use]
-    pub fn shared_provider(&self, url: Url) -> RootProvider {
-        RootProvider::new(self.shared_rpc_client(url))
-    }
-
-    /// Isolated-session Alloy provider.
-    #[must_use]
-    pub fn isolated_provider(&self, url: Url) -> RootProvider {
-        RootProvider::new(self.isolated_rpc_client(url))
-    }
-
-    /// `GET url` over the shared Tor client.
+    /// `GET url` over this Tor client.
     ///
     /// # Errors
     /// Returns when the download fails or the status is not 2xx.
     pub async fn get(&self, url: &Url) -> Result<Vec<u8>> {
-        self.request_shared(url, "GET", &[], &[]).await
+        self.request(url, "GET", &[], &[]).await
     }
 
-    /// Arbitrary `POST` request with `body` over the shared Tor client.
+    /// Arbitrary `POST` request with `body` over this Tor client.
     ///
     /// Used by e.g. PIR that must reach a PIR HTTP API without clearnet.
     ///
@@ -157,69 +122,56 @@ impl TorRpc {
         headers: &[(String, String)],
         body: &[u8],
     ) -> Result<Vec<u8>> {
-        self.request_shared(url, "POST", headers, body).await
+        self.request(url, "POST", headers, body).await
     }
 
-    /// Arbitrary HTTP request over the shared Tor client.
+    /// Arbitrary HTTP request over this Tor client. Returns the body when the status is 2xx.
     ///
     /// # Errors
     /// Returns when the exchange fails or the status is not 2xx.
-    pub async fn request_shared(
+    pub async fn request(
         &self,
         url: &Url,
         method: &str,
         headers: &[(String, String)],
         body: &[u8],
     ) -> Result<Vec<u8>> {
-        let resp = self.http_shared(url, method, headers, body).await?;
-        if !(200..300).contains(&resp.status) {
-            bail!("{method} {url} returned HTTP {}", resp.status);
+        let resp = self.http(url, method, headers, body).await?;
+        if !resp.status().is_success() {
+            bail!("{method} {url} returned HTTP {}", resp.status());
         }
-        Ok(resp.body)
+        Ok(resp.into_body().to_vec())
     }
 
-    /// HTTP over the shared Tor client, including response headers.
+    /// HTTP over this Tor client, including status and headers.
+    ///
+    /// The body is collected into [`Bytes`](Bytes). Non-2xx statuses are returned, not treated as
+    /// errors.
     ///
     /// # Errors
-    /// Returns when Tor or the HTTP exchange fails (not on non-2xx status).
-    pub async fn http_shared(
+    /// Returns when Tor or the HTTP exchange fails.
+    pub async fn http(
         &self,
         url: &Url,
         method: &str,
         headers: &[(String, String)],
         body: &[u8],
-    ) -> Result<TorHttpResponse> {
+    ) -> Result<hyper::Response<Bytes>> {
         exchange(&self.http, url, method, headers, body).await
     }
 
-    /// Send a JSON-RPC packet over the shared Tor client (one HTTP POST).
+    /// Send a JSON-RPC packet over this Tor client (one HTTP POST).
+    ///
+    /// Batch every RPC that should share this isolation group into `packet`.
     ///
     /// # Errors
     /// Returns a transport error when serialization, Tor, or HTTP fails.
-    pub async fn send_shared(
+    pub async fn send(
         &self,
         url: Url,
         packet: RequestPacket,
     ) -> Result<ResponsePacket, TransportError> {
         Service::call(&mut transport(self.http.clone(), url), packet).await
-    }
-
-    /// Send a JSON-RPC packet on a fresh [`TorClient::isolated_client`].
-    ///
-    /// Batch all RPCs that should share one isolation token into `packet`.
-    ///
-    /// # Errors
-    /// Returns a transport error when serialization, Tor, or HTTP fails.
-    pub async fn send_isolated(
-        &self,
-        url: Url,
-        packet: RequestPacket,
-    ) -> Result<ResponsePacket, TransportError> {
-        Service::call(
-            &mut transport(pool(self.client.isolated_client()), url),
-            packet,
-        )
-        .await
     }
 }
 
@@ -257,7 +209,6 @@ async fn exchange(
     let response = Service::call(&mut client, request)
         .await
         .context("http through Tor")?;
-    let status = response.status().as_u16();
     let (parts, body) = response.into_parts();
     let body = body.collect().await.context("http body")?.to_bytes();
     Ok(hyper::Response::from_parts(parts, body))
@@ -345,7 +296,7 @@ mod tests {
     async fn circuit_session_latency() {
         let tor = TorRpc::connect().await.unwrap();
         let url: Url = "https://ethereum.publicnode.com".parse().unwrap();
-        let shared = tor.shared_provider(url.clone());
+        let shared = tor.provider(url.clone());
         let started = std::time::Instant::now();
         let head = alloy::providers::Provider::get_block_number(&shared)
             .await
@@ -377,11 +328,7 @@ mod tests {
             }
         }
         let started = std::time::Instant::now();
-        let n = tor
-            .with_isolated(url, |client| async move {
-                let p: RootProvider = RootProvider::new(client);
-                Ok(alloy::providers::Provider::get_block_number(&p).await?)
-            })
+        let n = alloy::providers::Provider::get_block_number(&tor.isolated().provider(url))
             .await
             .unwrap();
         eprintln!(
