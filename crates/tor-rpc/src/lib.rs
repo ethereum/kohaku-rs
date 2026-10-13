@@ -245,7 +245,7 @@ async fn exchange(
     method: &str,
     headers: &[(String, String)],
     body: &[u8],
-) -> Result<TorHttpResponse> {
+) -> Result<hyper::Response<Bytes>> {
     let mut builder = hyper::Request::builder().method(method).uri(url.as_str());
     for (name, value) in headers {
         builder = builder.header(name.as_str(), value.as_str());
