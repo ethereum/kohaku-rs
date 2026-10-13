@@ -21,8 +21,8 @@ padding, order and bound-parameter binding. These are offline protocol facts,
 not deployment, account-custody, hardware or complete transaction qualification.
 
 The external-signer test stores no spending key in its signer implementation.
-It returns independently generated reference signatures, verifies them with the
-public key. A request it holds no signature for returns an error; this does not
+It returns independently generated reference signatures, which verify against
+the public key. A request it holds no signature for returns an error; this does not
 test error propagation through the transaction builder or a hardware device.
 
 Account 0 also agrees with the engine maintainers' hand-written
