@@ -1,7 +1,5 @@
-use std::time::Duration;
-
 use alloy::{providers::Provider, rpc::types::Filter};
-use kohaku_rpc_provider::StreamedEvent;
+use kohaku_rpc_provider::{StreamedEvent, StreamedEventConfig};
 use tracing::{info, warn};
 
 use crate::{
@@ -13,11 +11,7 @@ use crate::{
 #[derive(Clone)]
 pub struct RpcSyncer<P: Provider> {
     provider: P,
-    //? Unset options fall back to `StreamedEvent`'s defaults.
-    chunk_size: Option<u64>,
-    concurrent: Option<usize>,
-    backoff: Option<(Duration, Duration)>,
-    max_retries: Option<u32>,
+    config: StreamedEventConfig,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -34,41 +28,14 @@ impl<P: Provider> RpcSyncer<P> {
     pub fn new(provider: P) -> Self {
         Self {
             provider,
-            chunk_size: None,
-            concurrent: None,
-            backoff: None,
-            max_retries: None,
+            config: StreamedEventConfig::default(),
         }
     }
 
-    /// Sets the initial chunk size in blocks for `eth_getLogs` calls. See
-    /// [`StreamedEvent::chunk_size`].
+    /// Sets the chunking, concurrency and backoff options for `eth_getLogs` calls.
     #[must_use]
-    pub fn with_chunk_size(mut self, chunk_size: u64) -> Self {
-        self.chunk_size = Some(chunk_size);
-        self
-    }
-
-    /// Sets the maximum number of concurrent `eth_getLogs` calls. See
-    /// [`StreamedEvent::concurrent`].
-    #[must_use]
-    pub fn with_concurrent(mut self, max_concurrent: usize) -> Self {
-        self.concurrent = Some(max_concurrent);
-        self
-    }
-
-    /// Sets the rate-limit pause bounds. See [`StreamedEvent::backoff`].
-    #[must_use]
-    pub fn with_backoff(mut self, base_delay: Duration, max_delay: Duration) -> Self {
-        self.backoff = Some((base_delay, max_delay));
-        self
-    }
-
-    /// Sets how many consecutive rate limits a single call tolerates. See
-    /// [`StreamedEvent::max_retries`].
-    #[must_use]
-    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
-        self.max_retries = Some(max_retries);
+    pub fn with_config(mut self, config: StreamedEventConfig) -> Self {
+        self.config = config;
         self
     }
 }
@@ -108,7 +75,10 @@ impl<P: Provider + Clone> RpcSyncer<P> {
             .address(pool.address)
             .from_block(range.start)
             .to_block(range.end - 1);
-        let logs = self.streamed_event(filter).query().await?;
+        let logs = StreamedEvent::new(self.provider.clone(), filter)
+            .config(self.config)
+            .query()
+            .await?;
 
         let mut events = Vec::new();
         for log in logs {
@@ -138,23 +108,5 @@ impl<P: Provider + Clone> RpcSyncer<P> {
         let to = to_block.min(latest).max(from);
 
         Ok(from..to)
-    }
-
-    /// Builds a [`StreamedEvent`] for `filter` with this syncer's options.
-    fn streamed_event(&self, filter: Filter) -> StreamedEvent<P> {
-        let mut events = StreamedEvent::new(self.provider.clone(), filter);
-        if let Some(chunk_size) = self.chunk_size {
-            events = events.chunk_size(chunk_size);
-        }
-        if let Some(max_concurrent) = self.concurrent {
-            events = events.concurrent(max_concurrent);
-        }
-        if let Some((base_delay, max_delay)) = self.backoff {
-            events = events.backoff(base_delay, max_delay);
-        }
-        if let Some(max_retries) = self.max_retries {
-            events = events.max_retries(max_retries);
-        }
-        events
     }
 }

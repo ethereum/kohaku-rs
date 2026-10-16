@@ -38,12 +38,15 @@ use tracing::debug;
 /// #     provider: impl alloy::providers::Provider + Clone,
 /// # ) -> alloy::transports::TransportResult<()> {
 /// use alloy::rpc::types::Filter;
-/// use kohaku_rpc_provider::StreamedEvent;
+/// use kohaku_rpc_provider::{StreamedEvent, StreamedEventConfig};
 ///
 /// let filter = Filter::new().from_block(9_000_000).to_block(9_100_000);
 /// let logs = StreamedEvent::new(provider, filter)
-///     .chunk_size(10_000)
-///     .concurrent(4)
+///     .config(StreamedEventConfig {
+///         chunk_size: 10_000,
+///         max_concurrent: 4,
+///         ..Default::default()
+///     })
 ///     .query()
 ///     .await?;
 /// # Ok(())
@@ -53,13 +56,27 @@ use tracing::debug;
 pub struct StreamedEvent<P: Provider<N>, N: Network = Ethereum> {
     provider: P,
     filter: Filter,
-
-    chunk_size: u64,
-    max_concurrent: usize,
-    base_delay: Duration,
-    max_delay: Duration,
-    max_retries: u32,
+    config: StreamedEventConfig,
     _network: PhantomData<N>,
+}
+
+/// Tuning options for a [`StreamedEvent`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamedEventConfig {
+    /// The initial chunk size in blocks (default: 1,000).
+    ///
+    /// Clamped to 1..
+    pub chunk_size: u64,
+    /// The maximum number of concurrent chunk requests (default: 5).
+    ///
+    /// Clamped to 1..
+    pub max_concurrent: usize,
+    /// The rate-limit pause lower bound (default: 250ms).
+    pub base_delay: Duration,
+    /// The rate-limit pause upper bound (default: 30s).
+    pub max_delay: Duration,
+    /// How many consecutive rate limits a single request tolerates (default: 10).
+    pub max_retries: u32,
 }
 
 /// Adaptive state shared by every request in one stream.
@@ -79,45 +96,15 @@ impl<P: Provider<N>, N: Network> StreamedEvent<P, N> {
         Self {
             provider,
             filter,
-            chunk_size: 1_000,
-            max_concurrent: 5,
-            base_delay: Duration::from_millis(250),
-            max_delay: Duration::from_secs(30),
-            max_retries: 10,
+            config: StreamedEventConfig::default(),
             _network: PhantomData,
         }
     }
 
-    /// Sets the initial chunk size in blocks (default: 1,000).
-    ///
-    /// Clamps `chunk_size` to 1..
+    /// Replaces all tuning options at once.
     #[must_use]
-    pub fn chunk_size(mut self, chunk_size: u64) -> Self {
-        self.chunk_size = chunk_size.max(1);
-        self
-    }
-
-    /// Sets the maximum number of concurrent chunk requests (default: 5).
-    ///
-    /// Clamps `max_concurrent` to 1..
-    #[must_use]
-    pub fn concurrent(mut self, max_concurrent: usize) -> Self {
-        self.max_concurrent = max_concurrent.max(1);
-        self
-    }
-
-    /// Sets the rate-limit pause bounds (default: (250ms, 30s)).
-    #[must_use]
-    pub fn backoff(mut self, base_delay: Duration, max_delay: Duration) -> Self {
-        self.base_delay = base_delay;
-        self.max_delay = max_delay;
-        self
-    }
-
-    /// Sets how many consecutive rate limits a single request tolerates (default: 10).
-    #[must_use]
-    pub fn max_retries(mut self, max_retries: u32) -> Self {
-        self.max_retries = max_retries;
+    pub fn config(mut self, config: StreamedEventConfig) -> Self {
+        self.config = config;
         self
     }
 }
@@ -155,10 +142,10 @@ impl<P: Provider<N> + Clone, N: Network> StreamedEvent<P, N> {
 
     /// Streams the logs of `range` chunk by chunk, querying up to `max_concurrent` chunks at once.
     fn chunk_stream(self, range: Range<u64>) -> impl Stream<Item = TransportResult<Vec<Log>>> {
-        let max_concurrent = self.max_concurrent;
+        let max_concurrent = self.config.max_concurrent.max(1);
         let state = Arc::new(Mutex::new(State {
-            size: self.chunk_size,
-            delay: self.base_delay,
+            size: self.config.chunk_size.max(1),
+            delay: self.config.base_delay,
             paused_until: None,
         }));
 
@@ -255,7 +242,8 @@ impl<P: Provider<N> + Clone, N: Network> StreamedEvent<P, N> {
             .clone()
             .from_block(range.start)
             .to_block(range.end - 1);
-        let stagger = self.base_delay / u32::try_from(self.max_concurrent).unwrap_or(u32::MAX);
+        let max_concurrent = self.config.max_concurrent.max(1);
+        let stagger = self.config.base_delay / u32::try_from(max_concurrent).unwrap_or(u32::MAX);
         let mut retries = 0;
 
         loop {
@@ -266,20 +254,20 @@ impl<P: Provider<N> + Clone, N: Network> StreamedEvent<P, N> {
 
             let err = match self.provider.get_logs(&filter).await {
                 Ok(logs) => {
-                    lock(state)?.succeeded(self.base_delay);
+                    lock(state)?.succeeded(self.config.base_delay);
                     return Ok(logs);
                 }
                 Err(err) => err,
             };
 
-            if !is_rate_limited(&err) || retries >= self.max_retries {
+            if !is_rate_limited(&err) || retries >= self.config.max_retries {
                 return Err(err);
             }
 
             retries += 1;
             debug!(%err, ?range, retries, "eth_getLogs rate limited, pausing");
             let hint = RateLimitRetryPolicy::default().backoff_hint(&err);
-            lock(state)?.pause(hint, self.max_delay);
+            lock(state)?.pause(hint, self.config.max_delay);
         }
     }
 }
@@ -310,6 +298,18 @@ impl State {
         let until = Instant::now() + hint.unwrap_or(self.delay);
         self.paused_until = Some(self.paused_until.map_or(until, |prev| prev.max(until)));
         self.delay = (self.delay * 2).min(max_delay);
+    }
+}
+
+impl Default for StreamedEventConfig {
+    fn default() -> Self {
+        Self {
+            chunk_size: 1_000,
+            max_concurrent: 5,
+            base_delay: Duration::from_millis(250),
+            max_delay: Duration::from_secs(30),
+            max_retries: 10,
+        }
     }
 }
 
@@ -369,7 +369,10 @@ mod tests {
 
         let logs =
             StreamedEvent::<_, Ethereum>::new(provider, Filter::new().from_block(0).to_block(4))
-                .concurrent(1)
+                .config(StreamedEventConfig {
+                    max_concurrent: 1,
+                    ..Default::default()
+                })
                 .query()
                 .await
                 .unwrap();
@@ -388,7 +391,11 @@ mod tests {
         let start = Instant::now();
         let logs =
             StreamedEvent::<_, Ethereum>::new(provider, Filter::new().from_block(0).to_block(4))
-                .backoff(Duration::from_secs(1), Duration::from_secs(1))
+                .config(StreamedEventConfig {
+                    base_delay: Duration::from_secs(1),
+                    max_delay: Duration::from_secs(1),
+                    ..Default::default()
+                })
                 .query()
                 .await
                 .unwrap();
@@ -407,7 +414,10 @@ mod tests {
 
         let result =
             StreamedEvent::<_, Ethereum>::new(provider, Filter::new().from_block(0).to_block(4))
-                .max_retries(1)
+                .config(StreamedEventConfig {
+                    max_retries: 1,
+                    ..Default::default()
+                })
                 .query()
                 .await;
 
@@ -424,8 +434,11 @@ mod tests {
         //? Two one-block chunks: the second is never requested once the first fails.
         let items: Vec<_> =
             StreamedEvent::<_, Ethereum>::new(provider, Filter::new().from_block(0).to_block(1))
-                .chunk_size(1)
-                .concurrent(1)
+                .config(StreamedEventConfig {
+                    chunk_size: 1,
+                    max_concurrent: 1,
+                    ..Default::default()
+                })
                 .stream()
                 .collect()
                 .await;
