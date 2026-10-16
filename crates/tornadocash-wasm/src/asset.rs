@@ -222,7 +222,8 @@ mod tests {
     #[wasm_bindgen_test]
     fn native_assets_have_no_token_address() {
         for asset in [Asset::eth(), Asset::matic()] {
-            assert_eq!(asset.kind(), "native");
+            let kind: JsValue = asset.kind().unwrap().into();
+            assert_eq!(kind.as_string().unwrap(), "native");
             let address: JsValue = asset.address().unwrap().into();
             assert!(address.is_undefined());
         }
@@ -232,7 +233,8 @@ mod tests {
     fn erc20_asset_exposes_token_address_as_checksummed_hex() {
         let asset = Asset::ethereum_dai();
 
-        assert_eq!(asset.kind(), "erc20");
+        let kind: JsValue = asset.kind().unwrap().into();
+        assert_eq!(kind.as_string().unwrap(), "erc20");
         let address: JsValue = asset.address().unwrap().into();
         assert_eq!(
             address.as_string().unwrap(),
