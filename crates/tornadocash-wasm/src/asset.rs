@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use alloy_primitives::Address;
 use kohaku_tornadocash::Asset as CoreAsset;
+use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -13,6 +14,14 @@ use crate::hex::Hex;
 #[wasm_bindgen]
 pub struct Asset {
     pub(crate) inner: CoreAsset,
+}
+
+/// Represents the kind of a tornadocash asset.
+#[derive(Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum AssetKind {
+    Native,
+    Erc20,
 }
 
 #[wasm_bindgen]
@@ -84,12 +93,12 @@ impl Asset {
     /// Return the asset variant: `native` or `erc20`.
     #[wasm_bindgen(getter)]
     #[must_use]
-    pub fn kind(&self) -> String {
-        match &self.inner {
-            CoreAsset::Native { .. } => "native",
-            CoreAsset::Erc20 { .. } => "erc20",
+    pub fn kind(&self) -> Result<Ts<AssetKind>, JsError> {
+        Ok(match &self.inner {
+            CoreAsset::Native { .. } => AssetKind::Native,
+            CoreAsset::Erc20 { .. } => AssetKind::Erc20,
         }
-        .to_owned()
+        .into_ts()?)
     }
 
     /// Return the asset symbol.
