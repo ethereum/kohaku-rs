@@ -92,7 +92,6 @@ impl Asset {
 
     /// Return the asset variant: `native` or `erc20`.
     #[wasm_bindgen(getter)]
-    #[must_use]
     pub fn kind(&self) -> Result<Ts<AssetKind>, JsError> {
         Ok(match &self.inner {
             CoreAsset::Native { .. } => AssetKind::Native,
