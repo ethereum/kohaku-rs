@@ -4,7 +4,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::{asset::Asset, hex::Hex, note_string::NoteString};
 
-/// A known Tornado pool stored in WASM memory until its JavaScript wrapper is freed.
+/// A tornadocash pool.
+///
+/// See [`kohaku_tornadocash::Pool`] for more details.
 #[wasm_bindgen]
 pub struct Pool {
     inner: CorePool,

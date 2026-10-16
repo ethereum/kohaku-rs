@@ -7,7 +7,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::hex::Hex;
 
-/// A Tornado asset stored in WASM memory until its JavaScript wrapper is freed.
+/// Represents an asset in a tornadocash pool.
+///
+/// See [`kohaku_tornadocash::Asset`] for more details.
 #[wasm_bindgen]
 pub struct Asset {
     pub(crate) inner: CoreAsset,
