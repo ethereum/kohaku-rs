@@ -57,8 +57,9 @@ pub struct GasSimulationDetails {
 #[cfg_attr(js, derive(tsify::Tsify))]
 pub struct BalanceEntry {
     pub asset: AssetId,
-    /// If POI is enabled, the spendability status of the note according to the POI provider.
-    /// A failed lookup is `Unavailable`, never `Missing`. None when POI is disabled.
+    /// If POI is enabled, the spendability status from the local list copy.
+    /// `Unavailable` means that list is not caught up. It is never `Missing`.
+    /// None when POI is disabled.
     #[serde(rename = "poiStatus")]
     pub poi_status: Option<PoiStatus>,
     pub amount: u128,
@@ -68,8 +69,9 @@ pub struct BalanceEntry {
 #[cfg_attr(js, derive(tsify::Tsify))]
 pub struct NoteEntry {
     pub asset: AssetId,
-    /// If POI is enabled, the spendability status of the note according to the POI provider.
-    /// A failed lookup is `Unavailable`, never `Missing`. None when POI is disabled.
+    /// If POI is enabled, the spendability status from the local list copy.
+    /// `Unavailable` means that list is not caught up. It is never `Missing`.
+    /// None when POI is disabled.
     #[serde(rename = "poiStatus")]
     pub poi_status: Option<PoiStatus>,
     pub amount: u128,
@@ -310,7 +312,8 @@ impl RailgunProvider {
     /// Returns the balance for the given address.
     ///
     /// If POI is enabled, groups balances by observed POI status. Only `Valid`
-    /// is spendable; `Unavailable` means the lookup failed, not that a proof is missing.
+    /// is spendable. `Unavailable` means the local list is not caught up, not
+    /// that a proof is missing.
     pub async fn balance(&mut self, address: RailgunAddress) -> Vec<BalanceEntry> {
         let mut balance_map = HashMap::new();
         for note in self.notes(address).await {
@@ -1279,5 +1282,119 @@ mod poi_availability_tests {
         assert!(
             serde_json::from_str::<crate::poi::types::PoiNodeStatus>("\"Unavailable\"").is_err()
         );
+    }
+}
+
+#[cfg(all(test, native))]
+mod spendable_notes_tests {
+    use alloy::primitives::Address;
+
+    use super::*;
+    use crate::{
+        account::signer::{PrivateKeySigner, RailgunSigner},
+        caip::AssetId,
+        crypto::keys::{ByteKey, SpendingKey, ViewingKey},
+        note::utxo::UtxoNote,
+        poi::types::BlindedCommitmentType,
+        transact::TransactionBuilderError,
+    };
+
+    fn signer() -> std::sync::Arc<PrivateKeySigner> {
+        PrivateKeySigner::new_evm(
+            SpendingKey::from_bytes([1; 32]),
+            ViewingKey::from_bytes([2; 32]),
+            11_155_111,
+        )
+    }
+
+    fn note(signer: std::sync::Arc<PrivateKeySigner>, asset: AssetId, value: u128) -> UtxoNote {
+        UtxoNote::new(
+            0,
+            0,
+            signer,
+            asset,
+            value,
+            [5; 16],
+            "public fixture",
+            BlindedCommitmentType::Transact,
+        )
+    }
+
+    #[test]
+    fn a_valid_note_stays_spendable_beside_an_unavailable_one() {
+        let signer = signer();
+        let asset = AssetId::erc20(Address::repeat_byte(0x11));
+        let valid = note(signer.clone(), asset, 7);
+        let unavailable = note(signer, asset, 10);
+        let selected = SpendableNotes::from_unspent(
+            true,
+            vec![
+                (valid, Some(PoiStatus::Valid)),
+                (unavailable, Some(PoiStatus::Unavailable)),
+            ],
+        );
+        assert_eq!(selected.notes.len(), 1);
+        assert_eq!(selected.notes[0].value, 7);
+        assert!(selected.explain(Ok(vec![])).is_ok());
+    }
+
+    #[test]
+    fn missing_is_not_an_availability_error() {
+        let signer = signer();
+        let asset = AssetId::erc20(Address::repeat_byte(0x11));
+        let missing = note(signer.clone(), asset, 10);
+        let selected =
+            SpendableNotes::from_unspent(true, vec![(missing, Some(PoiStatus::Missing))]);
+        assert!(selected.notes.is_empty());
+        let err = selected.explain(Err(TransactionBuilderError::InsufficientBalance {
+            from: signer.address(),
+            asset,
+            value: 1,
+        }));
+        assert!(matches!(
+            err,
+            Err(RailgunProviderError::Build(
+                TransactionBuilderError::InsufficientBalance { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn unavailable_on_another_asset_does_not_mask_a_shortfall() {
+        let signer = signer();
+        let wanted = AssetId::erc20(Address::repeat_byte(0x11));
+        let other = AssetId::erc20(Address::repeat_byte(0x22));
+        let unavailable = note(signer.clone(), other, 10);
+        let selected =
+            SpendableNotes::from_unspent(true, vec![(unavailable, Some(PoiStatus::Unavailable))]);
+        let err = selected.explain(Err(TransactionBuilderError::InsufficientBalance {
+            from: signer.address(),
+            asset: wanted,
+            value: 1,
+        }));
+        assert!(matches!(
+            err,
+            Err(RailgunProviderError::Build(
+                TransactionBuilderError::InsufficientBalance { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn a_shortfall_on_an_unobserved_asset_is_unavailable() {
+        let signer = signer();
+        let asset = AssetId::erc20(Address::repeat_byte(0x11));
+        let unavailable = note(signer.clone(), asset, 10);
+        let selected =
+            SpendableNotes::from_unspent(true, vec![(unavailable, Some(PoiStatus::Unavailable))]);
+        let err = selected.explain(Err(TransactionBuilderError::InsufficientBalance {
+            from: signer.address(),
+            asset,
+            value: 1,
+        }));
+        assert!(matches!(
+            err,
+            Err(RailgunProviderError::PoiStatusUnavailable)
+        ));
     }
 }

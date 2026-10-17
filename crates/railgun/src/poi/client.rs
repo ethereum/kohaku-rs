@@ -103,7 +103,7 @@ pub struct JsonRpcError {
 impl PoiClient {
     pub fn new(chain: ChainId, url: impl Into<String>, list_keys: Vec<ListKey>) -> Self {
         let next_id = AtomicU64::new(1);
-        let http = reqwest::Client::new();
+        let http = poi_http_client();
         let url = url.into();
 
         Self {
@@ -123,6 +123,22 @@ impl PoiClient {
             chain_id: self.inner.chain.to_string(),
             txid_version: TxidVersion::V2PoseidonMerkle,
         }
+    }
+}
+
+/// A hung node must return so the list sync can spend its retries.
+/// The browser client has no equivalent reqwest timeout.
+fn poi_http_client() -> reqwest::Client {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("POI HTTP client accepts a timeout")
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        reqwest::Client::new()
     }
 }
 

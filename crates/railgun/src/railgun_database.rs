@@ -64,18 +64,7 @@ pub trait RailgunDB: crate::common::MaybeSend {
         list_key: &ListKey,
         tree_number: u32,
     ) -> Result<Option<PoiMerkleTreeState>, DatabaseError>;
-    async fn set_poi_tree(
-        &self,
-        list_key: &ListKey,
-        tree_number: u32,
-        state: PoiMerkleTreeState,
-    ) -> Result<(), DatabaseError>;
     async fn get_poi_sync(&self, list_key: &ListKey) -> Result<PoiSyncState, DatabaseError>;
-    async fn set_poi_sync(
-        &self,
-        list_key: &ListKey,
-        state: &PoiSyncState,
-    ) -> Result<(), DatabaseError>;
 }
 
 #[cfg_attr(native, async_trait::async_trait)]
@@ -181,15 +170,6 @@ impl RailgunDB for Store {
         deserialize_envelope(&bytes, 1).map(Some)
     }
 
-    async fn set_poi_tree(
-        &self,
-        list_key: &ListKey,
-        tree_number: u32,
-        state: PoiMerkleTreeState,
-    ) -> Result<(), DatabaseError> {
-        write_envelope(self, &poi_tree_key(list_key, tree_number), 1, &state).await
-    }
-
     async fn get_poi_sync(&self, list_key: &ListKey) -> Result<PoiSyncState, DatabaseError> {
         let key = poi_sync_key(list_key);
         let Some(bytes) = self.get(&key).await? else {
@@ -197,14 +177,6 @@ impl RailgunDB for Store {
         };
 
         deserialize_envelope(&bytes, 1)
-    }
-
-    async fn set_poi_sync(
-        &self,
-        list_key: &ListKey,
-        state: &PoiSyncState,
-    ) -> Result<(), DatabaseError> {
-        write_envelope(self, &poi_sync_key(list_key), 1, state).await
     }
 }
 
@@ -232,6 +204,29 @@ pub(crate) async fn write_txid_snapshot(
         writes.push((txid_tree_key(*number), serialize_envelope(1, tree)?));
     }
     writes.push((txid_indexer_key(), serialize_envelope(1, state)?));
+    store.put_batch(writes).await?;
+    Ok(())
+}
+
+/// One copied POI page. Trees and the cursor commit together, matching
+/// [`write_txid_snapshot`]: a crash cannot leave new leaves behind an old cursor.
+pub(crate) async fn write_poi_snapshot(
+    store: &Store,
+    list_key: &ListKey,
+    next_index: u64,
+    trees: &[(u32, PoiMerkleTreeState)],
+) -> Result<(), DatabaseError> {
+    let mut writes = Vec::with_capacity(trees.len() + 1);
+    for (number, tree) in trees {
+        writes.push((
+            poi_tree_key(list_key, *number),
+            serialize_envelope(1, tree)?,
+        ));
+    }
+    writes.push((
+        poi_sync_key(list_key),
+        serialize_envelope(1, &PoiSyncState { next_index })?,
+    ));
     store.put_batch(writes).await?;
     Ok(())
 }

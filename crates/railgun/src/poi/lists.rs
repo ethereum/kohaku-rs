@@ -8,14 +8,14 @@ use tracing::{info, warn};
 use crate::{
     common::sleep,
     merkle_tree::{
-        MerkleRoot, PoiMerkleProof, PoiMerkleTree, PoiMerkleTreeState, PoiSyncState, TOTAL_LEAVES,
+        MerkleRoot, PoiMerkleProof, PoiMerkleTree, PoiMerkleTreeState, TOTAL_LEAVES,
         is_poi_empty_leaf,
     },
     poi::{
         client::{PoiClientError, PoiNodeClient},
         types::{BlindedCommitment, ListKey},
     },
-    railgun_database::{DatabaseError, RailgunDB},
+    railgun_database::{DatabaseError, RailgunDB, write_poi_snapshot},
 };
 
 /// One request, matching the node's cap on `ppoi_poi_merkletree_leaves`.
@@ -47,6 +47,14 @@ pub enum PoiSyncError {
     Database(#[from] DatabaseError),
     #[error("POI node rejected merkle roots for list {list_key}")]
     RootRejected { list_key: ListKey },
+    /// The node owes a full page, or a shorter one that ends in the POI zero.
+    #[error("POI list {list_key} returned {got} leaves for {start}..{end} with no zero leaf")]
+    ShortPage {
+        list_key: ListKey,
+        start: u64,
+        end: u64,
+        got: usize,
+    },
 }
 
 impl PoiLists {
@@ -117,10 +125,17 @@ impl PoiLists {
             };
 
             let page = retry(|| client.merkletree_leaves(list_key, start, end)).await?;
-            let real_len = page
-                .iter()
-                .position(|leaf| is_poi_empty_leaf(*leaf))
-                .unwrap_or(page.len());
+            let expected = (end - start) as usize;
+            let zero_at = page.iter().position(|leaf| is_poi_empty_leaf(*leaf));
+            if page.len() < expected && zero_at.is_none() {
+                return Err(PoiSyncError::ShortPage {
+                    list_key: list_key.clone(),
+                    start,
+                    end,
+                    got: page.len(),
+                });
+            }
+            let real_len = zero_at.unwrap_or(page.len());
             let real = &page[..real_len];
             if real.is_empty() {
                 self.lists
@@ -153,13 +168,21 @@ impl PoiLists {
                 });
             }
 
+            let cursor = self.next_index(list_key);
             let synced_through = start + real_len as u64;
             self.lists
                 .get_mut(list_key)
                 .expect("POI list loaded at startup")
                 .next_index = synced_through;
             let tree_numbers: Vec<u32> = snapshots.iter().map(|(number, _)| *number).collect();
-            self.persist(list_key, &tree_numbers).await?;
+            if let Err(err) = self.persist(list_key, &tree_numbers).await {
+                self.restore(list_key, snapshots, previous);
+                self.lists
+                    .get_mut(list_key)
+                    .expect("POI list loaded at startup")
+                    .next_index = cursor;
+                return Err(err);
+            }
             info!("Synced POI list {list_key} through leaf {synced_through}");
 
             if real_len < page.len() {
@@ -256,12 +279,7 @@ impl PoiLists {
             })
             .collect();
         let next_index = list.next_index;
-        for (number, state) in states {
-            self.db.set_poi_tree(list_key, number, state).await?;
-        }
-        self.db
-            .set_poi_sync(list_key, &PoiSyncState { next_index })
-            .await?;
+        write_poi_snapshot(&self.db, list_key, next_index, &states).await?;
         Ok(())
     }
 }
@@ -362,6 +380,19 @@ mod tests {
 
     use super::*;
     use crate::poi::types::TransactProofData;
+    use kohaku_kv_store::{
+        backend::{KvStoreBackend, StoreError},
+        memory::MemoryStore,
+    };
+
+    #[derive(Clone, Copy)]
+    enum LeafPages {
+        /// Full requested range, POI zero past the stored leaves.
+        Padded,
+        Empty,
+        /// Stored leaves only, no zero padding.
+        Exact,
+    }
 
     struct FakeNode {
         leaves: Mutex<Vec<U256>>,
@@ -369,15 +400,29 @@ mod tests {
         /// Accept this many root checks, then reject. `None` follows `accept_roots`.
         accept_prefix: Mutex<Option<usize>>,
         root_checks: AtomicUsize,
+        pages: LeafPages,
     }
 
     impl FakeNode {
         fn new(leaves: Vec<U256>, accept_roots: bool) -> Self {
+            Self::with_pages(leaves, accept_roots, LeafPages::Padded)
+        }
+
+        fn empty() -> Self {
+            Self::with_pages(Vec::new(), true, LeafPages::Empty)
+        }
+
+        fn exact(leaves: Vec<U256>) -> Self {
+            Self::with_pages(leaves, true, LeafPages::Exact)
+        }
+
+        fn with_pages(leaves: Vec<U256>, accept_roots: bool, pages: LeafPages) -> Self {
             Self {
                 leaves: Mutex::new(leaves),
                 accept_roots: AtomicBool::new(accept_roots),
                 accept_prefix: Mutex::new(None),
                 root_checks: AtomicUsize::new(0),
+                pages,
             }
         }
 
@@ -402,11 +447,26 @@ mod tests {
             start_index: u64,
             end_index: u64,
         ) -> Result<Vec<U256>, PoiClientError> {
-            let leaves = self.leaves.lock().unwrap();
-            let zero = PoiMerkleTree::zero();
-            Ok((start_index..end_index)
-                .map(|index| leaves.get(index as usize).copied().unwrap_or(zero))
-                .collect())
+            match self.pages {
+                LeafPages::Empty => Ok(Vec::new()),
+                LeafPages::Exact => {
+                    let leaves = self.leaves.lock().unwrap();
+                    let start = start_index as usize;
+                    let end = (end_index as usize).min(leaves.len());
+                    if start >= end {
+                        Ok(Vec::new())
+                    } else {
+                        Ok(leaves[start..end].to_vec())
+                    }
+                }
+                LeafPages::Padded => {
+                    let leaves = self.leaves.lock().unwrap();
+                    let zero = PoiMerkleTree::zero();
+                    Ok((start_index..end_index)
+                        .map(|index| leaves.get(index as usize).copied().unwrap_or(zero))
+                        .collect())
+                }
+            }
         }
 
         async fn validate_poi_merkleroots(
@@ -512,5 +572,72 @@ mod tests {
         assert!(!lists.caught_up(&key));
         assert!(lists.contains(&key, BlindedCommitment::from(U256::from(1u8))));
         assert!(!lists.contains(&key, BlindedCommitment::from(U256::from(101u32))));
+    }
+
+    #[tokio::test]
+    async fn an_empty_page_is_not_the_end_of_the_list() {
+        let db = Store::create();
+        let key = list_key();
+        let node = FakeNode::empty();
+        let mut lists = PoiLists::load(db, &[key.clone()]).await.unwrap();
+
+        let err = lists.sync(&node).await.unwrap_err();
+        assert!(matches!(err, PoiSyncError::ShortPage { got: 0, .. }));
+        assert_eq!(lists.next_index(&key), 0);
+        assert!(!lists.caught_up(&key));
+    }
+
+    #[tokio::test]
+    async fn a_short_page_without_a_zero_is_not_applied() {
+        let db = Store::create();
+        let key = list_key();
+        let node = FakeNode::exact((1..=3u32).map(U256::from).collect());
+        let mut lists = PoiLists::load(db, &[key.clone()]).await.unwrap();
+
+        let err = lists.sync(&node).await.unwrap_err();
+        assert!(matches!(err, PoiSyncError::ShortPage { got: 3, .. }));
+        assert_eq!(lists.next_index(&key), 0);
+        assert!(!lists.caught_up(&key));
+        assert!(!lists.contains(&key, BlindedCommitment::from(U256::from(1u8))));
+    }
+
+    struct FailWrites {
+        inner: MemoryStore,
+    }
+    #[async_trait::async_trait]
+    impl KvStoreBackend for FailWrites {
+        async fn get_batch(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, StoreError> {
+            self.inner.get_batch(keys).await
+        }
+        async fn put_batch(&self, _: &[(&[u8], &[u8])]) -> Result<(), StoreError> {
+            Err(StoreError::from(
+                Box::new(std::io::Error::other("injected POI snapshot failure"))
+                    as Box<dyn std::error::Error + Send + Sync>,
+            ))
+        }
+        async fn delete_batch(&self, keys: &[&[u8]]) -> Result<(), StoreError> {
+            self.inner.delete_batch(keys).await
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_save_rolls_the_page_back() {
+        let db = Store::new(FailWrites {
+            inner: MemoryStore::new(),
+        });
+        let kept = db.clone();
+        let key = list_key();
+        let node = FakeNode::new((1..=3u32).map(U256::from).collect(), true);
+        let mut lists = PoiLists::load(db, &[key.clone()]).await.unwrap();
+
+        let err = lists.sync(&node).await.unwrap_err();
+        assert!(matches!(err, PoiSyncError::Database(_)));
+        assert_eq!(lists.next_index(&key), 0);
+        assert!(!lists.caught_up(&key));
+        assert!(!lists.contains(&key, BlindedCommitment::from(U256::from(1u8))));
+
+        let reloaded = PoiLists::load(kept, &[key.clone()]).await.unwrap();
+        assert_eq!(reloaded.next_index(&key), 0);
+        assert!(!reloaded.contains(&key, BlindedCommitment::from(U256::from(1u8))));
     }
 }

@@ -409,6 +409,9 @@ impl PoiProvider {
                 Err(PendingPoiError::MissingTxid(_)) => {
                     info!("Waiting for txid to be indexed: {:?}", entry.txid);
                 }
+                Err(PendingPoiError::ProofNotFound(commitment, list_key)) => {
+                    info!("Waiting for input {commitment} to appear in POI list {list_key}");
+                }
                 Err(e) => {
                     warn!("Failed to submit POI for pending entry: {:?}", e);
                 }
