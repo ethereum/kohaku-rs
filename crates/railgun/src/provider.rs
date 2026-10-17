@@ -23,6 +23,7 @@ use crate::{
     caip::AssetId,
     chain_config::ChainConfig,
     circuit::groth16_prover::Groth16Prover,
+    crypto::keys::ViewingPublicKey,
     indexer::utxo_indexer::{UtxoIndexer, UtxoIndexerError},
     note::{Note, utxo::UtxoNote},
     poi::{
@@ -123,6 +124,49 @@ pub struct RailgunProvider {
     utxo_indexer: UtxoIndexer,
     prover: Groth16Prover,
     poi_provider: Option<PoiProvider>,
+}
+
+/// Unspent notes a build may spend, plus accounts whose POI status was not observed.
+struct SpendableNotes {
+    notes: Vec<UtxoNote>,
+    unavailable: Vec<(ViewingPublicKey, AssetId)>,
+}
+
+impl SpendableNotes {
+    fn from_unspent(poi_enabled: bool, in_notes: Vec<(UtxoNote, Option<PoiStatus>)>) -> Self {
+        let unavailable = in_notes
+            .iter()
+            .filter(|(_, status)| *status == Some(PoiStatus::Unavailable))
+            .map(|(note, _)| (note.viewing_pubkey, note.asset))
+            .collect();
+        let notes = if poi_enabled {
+            in_notes
+                .into_iter()
+                .filter(|(_, status)| *status == Some(PoiStatus::Valid))
+                .map(|(note, _)| note)
+                .collect()
+        } else {
+            in_notes.into_iter().map(|(note, _)| note).collect()
+        };
+        Self { notes, unavailable }
+    }
+
+    /// An insufficient balance is an observation failure when this account and asset
+    /// still has notes whose POI status could not be read. Valid notes are already
+    /// the only inputs, so a covered amount does not take this path.
+    fn explain(
+        &self,
+        result: Result<Vec<ProvedOperation>, TransactionBuilderError>,
+    ) -> Result<Vec<ProvedOperation>, RailgunProviderError> {
+        match result {
+            Err(TransactionBuilderError::InsufficientBalance { from, asset, .. })
+                if self.unavailable.contains(&(from.viewing_pubkey(), asset)) =>
+            {
+                Err(RailgunProviderError::PoiStatusUnavailable)
+            }
+            result => result.map_err(Into::into),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -320,15 +364,16 @@ impl RailgunProvider {
         builder: TransactionBuilder,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvedTx, RailgunProviderError> {
-        let spendable_notes = self.spendable_notes().await;
-        let operations = builder
+        let spendable = self.spendable_notes().await;
+        let built = builder
             .build_dummy(
                 self.chain.id,
-                &spendable_notes,
+                &spendable.notes,
                 &self.utxo_indexer.utxo_trees,
                 rng,
             )
-            .await?;
+            .await;
+        let operations = spendable.explain(built)?;
         Ok(ProvedTx::new(self.chain.railgun_smart_wallet, operations))
     }
 
@@ -375,15 +420,16 @@ impl RailgunProvider {
                 fee,
                 "fee",
             );
-        let spendable_notes = self.spendable_notes().await;
-        let operations = adapted
+        let spendable = self.spendable_notes().await;
+        let built = adapted
             .build_dummy(
                 self.chain.id,
-                &spendable_notes,
+                &spendable.notes,
                 &self.utxo_indexer.utxo_trees,
                 rng,
             )
-            .await?;
+            .await;
+        let operations = spendable.explain(built)?;
         self.userop_from(
             &operations,
             sender,
@@ -908,54 +954,25 @@ impl RailgunProvider {
         builder: TransactionBuilder,
         rng: &mut impl CryptoRng,
     ) -> Result<Vec<ProvedOperation>, RailgunProviderError> {
-        let in_notes = self.all_unspent().await;
-        let unavailable: Vec<_> = in_notes
-            .iter()
-            .filter(|(_, status)| *status == Some(PoiStatus::Unavailable))
-            .map(|(note, _)| (note.viewing_pubkey, note.asset))
-            .collect();
-        let spendable_notes: Vec<UtxoNote> = if let Some(_) = self.poi_provider {
-            in_notes
-                .into_iter()
-                .filter(|(_, status)| *status == Some(PoiStatus::Valid))
-                .map(|(note, _)| note)
-                .collect()
-        } else {
-            in_notes.into_iter().map(|(note, _)| note).collect()
-        };
-
-        let operations = builder
+        let spendable = self.spendable_notes().await;
+        let built = builder
             .build(
                 &self.prover,
                 self.chain.id,
-                &spendable_notes,
+                &spendable.notes,
                 &self.utxo_indexer.utxo_trees,
                 rng,
             )
             .await;
-
-        match operations {
-            Err(TransactionBuilderError::InsufficientBalance { from, asset, .. })
-                if unavailable.contains(&(from.viewing_pubkey(), asset)) =>
-            {
-                Err(RailgunProviderError::PoiStatusUnavailable)
-            }
-            result => result.map_err(Into::into),
-        }
+        spendable.explain(built)
     }
 
-    /// Notes usable as inputs: all unspent notes, restricted to POI-valid ones when POI is on.
-    async fn spendable_notes(&mut self) -> Vec<UtxoNote> {
-        let in_notes = self.all_unspent().await;
-        if self.poi_provider.is_some() {
-            in_notes
-                .into_iter()
-                .filter(|(_, status)| *status == Some(PoiStatus::Valid))
-                .map(|(note, _)| note)
-                .collect()
-        } else {
-            in_notes.into_iter().map(|(note, _)| note).collect()
-        }
+    /// Notes usable as inputs, and the account/asset pairs that could not be observed.
+    ///
+    /// When POI is on, only `Valid` notes are inputs. `Unavailable` is not an input,
+    /// but every build reports it when that is what made the balance look short.
+    async fn spendable_notes(&mut self) -> SpendableNotes {
+        SpendableNotes::from_unspent(self.poi_provider.is_some(), self.all_unspent().await)
     }
 }
 
