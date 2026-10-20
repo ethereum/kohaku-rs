@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use alloy::{
     dyn_abi::Eip712Domain,
-    primitives::{B256, keccak256},
+    primitives::keccak256,
     signers::{Signature, Signer},
     sol_types::eip712_domain,
 };
