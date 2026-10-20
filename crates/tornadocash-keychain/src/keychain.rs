@@ -5,7 +5,7 @@
 //! big-endian `r` and low-`s` (32 bytes each) and `v` is dropped. Pools on the same chain share
 //! that signature, which speeds up recovery.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use alloy::{
     dyn_abi::Eip712Domain,
