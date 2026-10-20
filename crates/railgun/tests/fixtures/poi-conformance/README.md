@@ -101,7 +101,10 @@ indices. Keys, notes, roots and the unshield address are public dummy values.
 
 The separate fixture verifier reconstructs public inputs from the resulting
 payload and uses the independently pinned current key, not the key returned
-by the artifact loader. Both proofs must verify with that key and fail with
+by the artifact loader. This fixture key is byte-identical to the pinned
+artifact release's `vkey.json`; its coefficients were also checked against
+the separately derived official key recorded in the fixture provenance.
+Both proofs must verify with that key and fail with
 the retired key. Changing a public root must fail locally and receive
 `Invalid proof` through the real `PoiClient`; the original must pass the same
 loopback POST. The production provider is not connected to a real POI service.
@@ -132,5 +135,6 @@ remain free of artifact provisioning and expensive proving.
 
 This establishes fresh 3x3 proving and wire compatibility with a local
 cryptographic verifier. It does not establish fresh 13x13 generation, a
-transaction proof, authentic list signatures or root acceptance, encrypted
+transaction proof, pending-entry construction/recovery, authentic list signatures
+or root acceptance, encrypted
 wallet storage, a deployed service's acceptance, or an Alice-to-Bob lifecycle.
