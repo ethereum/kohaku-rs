@@ -600,10 +600,18 @@ mod tests {
             .unwrap();
         assert_eq!(reloaded.next_index(&key), 1);
         assert!(!reloaded.contains(&key, new));
+        // A buggy node may return different leaves when the cancelled page is re-fetched.
+        // The abandoned value must never survive as a stale membership-index entry.
+        let replacement = BlindedCommitment::from(U256::from(3));
+        node.set_leaves(vec![U256::from(1), U256::from(3)]);
         node.pause_root.store(false, Ordering::Relaxed);
         lists.sync(&node).await.unwrap();
         assert_eq!(lists.next_index(&key), 2);
-        assert!(lists.proof(&key, new).unwrap().verify());
+        assert!(!lists.contains(&key, new));
+        assert!(lists.proof(&key, new).is_none());
+        let proof = lists.proof(&key, replacement).unwrap();
+        assert_eq!(proof.element, U256::from(3));
+        assert!(proof.verify());
     }
     struct PausingWrites {
         inner: std::sync::Arc<MemoryStore>,
