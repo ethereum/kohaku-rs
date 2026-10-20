@@ -94,15 +94,13 @@ impl<S: Signer + Send + Sync> Keychain<S> {
     /// are signed separately, because `chain_id` is part of the EIP-712 domain.
     async fn notes(&self, nonce: u64, pools: &[Pool]) -> Result<Vec<NoteString>, KeychainError> {
         let mut signatures = HashMap::<u64, Signature>::new();
-        for pool in pools {
-            if signatures.contains_key(&pool.chain_id) {
-                continue;
-            }
+        let chain_ids: HashSet<u64> = pools.iter().map(|p| p.chain_id).collect();
+        for chain_id in chain_ids {
             let signature = self
                 .signer
-                .sign_typed_data(&sol::TornadoCashNote { nonce }, &domain(pool.chain_id))
+                .sign_typed_data(&sol::TornadoCashNote { nonce }, &domain(chain_id))
                 .await?;
-            signatures.insert(pool.chain_id, signature);
+            signatures.insert(chain_id, signature);
         }
 
         let notes = pools
