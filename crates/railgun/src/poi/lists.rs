@@ -578,14 +578,16 @@ mod tests {
         let old = BlindedCommitment::from(U256::from(1));
         let new = BlindedCommitment::from(U256::from(2));
         let node = FakeNode::new(vec![U256::from(1)], true);
-        let mut lists = PoiLists::load(db.clone(), &[key.clone()]).await.unwrap();
+        let mut lists = PoiLists::load(db.clone(), std::slice::from_ref(&key))
+            .await
+            .unwrap();
         lists.sync(&node).await.unwrap();
         node.set_leaves(vec![U256::from(1), U256::from(2)]);
         node.pause_root.store(true, Ordering::Relaxed);
         let mut sync = Box::pin(lists.sync(&node));
         tokio::select! {
             result = &mut sync => panic!("root validation should block: {result:?}"),
-            _ = node.entered_root.notified() => {},
+            () = node.entered_root.notified() => {},
         }
         drop(sync);
         assert_eq!(lists.next_index(&key), 1);
@@ -593,7 +595,9 @@ mod tests {
         assert!(lists.contains(&key, old));
         assert!(!lists.contains(&key, new));
         assert!(lists.proof(&key, new).is_none());
-        let reloaded = PoiLists::load(db, &[key.clone()]).await.unwrap();
+        let reloaded = PoiLists::load(db, std::slice::from_ref(&key))
+            .await
+            .unwrap();
         assert_eq!(reloaded.next_index(&key), 1);
         assert!(!reloaded.contains(&key, new));
         node.pause_root.store(false, Ordering::Relaxed);
@@ -644,14 +648,16 @@ mod tests {
         let old = BlindedCommitment::from(U256::from(1));
         let new = BlindedCommitment::from(U256::from(2));
         let node = FakeNode::new(vec![U256::from(1)], true);
-        let mut lists = PoiLists::load(db.clone(), &[key.clone()]).await.unwrap();
+        let mut lists = PoiLists::load(db.clone(), std::slice::from_ref(&key))
+            .await
+            .unwrap();
         lists.sync(&node).await.unwrap();
         node.set_leaves(vec![U256::from(1), U256::from(2)]);
         paused.store(true, Ordering::Relaxed);
         let mut sync = Box::pin(lists.sync(&node));
         tokio::select! {
             result = &mut sync => panic!("save should block: {result:?}"),
-            _ = entered.notified() => {},
+            () = entered.notified() => {},
         }
         drop(sync);
         assert_eq!(lists.next_index(&key), 1);
@@ -659,7 +665,9 @@ mod tests {
         assert!(lists.contains(&key, old));
         assert!(!lists.contains(&key, new));
         assert!(lists.proof(&key, new).is_none());
-        let reloaded = PoiLists::load(db.clone(), &[key.clone()]).await.unwrap();
+        let reloaded = PoiLists::load(db.clone(), std::slice::from_ref(&key))
+            .await
+            .unwrap();
         assert_eq!(reloaded.next_index(&key), if after_commit { 2 } else { 1 });
         assert_eq!(reloaded.contains(&key, new), after_commit);
         // A committed-but-unacknowledged snapshot may be ahead on disk. Replaying from the
@@ -669,7 +677,9 @@ mod tests {
         assert_eq!(lists.next_index(&key), 2);
         assert!(lists.caught_up(&key));
         assert!(lists.proof(&key, new).unwrap().verify());
-        let reloaded = PoiLists::load(db, &[key.clone()]).await.unwrap();
+        let reloaded = PoiLists::load(db, std::slice::from_ref(&key))
+            .await
+            .unwrap();
         assert_eq!(reloaded.next_index(&key), 2);
         assert!(reloaded.proof(&key, new).unwrap().verify());
     }
