@@ -13,9 +13,6 @@ mod provider;
 pub mod syncer;
 mod withdrawal;
 
-#[cfg(feature = "paymaster")]
-pub mod userop_provider;
-
 pub use asset::Asset;
 pub use call::Call;
 pub use deposit::Deposit;

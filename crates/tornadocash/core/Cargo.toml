@@ -7,9 +7,8 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [features]
-default = ["paymaster", "saga-sync"]
+default = ["saga-sync"]
 parallel = ["kohaku-tornadocash-circuit/parallel"]
-paymaster = ["dep:kohaku-userop-kit"]
 saga-sync = ["dep:flate2", "dep:sha2"]
 
 [dependencies]
