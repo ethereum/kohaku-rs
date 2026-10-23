@@ -111,26 +111,32 @@ impl Withdrawal {
 }
 
 impl ProvenWithdrawal {
+    #[must_use]
     pub fn pool(&self) -> &Pool {
         &self.inner.pool
     }
 
+    #[must_use]
     pub fn note(&self) -> &Note {
         &self.inner.note
     }
 
+    #[must_use]
     pub fn recipient(&self) -> Address {
         self.inner.recipient
     }
 
+    #[must_use]
     pub fn payer(&self) -> &Payer {
         &self.inner.payer
     }
 
+    #[must_use]
     pub fn root(&self) -> Field {
         self.root
     }
 
+    #[must_use]
     pub fn proof(&self) -> &Proof {
         &self.proof
     }
