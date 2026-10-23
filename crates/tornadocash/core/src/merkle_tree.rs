@@ -37,14 +37,14 @@ pub struct TornadoHasher;
 
 impl Hasher<2, Field> for TornadoHasher {
     fn hash(children: [Field; 2]) -> Field {
-        mimc_sponge_hash(children[0].into(), children[1].into()).into()
+        Field::from_fr(mimc_sponge_hash(children[0].as_fr(), children[1].as_fr()))
     }
 
     fn zero() -> Field {
         static ZERO: OnceLock<Field> = OnceLock::new();
         *ZERO.get_or_init(|| {
             let hash = keccak256(b"tornado");
-            Fr::from_be_bytes_mod_order(hash.as_slice()).into()
+            Field::from_fr(Fr::from_be_bytes_mod_order(hash.as_slice()))
         })
     }
 }
@@ -120,7 +120,7 @@ mod tests {
     fn splice_is_deterministic() {
         let mut tree = crate::merkle_tree::MerkleTree::new();
 
-        let leaves: [Field; 10] = from_fn(|i| Field::from(i + 1));
+        let leaves: [Field; 10] = from_fn(|i| Field::from_usize(i + 1));
         tree.splice(0, &leaves).unwrap();
 
         let root: U256 = tree.root().unwrap().into();

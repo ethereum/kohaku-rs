@@ -67,12 +67,12 @@ impl Note {
 
     #[must_use]
     pub fn commitment(&self) -> Field {
-        pedersen_hash(&self.preimage()).into()
+        Field::from_fr(pedersen_hash(&self.preimage()))
     }
 
     #[must_use]
     pub fn nullifier_hash(&self) -> Field {
-        pedersen_hash(self.nullifier.as_bytes()).into()
+        Field::from_fr(pedersen_hash(self.nullifier.as_bytes()))
     }
 }
 
