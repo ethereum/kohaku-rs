@@ -56,13 +56,13 @@ malformed address input throws a JavaScript `Error`.
 
 Read-only properties expose the pool metadata:
 
-| Property | TypeScript type | Meaning |
-| --- | --- | --- |
-| `chainId` | `bigint` | The chain ID, from the core's `u64`. |
-| `address` | `Hex` | The checksummed Tornado pool contract address. |
-| `asset` | `Asset` | A new, independently owned wrapper for the pool's asset. |
-| `amountWei` | `bigint` | The fixed deposit amount in asset base units, from the core's `u128`. |
-| `deployedBlock` | `bigint` | The deployment block, from the core's `u64`. |
+| Property        | TypeScript type | Meaning                                                               |
+| --------------- | --------------- | --------------------------------------------------------------------- |
+| `chainId`       | `bigint`        | The chain ID, from the core's `u64`.                                  |
+| `address`       | `Hex`           | The checksummed Tornado pool contract address.                        |
+| `asset`         | `Asset`         | A new, independently owned wrapper for the pool's asset.              |
+| `amountWei`     | `bigint`        | The fixed deposit amount in asset base units, from the core's `u128`. |
+| `deployedBlock` | `bigint`        | The deployment block, from the core's `u64`.                          |
 
 The integer properties retain their exact values. `amountWei` is the denomination
 of each deposit, not the pool's balance. For example, the 1000 DAI pool's amount is
@@ -125,12 +125,12 @@ try {
 Each factory returns a new, independently owned WASM wrapper. Read-only properties
 expose the core metadata:
 
-| Property | TypeScript type | Meaning |
-| --- | --- | --- |
-| `kind` | `string` | `"native"` or `"erc20"`. |
-| `symbol` | `string` | The core's asset symbol. |
-| `decimals` | `number` | The number of decimal places. |
-| `address` | `Hex \| undefined` | The checksummed ERC20 token address; `undefined` for native assets. |
+| Property   | TypeScript type    | Meaning                                                             |
+| ---------- | ------------------ | ------------------------------------------------------------------- |
+| `kind`     | `string`           | `"native"` or `"erc20"`.                                            |
+| `symbol`   | `string`           | The core's asset symbol.                                            |
+| `decimals` | `number`           | The number of decimal places.                                       |
+| `address`  | `Hex \| undefined` | The checksummed ERC20 token address; `undefined` for native assets. |
 
 Use the named factories to obtain known assets. Call `free()` on each wrapper when
 finished, and do not reuse a freed wrapper. Freeing one wrapper does not invalidate
