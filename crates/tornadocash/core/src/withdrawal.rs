@@ -136,8 +136,8 @@ impl ProvenWithdrawal {
     }
 
     #[must_use]
-    pub fn payer(&self) -> &Payer {
-        &self.inner.payer
+    pub fn payer(&self) -> Payer {
+        self.inner.payer
     }
 
     #[must_use]
