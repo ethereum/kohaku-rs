@@ -18,9 +18,9 @@
 //! #     merkle_tree::MerkleTree,
 //! #     Note,
 //! #     Pool,
-//! #     relayer::Relayer,
 //! #     Withdrawal,
 //! # };
+//! # use kohaku_tornadocash_relayer::Relayer;
 //! #
 //! # async fn example(
 //! #     provider: DynProvider,
@@ -54,22 +54,16 @@ use alloy::{
     primitives::{TxHash, U256},
     providers::Provider,
 };
+use kohaku_tornadocash_core::{Field, Payer, Pool, ProvenWithdrawal, TornadoProviderExt};
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    Payer,
-    field::Field,
-    pool::Pool,
-    provider::TornadoProviderExt,
-    relayer::wire::{JobResponse, WithdrawRequest, WithdrawResponse},
-    withdrawal::ProvenWithdrawal,
-};
 
 mod status;
 mod wire;
 
 pub use status::{Health, Instance, RelayerStatus};
 pub use wire::{JobId, JobStatus};
+
+use crate::wire::{JobResponse, WithdrawRequest, WithdrawResponse};
 
 /// Tornadocash relayer.
 ///

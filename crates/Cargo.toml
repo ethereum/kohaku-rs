@@ -8,6 +8,7 @@ members = [
     "tornadocash/circuit",
     "tornadocash/keychain",
     "tornadocash/wasm",
+    "tornadocash/relayer",
     "userop-kit",
 ]
 resolver = "3"
@@ -42,6 +43,7 @@ kohaku-tor-rpc = { path = "tor-rpc" }
 kohaku-tornadocash-core = { path = "tornadocash/core" }
 kohaku-tornadocash-circuit = { path = "tornadocash/circuit" }
 kohaku-tornadocash-keychain = { path = "tornadocash/keychain" }
+kohaku-tornadocash-relayer = { path = "tornadocash/relayer" }
 kohaku-userop-kit = { path = "userop-kit" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"
