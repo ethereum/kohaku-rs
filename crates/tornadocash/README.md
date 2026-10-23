@@ -78,13 +78,17 @@ provider.send_transaction(withdrawal.data().into()).await?.watch().await?;
 
 The pool catalog includes the 0.01, 0.03, 0.3, 3 and 30 ETH Extended pools on Ethereum mainnet and Sepolia. `Pool::is_extended()` identifies this family without changing serialized pool records or note identifiers. `Pool::EXTENDED_POOLS` lists those entries explicitly. Deployment blocks come from each contract's creation transaction on the respective Blockscout explorer. Paymaster metadata remains `None` for these entries.
 
-SDK consumers choose support at their configuration boundary:
+SDK consumers instantiate one pool set. All known pools are enabled by default; canonical-only support is an explicit override:
 
 ```rust
-use kohaku_tornadocash::{Pool, PoolSelection};
+use kohaku_tornadocash::{PoolSelection, PoolSet};
 
-let selection = PoolSelection::IncludeExtended; // Classic excludes Extended pools.
-let pools: Vec<_> = Pool::for_chain(1, selection).cloned().collect();
+let pools = PoolSet::new(1); // All pools, including Extended.
+let canonical_only = PoolSet::new(1).with_selection(PoolSelection::Classic);
+// pools.pools() lists the active set.
+// pools.deposit_pools(amount) packs native ETH using that same set.
 ```
 
 `Pool::POOLS` remains the complete catalog; address and note lookup recognize both families regardless of selection. WASM exposes the corresponding `isExtended` property. Wallets should consistently apply their chosen selection to synchronization, recovery, deposits and note packing.
+
+`PoolSelection::default()` includes Extended pools. Keep the configured set for the consumer's lifetime. Canonical/Extended membership is maintained in the catalog, so a later promotion can make a pool available to canonical-only consumers without changing its identity or stored history. Classification is not an anonymity score.
