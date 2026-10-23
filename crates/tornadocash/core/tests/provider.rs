@@ -4,11 +4,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use kohaku_fork_kit::pool::deploy_pool;
-use kohaku_tornadocash_core::{
-    Deposit, Withdrawal,
-    merkle_tree::{MerkleTree, MerkleTreeExt},
-};
-use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
+use kohaku_tornadocash_core::{Deposit, Withdrawal, merkle_tree::MerkleTree};
 
 #[tokio::test]
 #[ignore = "run with `cargo test --release -- --ignored`"]
@@ -51,21 +47,24 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
     let pool = deploy_pool(provider.clone(), None).await?;
 
     // Deposit a note
-    let deposit = Deposit::new(&pool, rand::random());
-    let note = deposit.note.clone();
-    provider
-        .send_transaction(deposit.call().into())
-        .await?
-        .watch()
-        .await?;
-
-    // Construct a TornadoProvider
-    let syncer = RpcSyncer::new(provider.clone());
+    let mut commitments = Vec::new();
+    let mut last_note = None;
+    for _ in 0..5 {
+        let deposit = Deposit::new(&pool, rand::random());
+        let note = deposit.note.clone();
+        commitments.push(note.commitment());
+        last_note = Some(note);
+        provider
+            .send_transaction(deposit.call().into())
+            .await?
+            .watch()
+            .await?;
+    }
+    let note = last_note.expect("at least one note was deposited");
 
     // Sync a Merkle tree against the provider
     let mut tree = MerkleTree::new();
-    let snapshot = syncer.sync(&pool, ..).await?;
-    tree.splice_events(snapshot.events())?;
+    tree.splice(0, &commitments)?;
 
     // Withdraw the note
     let recipient: Address = PrivateKeySigner::random().address();
