@@ -6,7 +6,7 @@ use crate::{bigint::JsU64, hex::Hex, note::Note};
 
 /// A portable tornadocash deposit note.
 ///
-/// See [`kohaku_tornadocash::NoteString`] for more details.
+/// See [`kohaku_tornadocash_core::NoteString`] for more details.
 #[wasm_bindgen]
 pub struct NoteString {
     pub(crate) inner: CoreNoteString,

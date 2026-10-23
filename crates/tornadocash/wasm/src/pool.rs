@@ -6,7 +6,7 @@ use crate::{asset::Asset, hex::Hex, note_string::NoteString};
 
 /// A tornadocash pool.
 ///
-/// See [`kohaku_tornadocash::Pool`] for more details.
+/// See [`kohaku_tornadocash_core::Pool`] for more details.
 #[wasm_bindgen]
 pub struct Pool {
     pub(crate) inner: CorePool,
