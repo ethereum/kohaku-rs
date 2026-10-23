@@ -10,7 +10,7 @@ use crate::{bigint::JsU8, hex::Hex};
 
 /// Represents an asset in a tornadocash pool.
 ///
-/// See [`kohaku_tornadocash::Asset`] for more details.
+/// See [`kohaku_tornadocash_core::Asset`] for more details.
 #[wasm_bindgen]
 pub struct Asset {
     pub(crate) inner: CoreAsset,

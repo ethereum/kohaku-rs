@@ -6,7 +6,7 @@ use crate::{call::Call, note::Note, pool::Pool};
 
 /// A Tornado Cash deposit.
 ///
-/// See [`kohaku_tornadocash::Deposit`] for more details.
+/// See [`kohaku_tornadocash_core::Deposit`] for more details.
 #[wasm_bindgen]
 pub struct Deposit {
     inner: CoreDeposit,
