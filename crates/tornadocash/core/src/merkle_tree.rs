@@ -63,16 +63,6 @@ impl MerkleTreeExt for MerkleTree {
             return Ok(());
         };
 
-        for (offset, d) in deposits.iter().enumerate() {
-            let expected = first_leaf_index + offset as u32;
-            if d.leaf_index != expected {
-                return Err(MerkleTreeError::Other(format!(
-                    "non-contiguous deposit events: expected leaf {expected}, got {}",
-                    d.leaf_index
-                )));
-            }
-        }
-
         let commitments: Vec<Field> = deposits.into_iter().map(|d| d.commitment).collect();
         self.splice(first_leaf_index as usize, &commitments)
     }
