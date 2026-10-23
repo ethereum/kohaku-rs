@@ -15,8 +15,8 @@ use kohaku_tornadocash_core::{
     Deposit, PaymasterInfo, TornadoProviderExt, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
     syncer::{Syncer, rpc::RpcSyncer},
-    userop_provider::UserOperationPaymasterExt,
 };
+use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
     bundler::Bundler,

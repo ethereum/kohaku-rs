@@ -7,9 +7,9 @@
 //! #     merkle_tree::MerkleTree,
 //! #     Note,
 //! #     Pool,
-//! #     userop_provider::UserOperationPaymasterExt,
 //! #     Withdrawal,
 //! # };
+//! # use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
 //! # use kohaku_userop_kit::{
 //! #     builder::UserOperationBuilder,
 //! #     bundler::{Bundler, pimlico::PimlicoBundler},
@@ -52,18 +52,16 @@ use alloy::{
     providers::Provider,
     sol_types::SolValue,
 };
+use kohaku_tornadocash_core::{
+    Payer, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal, WithdrawalError,
+    merkle_tree::MerkleProof,
+};
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
     bundler::{Bundler, BundlerExt},
 };
 
-use crate::{
-    merkle_tree::MerkleProof,
-    pool::Pool,
-    provider::TornadoProviderExt,
-    userop_provider::abis::{PaymasterData, TornadoAdapterData},
-    withdrawal::{Payer, ProvenWithdrawal, Withdrawal, WithdrawalError},
-};
+use crate::abis::{PaymasterData, TornadoAdapterData};
 
 mod abis;
 
