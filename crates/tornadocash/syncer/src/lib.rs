@@ -5,17 +5,15 @@ use std::{
     sync::Arc,
 };
 
+use kohaku_tornadocash_core::{Pool, event::Snapshot};
 use thiserror::Error;
 
-use crate::pool::Pool;
-
-mod event;
+#[cfg(feature = "saga-sync")]
+mod abis;
 pub mod remote;
 pub mod rpc;
 #[cfg(feature = "saga-sync")]
 pub mod saga;
-
-pub use event::{Deposit, Snapshot, SyncEvent, Withdrawal};
 
 /// Fetches a pool's events from some source.
 #[cfg_attr(native, async_trait::async_trait)]

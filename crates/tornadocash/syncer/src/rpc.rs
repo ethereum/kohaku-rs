@@ -1,11 +1,12 @@
 use alloy::{providers::Provider, rpc::types::Filter};
 use kohaku_rpc_provider::{StreamedEvent, StreamedEventConfig};
+use kohaku_tornadocash_core::{
+    Pool,
+    event::{Snapshot, SyncEvent},
+};
 use tracing::{info, warn};
 
-use crate::{
-    pool::Pool,
-    syncer::{Snapshot, SyncEvent, Syncer, SyncerError},
-};
+use crate::{Syncer, SyncerError};
 
 /// A syncer that reads from an Ethereum JSON-RPC provider
 #[derive(Clone)]
@@ -21,7 +22,7 @@ enum RpcSyncerError {
     #[error("RPC error: {0}")]
     RpcError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
     #[error("Field conversion error: {0}")]
-    Field(#[from] crate::field::NotInRangeError),
+    Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
 }
 
 impl<P: Provider> RpcSyncer<P> {

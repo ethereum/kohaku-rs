@@ -11,7 +11,7 @@ pub struct Field(Fr);
 
 #[derive(Debug, thiserror::Error)]
 #[error("Field not in range")]
-pub struct NotInRangeError;
+pub struct FieldNotInRangeError;
 
 impl From<Field> for Fr {
     fn from(value: Field) -> Self {
@@ -45,18 +45,18 @@ impl From<Fr> for Field {
 }
 
 impl TryFrom<U256> for Field {
-    type Error = NotInRangeError;
+    type Error = FieldNotInRangeError;
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
         match value.try_into() {
             Ok(fr) => Ok(Field(fr)),
-            Err(_) => Err(NotInRangeError),
+            Err(_) => Err(FieldNotInRangeError),
         }
     }
 }
 
 impl TryFrom<B256> for Field {
-    type Error = NotInRangeError;
+    type Error = FieldNotInRangeError;
 
     fn try_from(value: B256) -> Result<Self, Self::Error> {
         let u256: U256 = value.into();

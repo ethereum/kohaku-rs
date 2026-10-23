@@ -7,8 +7,8 @@ use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_tornadocash_core::{
     Deposit, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
-    syncer::{Syncer, rpc::RpcSyncer},
 };
+use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 
 #[tokio::test]
 #[ignore = "run with `cargo test --release -- --ignored`"]

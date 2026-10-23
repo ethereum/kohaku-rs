@@ -1,16 +1,14 @@
 use alloy::primitives::{Address, B256, U256};
+use kohaku_tornadocash_core::{
+    Pool,
+    event::{Deposit, Snapshot, SyncEvent, Withdrawal},
+};
 use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::info;
 
-use crate::{
-    pool::Pool,
-    syncer::{
-        Snapshot, SyncEvent, Syncer, SyncerError,
-        event::{Deposit, Withdrawal},
-    },
-};
+use crate::{Syncer, SyncerError};
 
 /// A syncer that reads from a remote database of cached data.
 ///
@@ -47,7 +45,7 @@ enum RemoteSyncerError {
     #[error("Serde error: {0}")]
     JsonError(#[from] serde_json::Error),
     #[error("Field conversion error: {0}")]
-    Field(#[from] crate::field::NotInRangeError),
+    Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
 }
 
 impl RemoteSyncer {

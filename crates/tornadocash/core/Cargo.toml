@@ -7,9 +7,8 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [features]
-default = ["saga-sync"]
+default = []
 parallel = ["kohaku-tornadocash-circuit/parallel"]
-saga-sync = ["dep:flate2", "dep:sha2"]
 
 [dependencies]
 alloy = { workspace = true, features = [
@@ -55,6 +54,7 @@ alloy = { workspace = true, features = [
 anyhow = { workspace = true }
 insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
+kohaku-tornadocash-syncer = { workspace = true }
 tokio = { workspace = true, features = ["macros", "process"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
