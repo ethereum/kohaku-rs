@@ -176,6 +176,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn extended_stream_keys_use_exact_decimal_amounts() {
+        assert_eq!(
+            stream_key(&Pool::ETHEREUM_ETHER_001),
+            "tornado-cash-1-eth-0.01"
+        );
+        assert_eq!(
+            stream_key(&Pool::SEPOLIA_ETHER_003),
+            "tornado-cash-11155111-eth-0.03"
+        );
+    }
+
+    #[test]
     fn derives_stream_key() {
         assert_eq!(
             stream_key(&Pool::ETHEREUM_ETHER_01),

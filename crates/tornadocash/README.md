@@ -72,3 +72,18 @@ provider.send_transaction(withdrawal.call().into()).await?.watch().await?;
 # Ok(())
 # }
 ```
+
+### Extended ETH pools
+
+The pool catalog includes the 0.01, 0.03, 0.3, 3 and 30 ETH Extended pools on Ethereum mainnet and Sepolia. `Pool::is_extended()` identifies this family without changing serialized pool records or note identifiers. `Pool::EXTENDED_POOLS` lists those entries explicitly. Deployment blocks come from each contract's creation transaction on the respective Blockscout explorer. Paymaster metadata remains `None` for these entries.
+
+SDK consumers choose support at their configuration boundary:
+
+```rust
+use kohaku_tornadocash::{Pool, PoolSelection};
+
+let selection = PoolSelection::IncludeExtended; // Classic excludes Extended pools.
+let pools: Vec<_> = Pool::for_chain(1, selection).cloned().collect();
+```
+
+`Pool::POOLS` remains the complete catalog; address and note lookup recognize both families regardless of selection. WASM exposes the corresponding `isExtended` property. Wallets should consistently apply their chosen selection to synchronization, recovery, deposits and note packing.

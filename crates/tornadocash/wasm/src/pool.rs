@@ -108,6 +108,13 @@ impl Pool {
         CorePool::from_note(&note.inner).map(|inner| Self { inner })
     }
 
+    /// Whether this pool belongs to the extended family.
+    #[wasm_bindgen(getter, js_name = isExtended)]
+    #[must_use]
+    pub fn is_extended(&self) -> bool {
+        self.inner.is_extended()
+    }
+
     /// Return the pool's chain ID.
     #[wasm_bindgen(getter, js_name = chainId)]
     #[must_use]
