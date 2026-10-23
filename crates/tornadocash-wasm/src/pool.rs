@@ -33,19 +33,6 @@ impl Pool {
         CorePool::from_note(&note.inner).map(|inner| Self { inner })
     }
 
-    /// Find a known pool by its contract address.
-    ///
-    /// Return an independently owned wrapper, or undefined if no pool matches.
-    ///
-    /// # Errors
-    ///
-    /// Throws if the input cannot be decoded into a 20-byte address.
-    #[wasm_bindgen(js_name = fromAddress)]
-    pub fn from_address(address: &Ts<Hex>) -> Result<Option<Self>, JsError> {
-        let address = address.to_rust()?.try_into()?;
-        Ok(CorePool::from_address(address).map(|inner| Self { inner }))
-    }
-
     /// Return the pool's chain ID.
     #[wasm_bindgen(getter, js_name = chainId)]
     #[must_use]
