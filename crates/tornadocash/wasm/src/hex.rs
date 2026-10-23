@@ -100,7 +100,7 @@ impl TryFrom<Hex> for Field {
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::Address;
+    use alloy::primitives::{Address, U256};
     use kohaku_tornadocash_core::Field;
 
     use super::{Hex, HexError};
@@ -110,7 +110,7 @@ mod tests {
         let value = Hex(format!("0x{}AB", "00".repeat(31)));
         let field = Field::try_from(value).unwrap();
 
-        assert_eq!(field, Field::from(0xab_usize));
+        assert_eq!(field, Field::try_from(U256::from(0xab)).unwrap());
         assert_eq!(Hex::from(field).0, format!("0x{}ab", "00".repeat(31)));
     }
 
