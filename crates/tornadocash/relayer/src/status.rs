@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
+use kohaku_tornadocash_core::{Asset, Payer, Pool};
 use ruint::uint;
 use serde::{Deserialize, Serialize};
 
-use crate::{asset::Asset, pool::Pool, relayer::RelayerError, withdrawal::Payer};
+use crate::RelayerError;
 
 /// A relayer's status.
 ///

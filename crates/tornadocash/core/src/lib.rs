@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![doc = include_str!("../../README.md")]
 
 mod abis;
 mod asset;
@@ -10,7 +10,6 @@ pub mod merkle_tree;
 mod note;
 mod pool;
 mod provider;
-pub mod relayer;
 pub mod syncer;
 mod withdrawal;
 
