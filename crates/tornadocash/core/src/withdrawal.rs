@@ -10,8 +10,8 @@ use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
 
 use crate::{
-    Call, abis::tornado::Tornado::withdrawCall, field::Field, merkle_tree::MerkleProof, note::Note,
-    pool::Pool,
+    Asset, Call, abis::tornado::Tornado::withdrawCall, field::Field, merkle_tree::MerkleProof,
+    note::Note, pool::Pool,
 };
 
 /// A Tornado Cash withdrawal.
@@ -45,6 +45,8 @@ pub enum WithdrawalError {
     Circuit(#[from] kohaku_tornadocash_circuit::CircuitError),
     #[error("Proof leaf mismatch: expected {expected}, got {actual}")]
     ProofLeafMismatch { expected: Field, actual: Field },
+    #[error("Nonzero refund for native-asset withdrawal: {0}")]
+    NonzeroRefundForNativeAsset(U256),
 }
 
 impl Withdrawal {
@@ -77,6 +79,13 @@ impl Withdrawal {
         merkle_proof: &MerkleProof,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvenWithdrawal, WithdrawalError> {
+        let is_native = matches!(self.pool.asset, Asset::Native { .. });
+        if is_native && !self.payer.refund.is_zero() {
+            return Err(WithdrawalError::NonzeroRefundForNativeAsset(
+                self.payer.refund,
+            ));
+        }
+
         if merkle_proof.leaf != self.note.commitment() {
             return Err(WithdrawalError::ProofLeafMismatch {
                 expected: self.note.commitment(),
