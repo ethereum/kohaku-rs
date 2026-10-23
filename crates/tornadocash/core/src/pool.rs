@@ -135,7 +135,7 @@ impl PoolSet {
 
 #[allow(clippy::unreadable_literal)]
 impl Pool {
-    /// Complete known pool catalog. Filter with `PoolSelection` for opt-in Extended support.
+    /// Complete known pool catalog. Use `PoolSet` to explicitly exclude Extended pools.
     pub const POOLS: &[Pool] = &[
         Pool::ETHEREUM_ETHER_001,
         Pool::ETHEREUM_ETHER_003,
@@ -604,6 +604,7 @@ mod tests {
     #[test]
     fn configured_pool_set_applies_one_policy_to_listing_membership_and_packing() {
         use alloy::primitives::U256;
+        assert_eq!(PoolSelection::default(), PoolSelection::IncludeExtended);
         for chain in [1, 11_155_111] {
             let classic = PoolSet::new(chain).with_selection(PoolSelection::Classic);
             let all = PoolSet::new(chain);
@@ -636,7 +637,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_catalog_is_complete_and_opt_in() {
+    fn extended_catalog_is_complete_and_can_be_excluded() {
         let amounts = [
             10_u128.pow(16),
             3 * 10_u128.pow(16),
