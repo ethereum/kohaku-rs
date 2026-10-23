@@ -4,7 +4,7 @@ use alloy::{
     primitives::{Address, B256},
     sol_types::SolEvent,
 };
-use kohaku_tornadocash_core::event::{Deposit, SyncEvent, Withdrawal};
+use kohaku_tornadocash_core::event::{DepositEvent, SyncEvent, WithdrawalEvent};
 use sha2::{Digest as _, Sha256};
 use tracing::warn;
 
@@ -38,7 +38,7 @@ impl SagaEvent {
         match self.topics.first() {
             Some(&Tornado::Deposit::SIGNATURE_HASH) => {
                 let decoded = Tornado::Deposit::decode_raw_log(self.topics.iter().copied(), &data)?;
-                Ok(Some(SyncEvent::Deposit(Deposit {
+                Ok(Some(SyncEvent::Deposit(DepositEvent {
                     commitment: decoded.commitment.try_into()?,
                     leaf_index: decoded.leafIndex,
                     block_number: self.block_number,
@@ -47,7 +47,7 @@ impl SagaEvent {
             Some(&Tornado::Withdrawal::SIGNATURE_HASH) => {
                 let decoded =
                     Tornado::Withdrawal::decode_raw_log(self.topics.iter().copied(), &data)?;
-                Ok(Some(SyncEvent::Withdrawal(Withdrawal {
+                Ok(Some(SyncEvent::Withdrawal(WithdrawalEvent {
                     to: decoded.to,
                     nullifier_hash: decoded.nullifierHash.try_into()?,
                     relayer: decoded.relayer,

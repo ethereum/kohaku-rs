@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use alloy::signers::Signer;
 use kohaku_tornadocash_core::{
     Field, Pool,
-    event::{Deposit, Snapshot, SyncEvent, Withdrawal},
+    event::{DepositEvent, Snapshot, SyncEvent, WithdrawalEvent},
 };
 
 use crate::{Keychain, KeychainError};
@@ -18,16 +18,16 @@ pub struct RecoveredNote {
     /// The nonce used to derive the note.
     pub nonce: u64,
     /// The deposit event that created the note.
-    pub deposit: Deposit,
+    pub deposit: DepositEvent,
     /// The withdrawal event that spent the note, if any.
-    pub withdrawal: Option<Withdrawal>,
+    pub withdrawal: Option<WithdrawalEvent>,
 }
 
 /// One pool's events, indexed by commitment and nullifier hash.
 struct PoolIndex<'a> {
     pool: &'a Pool,
-    deposits: HashMap<Field, &'a Deposit>,
-    withdrawals: HashMap<Field, &'a Withdrawal>,
+    deposits: HashMap<Field, &'a DepositEvent>,
+    withdrawals: HashMap<Field, &'a WithdrawalEvent>,
 }
 
 /// Returns the next nonce that should be used for a new note derived from `keychain`.
@@ -108,17 +108,17 @@ pub async fn recover<S: Signer + Send + Sync>(
 fn index(batches: &[Snapshot]) -> Vec<PoolIndex<'_>> {
     let mut indexes: Vec<PoolIndex> = Vec::new();
     for batch in batches {
-        let deposits = deposits(&batch.events);
-        let withdrawals = withdrawals(&batch.events);
+        let deposits = deposits(batch.events());
+        let withdrawals = withdrawals(batch.events());
 
-        if let Some(index) = indexes.iter_mut().find(|index| *index.pool == batch.pool) {
+        if let Some(index) = indexes.iter_mut().find(|index| index.pool == batch.pool()) {
             index.deposits.extend(deposits);
             index.withdrawals.extend(withdrawals);
             continue;
         }
 
         indexes.push(PoolIndex {
-            pool: &batch.pool,
+            pool: batch.pool(),
             deposits,
             withdrawals,
         });
@@ -127,7 +127,7 @@ fn index(batches: &[Snapshot]) -> Vec<PoolIndex<'_>> {
 }
 
 /// Indexes the deposits in `events` by commitment.
-fn deposits(events: &[SyncEvent]) -> HashMap<Field, &Deposit> {
+fn deposits(events: &[SyncEvent]) -> HashMap<Field, &DepositEvent> {
     events
         .iter()
         .filter_map(|event| match event {
@@ -138,7 +138,7 @@ fn deposits(events: &[SyncEvent]) -> HashMap<Field, &Deposit> {
 }
 
 /// Indexes the withdrawals in `events` by nullifier hash.
-fn withdrawals(events: &[SyncEvent]) -> HashMap<Field, &Withdrawal> {
+fn withdrawals(events: &[SyncEvent]) -> HashMap<Field, &WithdrawalEvent> {
     events
         .iter()
         .filter_map(|event| match event {
@@ -278,11 +278,11 @@ mod tests {
     }
 
     fn batch(pool: &Pool, events: Vec<SyncEvent>) -> Snapshot {
-        Snapshot::new(pool.clone(), 0..0, events)
+        Snapshot::new(pool.clone(), 0..1, events).unwrap()
     }
 
     fn deposit(note: &Note, leaf_index: u32) -> SyncEvent {
-        SyncEvent::Deposit(Deposit {
+        SyncEvent::Deposit(DepositEvent {
             commitment: note.commitment(),
             leaf_index,
             block_number: 0,
@@ -290,7 +290,7 @@ mod tests {
     }
 
     fn withdrawal(note: &Note) -> SyncEvent {
-        SyncEvent::Withdrawal(Withdrawal {
+        SyncEvent::Withdrawal(WithdrawalEvent {
             to: Address::ZERO,
             nullifier_hash: note.nullifier_hash(),
             relayer: Address::ZERO,

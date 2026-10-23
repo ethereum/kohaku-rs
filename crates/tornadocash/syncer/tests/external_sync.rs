@@ -38,7 +38,7 @@ async fn assert_matches_snapshot(target_syncer: &dyn Syncer) -> Result<(), anyho
         .sync_range(&pool, FROM_BLOCK, TO_BLOCK)
         .await?;
 
-    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(&synced.events);
+    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(synced.events());
     commitments.sort();
     nullifiers.sort();
 

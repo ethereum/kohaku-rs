@@ -1,7 +1,7 @@
 use alloy::primitives::{Address, B256, U256};
 use kohaku_tornadocash_core::{
     Pool,
-    event::{Deposit, Snapshot, SyncEvent, Withdrawal},
+    event::{DepositEvent, Snapshot, SyncEvent, WithdrawalEvent},
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -46,6 +46,8 @@ enum RemoteSyncerError {
     JsonError(#[from] serde_json::Error),
     #[error("Field conversion error: {0}")]
     Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
+    #[error("Snapshot error: {0}")]
+    Snapshot(#[from] kohaku_tornadocash_core::event::SnapshotError),
 }
 
 impl RemoteSyncer {
@@ -103,7 +105,7 @@ impl RemoteSyncer {
 
         let events = deposits.into_iter().chain(withdrawals).collect();
 
-        Ok(Snapshot::new(pool.clone(), range, events))
+        Ok(Snapshot::new(pool.clone(), range, events)?)
     }
 
     async fn deposits(&self, pool: &Pool) -> Result<Vec<RemoteDeposit>, RemoteSyncerError> {
@@ -144,7 +146,7 @@ impl RemoteSyncer {
 }
 
 fn decode_deposit(deposit: &RemoteDeposit) -> Result<SyncEvent, RemoteSyncerError> {
-    Ok(SyncEvent::Deposit(Deposit {
+    Ok(SyncEvent::Deposit(DepositEvent {
         commitment: deposit.commitment.try_into()?,
         leaf_index: deposit.leaf_index,
         block_number: deposit.block_number,
@@ -152,7 +154,7 @@ fn decode_deposit(deposit: &RemoteDeposit) -> Result<SyncEvent, RemoteSyncerErro
 }
 
 fn decode_withdrawal(withdrawal: &RemoteWithdrawal) -> Result<SyncEvent, RemoteSyncerError> {
-    Ok(SyncEvent::Withdrawal(Withdrawal {
+    Ok(SyncEvent::Withdrawal(WithdrawalEvent {
         to: withdrawal.to,
         nullifier_hash: withdrawal.nullifier.try_into()?,
         relayer: Address::ZERO,

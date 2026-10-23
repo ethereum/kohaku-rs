@@ -23,6 +23,8 @@ enum RpcSyncerError {
     RpcError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
     #[error("Field conversion error: {0}")]
     Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
+    #[error("Snapshot error: {0}")]
+    Snapshot(#[from] kohaku_tornadocash_core::event::SnapshotError),
 }
 
 impl<P: Provider> RpcSyncer<P> {
@@ -68,7 +70,7 @@ impl<P: Provider + Clone> RpcSyncer<P> {
         info!("Syncing from {} to {}", range.start, range.end);
 
         if range.is_empty() {
-            return Ok(Snapshot::new(pool.clone(), range, Vec::new()));
+            return Ok(Snapshot::new(pool.clone(), range, Vec::new())?);
         }
 
         //? `eth_getLogs` treats both block bounds as inclusive
@@ -92,7 +94,7 @@ impl<P: Provider + Clone> RpcSyncer<P> {
         }
 
         info!("Synced {} events", events.len());
-        Ok(Snapshot::new(pool.clone(), range, events))
+        Ok(Snapshot::new(pool.clone(), range, events)?)
     }
 
     /// Clamps the requested range to the blocks this syncer can serve: the pool's deployment

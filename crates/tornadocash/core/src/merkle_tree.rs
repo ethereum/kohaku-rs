@@ -9,7 +9,7 @@ use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
 
 use crate::{
     crypto::mimc::mimc_sponge_hash,
-    event::{Deposit, SyncEvent},
+    event::{DepositEvent, SyncEvent},
     field::Field,
 };
 
@@ -51,7 +51,7 @@ impl Hasher<2, Field> for TornadoHasher {
 
 impl MerkleTreeExt for MerkleTree {
     fn splice_events(&mut self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
-        let deposits: Vec<&Deposit> = events
+        let deposits: Vec<&DepositEvent> = events
             .iter()
             .filter_map(|e| match e {
                 SyncEvent::Deposit(d) => Some(d),
