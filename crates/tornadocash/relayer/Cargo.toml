@@ -51,6 +51,7 @@ alloy = { workspace = true, features = [
 anyhow = { workspace = true }
 insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
+kohaku-tornadocash-syncer = { workspace = true }
 tokio = { workspace = true, features = ["macros", "process"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

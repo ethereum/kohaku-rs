@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use alloy::signers::Signer;
 use kohaku_tornadocash_core::{
     Field, Pool,
-    syncer::{Deposit, Snapshot, SyncEvent, Withdrawal},
+    event::{Deposit, Snapshot, SyncEvent, Withdrawal},
 };
 
 use crate::{Keychain, KeychainError};

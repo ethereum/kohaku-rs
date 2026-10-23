@@ -10,6 +10,7 @@ members = [
     "tornadocash/wasm",
     "tornadocash/relayer",
     "tornadocash/paymaster",
+    "tornadocash/syncer",
     "userop-kit",
 ]
 resolver = "3"
@@ -46,6 +47,7 @@ kohaku-tornadocash-circuit = { path = "tornadocash/circuit" }
 kohaku-tornadocash-keychain = { path = "tornadocash/keychain" }
 kohaku-tornadocash-relayer = { path = "tornadocash/relayer" }
 kohaku-tornadocash-paymaster = { path = "tornadocash/paymaster" }
+kohaku-tornadocash-syncer = { path = "tornadocash/syncer" }
 kohaku-userop-kit = { path = "userop-kit" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"

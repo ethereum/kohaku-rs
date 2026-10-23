@@ -1,10 +1,8 @@
 use alloy::primitives::B256;
+use kohaku_tornadocash_core::{Pool, event::SyncEvent};
 #[cfg(feature = "saga-sync")]
-use kohaku_tornadocash_core::syncer::saga::SagaSyncer;
-use kohaku_tornadocash_core::{
-    Pool,
-    syncer::{SyncEvent, Syncer, remote::RemoteSyncer},
-};
+use kohaku_tornadocash_syncer::saga::SagaSyncer;
+use kohaku_tornadocash_syncer::{Syncer, remote::RemoteSyncer};
 
 const REMOTE_SYNC_BASE_URL: &str = "https://raw.githubusercontent.com/Robert-MacWha/privacy-protocols/refs/heads/sync-state/tornadocash-sync";
 #[cfg(feature = "saga-sync")]

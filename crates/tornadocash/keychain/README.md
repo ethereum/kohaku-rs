@@ -1,6 +1,6 @@
 # kohaku-tornadocash-keychain
 
-Deterministic note derivation for [`kohaku-tornadocash`](../tornadocash/).
+Deterministic note derivation for [`kohaku-tornadocash-core`](../core/).
 
 [`Keychain`]s are used to derive tornadocash note secrets from a single source of entropy. This makes it easier for users to manage their notes, because they only need to backup a single secret (e.g. a mnemonic) instead of each individual note secret. New notes can be derived from the keychain by incrementing a nonce, and notes can be recovered by scanning pools' synced events against the keychain's derivation scheme.
 
@@ -55,25 +55,19 @@ async fn example<S: Signer + Send + Sync>(
 
 ```rust,no_run
 use alloy::signers::Signer;
-use kohaku_tornadocash_core::{Pool, syncer::{DynSyncer, Syncer}};
+use kohaku_tornadocash_core::event::Snapshot;
 use kohaku_tornadocash_keychain::{Keychain, next_nonce, recover};
 
 async fn example<S: Signer + Send + Sync>(
     keychain: &Keychain<S>,
-    syncer: &DynSyncer,
-    pools: &[Pool],
+    batches: &[Snapshot],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut batches = Vec::new();
-    for pool in pools {
-        batches.push(syncer.sync(pool, ..).await?);
-    }
-
-    let notes = recover(keychain, &batches, None).await?;
+    let notes = recover(keychain, batches, None).await?;
     for note in &notes {
         println!("{} ({}): leaf {}", note.nonce, note.pool, note.deposit.leaf_index);
     }
 
-    let next_nonce = next_nonce(keychain, &batches, None).await?;
+    let next_nonce = next_nonce(keychain, batches, None).await?;
     // Or calculate manually:
     // let next_nonce = notes.last().map(|note| note.nonce + 1).unwrap_or(0);
     Ok(())

@@ -4,6 +4,7 @@ use alloy::{
     primitives::{Address, B256},
     sol_types::SolEvent,
 };
+use kohaku_tornadocash_core::event::{Deposit, SyncEvent, Withdrawal};
 use sha2::{Digest as _, Sha256};
 use tracing::warn;
 
@@ -11,13 +12,7 @@ use super::{
     SagaSyncError,
     manifest::{ChunkRef, deserialize_hex_u64},
 };
-use crate::{
-    abis::tornado::Tornado,
-    syncer::{
-        SyncEvent,
-        event::{Deposit, Withdrawal},
-    },
-};
+use crate::abis::Tornado;
 
 /// One line of a saga-sync chunk file.
 ///
@@ -147,7 +142,7 @@ mod tests {
     use flate2::{Compression, write::GzEncoder};
 
     use super::*;
-    use crate::syncer::saga::manifest::Digest;
+    use crate::saga::manifest::Digest;
 
     fn gzip(bytes: &[u8]) -> Vec<u8> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());

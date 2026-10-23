@@ -7,7 +7,7 @@ use alloy::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{Pool, abis::tornado::Tornado, field::Field};
+use crate::{abis::tornado::Tornado, field::Field, pool::Pool};
 
 /// A set of events emitted by a pool within a given block range.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
