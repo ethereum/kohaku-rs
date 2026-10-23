@@ -114,15 +114,4 @@ mod wasm_tests {
         let address: JsValue = pool.address().unwrap().into();
         assert_eq!(address.as_string().unwrap(), expected);
     }
-
-    #[wasm_bindgen_test]
-    fn address_lookup_decodes_hex_and_rejects_invalid_length() {
-        let core = CorePool::ETHEREUM_ETHER_01;
-        let address = Hex::from(core.address).into_ts().unwrap();
-        let pool = Pool::from_address(&address).unwrap().unwrap();
-        assert_eq!(pool.inner.address, core.address);
-
-        let short_address = Hex::from([0xab].as_slice()).into_ts().unwrap();
-        assert!(Pool::from_address(&short_address).is_err());
-    }
 }

@@ -55,7 +55,7 @@ mod tests {
         for pool in [CorePool::ETHEREUM_ETHER_01, CorePool::ETHEREUM_DAI_100] {
             let (deposit, core) = deposit_fixture(pool);
 
-            assert_call(deposit.call().unwrap(), core.deposit_data());
+            assert_call(deposit.call().unwrap(), core.call());
         }
     }
 
@@ -73,7 +73,7 @@ mod tests {
 
         assert_call(
             deposit.approval().unwrap().unwrap(),
-            core.approval_data().unwrap(),
+            core.approval().unwrap(),
         );
     }
 
