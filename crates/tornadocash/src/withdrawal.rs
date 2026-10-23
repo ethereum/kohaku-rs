@@ -1,8 +1,7 @@
-use std::{array::from_fn, ops::Deref};
+use std::array::from_fn;
 
 use alloy::{
     primitives::{Address, Bytes},
-    rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
 use kohaku_tornadocash_circuit::{CircuitInputs, prove};
@@ -11,8 +10,8 @@ use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
 
 use crate::{
-    Asset, Call, abis::tornado::Tornado::withdrawCall, field::Field, merkle_tree::MerkleProof,
-    note::Note, pool::Pool,
+    Call, abis::tornado::Tornado::withdrawCall, field::Field, merkle_tree::MerkleProof, note::Note,
+    pool::Pool,
 };
 
 /// A Tornado Cash withdrawal.
@@ -27,9 +26,9 @@ pub struct Withdrawal {
 /// A proven Tornado Cash withdrawal.
 #[derive(Debug, Clone)]
 pub struct ProvenWithdrawal {
-    pub root: Field,
-    pub proof: Proof,
-    pub inner: Withdrawal,
+    inner: Withdrawal,
+    root: Field,
+    proof: Proof,
 }
 
 /// The payer of a withdrawal transaction.
@@ -112,6 +111,30 @@ impl Withdrawal {
 }
 
 impl ProvenWithdrawal {
+    pub fn pool(&self) -> &Pool {
+        &self.inner.pool
+    }
+
+    pub fn note(&self) -> &Note {
+        &self.inner.note
+    }
+
+    pub fn recipient(&self) -> Address {
+        self.inner.recipient
+    }
+
+    pub fn payer(&self) -> &Payer {
+        &self.inner.payer
+    }
+
+    pub fn root(&self) -> Field {
+        self.root
+    }
+
+    pub fn proof(&self) -> &Proof {
+        &self.proof
+    }
+
     /// Returns the call to withdraw from the pool using the generated proof.
     ///
     /// ERC20 withdrawals attach the native-currency refund paid to the recipient.
@@ -121,20 +144,17 @@ impl ProvenWithdrawal {
         let input = withdrawCall {
             _proof: self.solidity_proof(),
             _root: self.root.into(),
-            _nullifierHash: self.note.nullifier_hash().into(),
-            _recipient: self.recipient,
-            _relayer: self.payer.address,
-            _fee: self.payer.fee,
-            _refund: self.payer.refund,
+            _nullifierHash: self.note().nullifier_hash().into(),
+            _recipient: self.recipient(),
+            _relayer: self.payer().address,
+            _fee: self.payer().fee,
+            _refund: self.payer().refund,
         }
         .abi_encode();
 
         Call {
-            target: self.pool.address,
-            value: match self.pool.asset {
-                Asset::Native { .. } => U256::ZERO,
-                Asset::Erc20 { .. } => self.payer.refund,
-            },
+            target: self.pool().address,
+            value: self.payer().refund,
             input: input.into(),
         }
     }
@@ -143,20 +163,6 @@ impl ProvenWithdrawal {
     #[must_use]
     pub fn solidity_proof(&self) -> Bytes {
         into_solidity_proof(&self.proof)
-    }
-}
-
-impl Deref for ProvenWithdrawal {
-    type Target = Withdrawal;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl From<ProvenWithdrawal> for TransactionRequest {
-    fn from(proven_withdrawal: ProvenWithdrawal) -> Self {
-        proven_withdrawal.data().into()
     }
 }
 
@@ -222,11 +228,11 @@ mod tests {
             assert_eq!(input._root, B256::from(withdrawal.root));
             assert_eq!(
                 input._nullifierHash,
-                B256::from(withdrawal.note.nullifier_hash())
+                B256::from(withdrawal.note().nullifier_hash())
             );
-            assert_eq!(input._recipient, withdrawal.recipient);
-            assert_eq!(input._relayer, withdrawal.payer.address);
-            assert_eq!(input._fee, withdrawal.payer.fee);
+            assert_eq!(input._recipient, withdrawal.recipient());
+            assert_eq!(input._relayer, withdrawal.payer().address);
+            assert_eq!(input._fee, withdrawal.payer().fee);
             assert_eq!(input._refund, refund);
         }
     }
