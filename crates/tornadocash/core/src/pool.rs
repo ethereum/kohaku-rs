@@ -30,11 +30,11 @@ pub struct PaymasterInfo {
     pub adapter: Address,
 }
 
-/// Which pool families a caller enables. Defaults to canonical (classic) pools.
+/// Which pool families a caller enables. Defaults to all known pools, including Extended.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum PoolSelection {
-    #[default]
     Classic,
+    #[default]
     IncludeExtended,
 }
 
@@ -59,14 +59,29 @@ pub enum PoolPackingError {
     Zero,
     #[error("no native ETH pools on chain {chain_id}")]
     NoNativePools { chain_id: u64 },
-    #[error("amount {amount} is not a sum of the enabled native pool denominations on chain {chain_id}")]
-    NotADenominationSum { amount: alloy::primitives::U256, chain_id: u64 },
+    #[error(
+        "amount {amount} is not a sum of the enabled native pool denominations on chain {chain_id}"
+    )]
+    NotADenominationSum {
+        amount: alloy::primitives::U256,
+        chain_id: u64,
+    },
 }
 
 impl PoolSet {
     #[must_use]
-    pub const fn new(chain_id: u64, selection: PoolSelection) -> Self {
-        Self { chain_id, selection }
+    pub const fn new(chain_id: u64) -> Self {
+        Self {
+            chain_id,
+            selection: PoolSelection::IncludeExtended,
+        }
+    }
+
+    /// Explicitly override the default of using all known pools.
+    #[must_use]
+    pub const fn with_selection(mut self, selection: PoolSelection) -> Self {
+        self.selection = selection;
+        self
     }
 
     pub fn pools(&self) -> impl Iterator<Item = &'static Pool> + use<> {
@@ -80,24 +95,39 @@ impl PoolSet {
 
     /// Packs native ETH using the fewest notes in this configured catalog.
     /// The known denominations form the canonical 1/3/10 decimal coin system.
-    pub fn deposit_pools(&self, amount: alloy::primitives::U256) -> Result<Vec<Pool>, PoolPackingError> {
+    pub fn deposit_pools(
+        &self,
+        amount: alloy::primitives::U256,
+    ) -> Result<Vec<Pool>, PoolPackingError> {
         use alloy::primitives::U256;
-        if amount.is_zero() { return Err(PoolPackingError::Zero); }
-        let mut pools: Vec<_> = self.pools()
+        if amount.is_zero() {
+            return Err(PoolPackingError::Zero);
+        }
+        let mut pools: Vec<_> = self
+            .pools()
             .filter(|pool| matches!(&pool.asset, Asset::Native { symbol, .. } if symbol == "eth"))
             .collect();
         pools.sort_by_key(|pool| std::cmp::Reverse(pool.amount_wei));
-        if pools.is_empty() { return Err(PoolPackingError::NoNativePools { chain_id: self.chain_id }); }
+        if pools.is_empty() {
+            return Err(PoolPackingError::NoNativePools {
+                chain_id: self.chain_id,
+            });
+        }
         let mut remaining = amount;
         let mut chosen = Vec::new();
         for pool in pools {
             let denom = U256::from(pool.amount_wei);
             let count = u64::try_from(remaining / denom).unwrap_or(u64::MAX);
-            for _ in 0..count { chosen.push(pool.clone()); }
+            for _ in 0..count {
+                chosen.push(pool.clone());
+            }
             remaining -= denom * U256::from(count);
         }
         if !remaining.is_zero() {
-            return Err(PoolPackingError::NotADenominationSum { amount, chain_id: self.chain_id });
+            return Err(PoolPackingError::NotADenominationSum {
+                amount,
+                chain_id: self.chain_id,
+            });
         }
         Ok(chosen)
     }
@@ -570,6 +600,40 @@ fn format_amount(amount: u128, decimals: u8) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_pool_set_applies_one_policy_to_listing_membership_and_packing() {
+        use alloy::primitives::U256;
+        for chain in [1, 11_155_111] {
+            let classic = PoolSet::new(chain).with_selection(PoolSelection::Classic);
+            let all = PoolSet::new(chain);
+            assert!(classic.pools().all(|pool| !pool.is_extended()));
+            assert_eq!(all.pools().count(), classic.pools().count() + 5);
+            let amount = U256::from(3 * 10_u128.pow(16));
+            assert!(matches!(
+                classic.deposit_pools(amount),
+                Err(PoolPackingError::NotADenominationSum { .. })
+            ));
+            let packed = all.deposit_pools(amount).unwrap();
+            assert_eq!(packed.len(), 1);
+            assert!(all.includes(&packed[0]));
+            assert!(!classic.includes(&packed[0]));
+            assert!(!PoolSet::new(137).includes(&packed[0]));
+            assert!(Pool::from_address(packed[0].address).is_some());
+        }
+        assert!(matches!(
+            PoolSet::new(1)
+                .with_selection(PoolSelection::Classic)
+                .deposit_pools(U256::ZERO),
+            Err(PoolPackingError::Zero)
+        ));
+        assert!(matches!(
+            PoolSet::new(999)
+                .with_selection(PoolSelection::Classic)
+                .deposit_pools(U256::from(1)),
+            Err(PoolPackingError::NoNativePools { .. })
+        ));
+    }
 
     #[test]
     fn extended_catalog_is_complete_and_opt_in() {
