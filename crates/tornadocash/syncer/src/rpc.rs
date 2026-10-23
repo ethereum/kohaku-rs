@@ -113,3 +113,91 @@ impl<P: Provider + Clone> RpcSyncer<P> {
         Ok(from..to)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy::{
+        primitives::{Address, B256, LogData, U256},
+        providers::ProviderBuilder,
+        rpc::types::Log,
+        sol,
+        sol_types::SolEvent,
+        transports::mock::Asserter,
+    };
+    use kohaku_tornadocash_core::event::{DepositEvent, WithdrawalEvent};
+
+    use super::*;
+
+    sol!(
+        event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
+        event Withdrawal(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
+    );
+
+    #[tokio::test]
+    async fn syncs_events_within_clamped_range() {
+        let pool = Pool::SEPOLIA_ETHER_01;
+        let deposit_block = pool.deployed_block + 3;
+        let latest = pool.deployed_block + 9;
+        let commitment = B256::with_last_byte(1);
+        let nullifier_hash = B256::with_last_byte(2);
+        let to = Address::with_last_byte(3);
+        let relayer = Address::with_last_byte(4);
+        let fee = U256::from(5);
+
+        let deposit = Deposit {
+            commitment,
+            leafIndex: 0,
+            timestamp: U256::ZERO,
+        };
+        let withdrawal = Withdrawal {
+            to,
+            nullifierHash: nullifier_hash,
+            relayer,
+            fee,
+        };
+
+        let asserter = Asserter::new();
+        asserter.push_success(&latest);
+        asserter.push_success(&vec![
+            log_at(&pool, deposit.encode_log_data(), deposit_block),
+            log_at(&pool, withdrawal.encode_log_data(), latest),
+        ]);
+        let provider = ProviderBuilder::new().connect_mocked_client(asserter.clone());
+
+        let snapshot = RpcSyncer::new(provider)
+            .sync_range(&pool, 0, u64::MAX)
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.range(), pool.deployed_block..latest + 1);
+        assert_eq!(
+            snapshot.events(),
+            &[
+                SyncEvent::Deposit(DepositEvent {
+                    commitment: commitment.try_into().unwrap(),
+                    leaf_index: 0,
+                    block_number: deposit_block,
+                }),
+                SyncEvent::Withdrawal(WithdrawalEvent {
+                    to,
+                    nullifier_hash: nullifier_hash.try_into().unwrap(),
+                    relayer,
+                    fee,
+                    block_number: latest,
+                }),
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    fn log_at(pool: &Pool, data: LogData, block: u64) -> Log {
+        Log {
+            inner: alloy::primitives::Log {
+                address: pool.address,
+                data,
+            },
+            block_number: Some(block),
+            ..Default::default()
+        }
+    }
+}
