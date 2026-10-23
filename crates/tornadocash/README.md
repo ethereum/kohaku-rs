@@ -61,7 +61,7 @@ provider.send_transaction(deposit.call().into()).await?.watch().await?;
 #     rng: &mut impl rand::CryptoRng,
 # ) -> Result<(), Box<dyn std::error::Error>> {
 let mut tree = MerkleTree::new();
-tree.splice_events(&snapshot.events)?;
+tree.splice_events(snapshot.events())?;
 
 let merkle_proof = tree.leaf_proof(note.commitment())?;
 let withdrawal = Withdrawal::new(&pool, note, recipient)

@@ -14,6 +14,7 @@ pub struct Field(Fr);
 pub struct FieldNotInRangeError;
 
 impl Field {
+    #[cfg(test)]
     pub(crate) fn from_usize(value: usize) -> Self {
         Self(Fr::from(value as u64))
     }

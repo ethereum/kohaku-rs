@@ -79,7 +79,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let syncer = RpcSyncer::new(provider.clone());
     let mut tree = MerkleTree::new();
     let snapshot = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&snapshot.events)?;
+    tree.splice_events(snapshot.events())?;
 
     info!("Starting local alto bundler");
     let alto = AltoBuilder::new(
@@ -181,7 +181,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
     let syncer = RpcSyncer::new(provider.clone());
     let mut tree = MerkleTree::new();
     let snapshot = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&snapshot.events)?;
+    tree.splice_events(snapshot.events())?;
 
     info!("Starting local alto bundler");
     let alto = AltoBuilder::new(
