@@ -27,7 +27,7 @@ impl Deposit {
 
     /// Returns the call to deposit this note into the pool.
     #[must_use]
-    pub fn deposit(&self) -> Call {
+    pub fn call(&self) -> Call {
         let value = match self.pool.asset {
             Asset::Native { .. } => U256::from(self.pool.amount_wei),
             Asset::Erc20 { .. } => U256::ZERO,
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn native_deposit_call_contains_denomination_and_commitment() {
         let deposit = Deposit::new(&Pool::ETHEREUM_ETHER_01, Note::new([1; 31], [2; 31]));
-        let call = deposit.deposit();
+        let call = deposit.call();
 
         assert_eq!(call.target, deposit.pool.address);
         assert_eq!(call.value, U256::from(deposit.pool.amount_wei));
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn erc20_calls_target_pool_and_token_with_zero_native_value() {
         let deposit = Deposit::new(&Pool::ETHEREUM_DAI_100, Note::new([1; 31], [2; 31]));
-        let call = deposit.deposit();
+        let call = deposit.call();
         let approval = deposit.approval().unwrap();
         let Asset::Erc20 { address, .. } = deposit.pool.asset else {
             panic!("expected an ERC20 asset");

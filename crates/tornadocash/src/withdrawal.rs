@@ -140,7 +140,7 @@ impl ProvenWithdrawal {
     /// ERC20 withdrawals attach the native-currency refund paid to the recipient.
     /// Native-asset withdrawals attach zero value.
     #[must_use]
-    pub fn data(&self) -> Call {
+    pub fn call(&self) -> Call {
         let input = withdrawCall {
             _proof: self.solidity_proof(),
             _root: self.root.into(),
@@ -163,6 +163,12 @@ impl ProvenWithdrawal {
     #[must_use]
     pub fn solidity_proof(&self) -> Bytes {
         into_solidity_proof(&self.proof)
+    }
+}
+
+impl From<ProvenWithdrawal> for Withdrawal {
+    fn from(proven: ProvenWithdrawal) -> Self {
+        proven.inner
     }
 }
 
@@ -219,7 +225,7 @@ mod tests {
                     refund,
                 }),
             };
-            let call = withdrawal.data();
+            let call = withdrawal.call();
             let input = withdrawCall::abi_decode(&call.input).unwrap();
 
             assert_eq!(call.target, pool.address);
