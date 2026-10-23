@@ -72,8 +72,8 @@ impl Withdrawal {
     /// recent Merkle root. Outdated proofs are rejected by the contract.
     ///
     /// # Errors
-    /// Returns an error if `merkle_proof` does not match this withdrawal's commitment,
-    /// or if proving fails.
+    /// Returns an error if refund is nonzero for native withdrawals, `merkle_proof` does not match
+    /// this withdrawal's commitment, or if proving fails.
     pub fn prove(
         self,
         merkle_proof: &MerkleProof,
@@ -153,7 +153,6 @@ impl ProvenWithdrawal {
     /// Returns the call to withdraw from the pool using the generated proof.
     ///
     /// ERC20 withdrawals attach the native-currency refund paid to the recipient.
-    /// Native-asset withdrawals attach zero value.
     #[must_use]
     pub fn call(&self) -> Call {
         let input = withdrawCall {
