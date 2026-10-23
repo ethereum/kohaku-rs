@@ -1,5 +1,6 @@
 use alloy::primitives::Address;
-use kohaku_tornadocash::{PaymasterInfo as CorePaymasterInfo, Pool as CorePool};
+use kohaku_tornadocash_core::Pool as CorePool;
+use kohaku_tornadocash_paymaster::PaymasterInfo as CorePaymasterInfo;
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use alloy::primitives::Address;
-use kohaku_tornadocash::Asset as CoreAsset;
+use kohaku_tornadocash_core::Asset as CoreAsset;
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -122,7 +122,7 @@ mod tests {
     use std::borrow::Cow;
 
     use alloy::primitives::Address;
-    use kohaku_tornadocash::Asset as CoreAsset;
+    use kohaku_tornadocash_core::Asset as CoreAsset;
     use tsify::Ts;
     use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen_test::wasm_bindgen_test;

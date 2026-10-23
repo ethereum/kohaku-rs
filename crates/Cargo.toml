@@ -39,7 +39,7 @@ kohaku-fork-kit = { path = "fork-kit" }
 kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-rpc-provider = { path = "rpc-provider" }
 kohaku-tor-rpc = { path = "tor-rpc" }
-kohaku-tornadocash = { path = "tornadocash/core" }
+kohaku-tornadocash-core = { path = "tornadocash/core" }
 kohaku-tornadocash-circuit = { path = "tornadocash/circuit" }
 kohaku-tornadocash-keychain = { path = "tornadocash/keychain" }
 kohaku-userop-kit = { path = "userop-kit" }

@@ -1,4 +1,4 @@
-use kohaku_tornadocash::{Note as CoreNote, Nullifier, Secret};
+use kohaku_tornadocash_core::{Note as CoreNote, Nullifier, Secret};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 

@@ -4535,7 +4535,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
- "kohaku-tornadocash",
+ "kohaku-tornadocash-core",
  "kohaku-userop-kit",
  "tokio",
  "tracing",
@@ -4578,7 +4578,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "kohaku-tornadocash"
+name = "kohaku-tornadocash-circuit"
+version = "0.1.0"
+dependencies = [
+ "brotli",
+ "criterion 0.8.2",
+ "postcard",
+ "rand 0.10.2",
+ "ruint",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "websnark-rs",
+]
+
+[[package]]
+name = "kohaku-tornadocash-core"
 version = "0.1.0"
 dependencies = [
  "alloy",
@@ -4611,28 +4627,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "kohaku-tornadocash-circuit"
-version = "0.1.0"
-dependencies = [
- "brotli",
- "criterion 0.8.2",
- "postcard",
- "rand 0.10.2",
- "ruint",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "websnark-rs",
-]
-
-[[package]]
 name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 dependencies = [
  "alloy",
  "cfg_aliases",
- "kohaku-tornadocash",
+ "kohaku-tornadocash-core",
  "thiserror 2.0.20",
  "tokio",
 ]
@@ -4645,7 +4645,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "js-sys",
- "kohaku-tornadocash",
+ "kohaku-tornadocash-core",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
