@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 alloy = { workspace = true, features = ["providers", "reqwest"] }
 hex = { workspace = true }
 js-sys = { workspace = true }
-kohaku-tornadocash = { workspace = true }
+kohaku-tornadocash-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

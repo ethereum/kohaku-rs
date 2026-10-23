@@ -3,7 +3,7 @@
 //! # Example
 //! ```no_run
 //! # use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
-//! # use kohaku_tornadocash::{
+//! # use kohaku_tornadocash_core::{
 //! #     merkle_tree::MerkleTree,
 //! #     Note,
 //! #     Pool,

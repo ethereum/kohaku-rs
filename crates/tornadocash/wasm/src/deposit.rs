@@ -1,4 +1,4 @@
-use kohaku_tornadocash::Deposit as CoreDeposit;
+use kohaku_tornadocash_core::Deposit as CoreDeposit;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -45,7 +45,7 @@ impl Deposit {
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
     use js_sys::Reflect;
-    use kohaku_tornadocash::{Call as CoreCall, Note as CoreNote, Pool as CorePool};
+    use kohaku_tornadocash_core::{Call as CoreCall, Note as CoreNote, Pool as CorePool};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;

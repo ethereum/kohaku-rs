@@ -4,7 +4,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use kohaku_fork_kit::pool::deploy_pool;
-use kohaku_tornadocash::{
+use kohaku_tornadocash_core::{
     Deposit, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
     syncer::{Syncer, rpc::RpcSyncer},

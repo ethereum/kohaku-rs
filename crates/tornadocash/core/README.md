@@ -18,7 +18,7 @@ Native deposits have no approval call. A `Call` can be converted into Alloy's
 ```rust,no_run
 # use rand::RngExt;
 # use alloy::providers::{DynProvider, Provider};
-# use kohaku_tornadocash::{Deposit, Pool};
+# use kohaku_tornadocash_core::{Deposit, Pool};
 # 
 # async fn example(
 #     provider: DynProvider, 
@@ -44,7 +44,7 @@ provider.send_transaction(deposit.call().into()).await?.watch().await?;
 #     primitives::Address,
 #     providers::{DynProvider, Provider},
 # };
-# use kohaku_tornadocash::{
+# use kohaku_tornadocash_core::{
 #     merkle_tree::{MerkleTree, MerkleTreeExt},
 #     Note,
 #     Pool,

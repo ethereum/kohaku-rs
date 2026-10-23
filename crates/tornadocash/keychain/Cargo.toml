@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-kohaku-tornadocash = { workspace = true }
+kohaku-tornadocash-core = { workspace = true }
 thiserror = { workspace = true }
 alloy = { workspace = true, features = ["eip712"] }
 

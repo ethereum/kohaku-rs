@@ -16,7 +16,7 @@ Nonces are used to derive tornadocash note secrets from a keychain. Nonces shoul
 
 ```rust,no_run
 use alloy::signers::Signer;
-use kohaku_tornadocash::{Deposit, Pool};
+use kohaku_tornadocash_core::{Deposit, Pool};
 use kohaku_tornadocash_keychain::Keychain;
 
 async fn example<S: Signer + Send + Sync>(
@@ -35,7 +35,7 @@ async fn example<S: Signer + Send + Sync>(
 
 ```rust,no_run
 use alloy::signers::Signer;
-use kohaku_tornadocash::{Pool, Withdrawal};
+use kohaku_tornadocash_core::{Pool, Withdrawal};
 use kohaku_tornadocash_keychain::Keychain;
 
 async fn example<S: Signer + Send + Sync>(
@@ -55,7 +55,7 @@ async fn example<S: Signer + Send + Sync>(
 
 ```rust,no_run
 use alloy::signers::Signer;
-use kohaku_tornadocash::{Pool, syncer::{DynSyncer, Syncer}};
+use kohaku_tornadocash_core::{Pool, syncer::{DynSyncer, Syncer}};
 use kohaku_tornadocash_keychain::{Keychain, next_nonce, recover};
 
 async fn example<S: Signer + Send + Sync>(

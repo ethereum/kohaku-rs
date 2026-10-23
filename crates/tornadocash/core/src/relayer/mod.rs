@@ -14,7 +14,7 @@
 //! #     primitives::{Address, U256},
 //! #     providers::{DynProvider, Provider},
 //! # };
-//! # use kohaku_tornadocash::{
+//! # use kohaku_tornadocash_core::{
 //! #     merkle_tree::MerkleTree,
 //! #     Note,
 //! #     Pool,

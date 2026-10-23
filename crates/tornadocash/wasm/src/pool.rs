@@ -1,4 +1,4 @@
-use kohaku_tornadocash::Pool as CorePool;
+use kohaku_tornadocash_core::Pool as CorePool;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 

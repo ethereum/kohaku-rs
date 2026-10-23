@@ -13,7 +13,7 @@ use alloy::{
     signers::{Signature, Signer},
     sol_types::eip712_domain,
 };
-use kohaku_tornadocash::{Field, Note, NoteString, Nullifier, Pool, Secret};
+use kohaku_tornadocash_core::{Field, Note, NoteString, Nullifier, Pool, Secret};
 
 mod sol {
     use alloy::sol;
