@@ -46,6 +46,13 @@ impl Pool {
         Ok(CorePool::from_address(address).map(|inner| Self { inner }))
     }
 
+    /// Whether this pool belongs to the opt-in Extended family.
+    #[wasm_bindgen(getter, js_name = isExtended)]
+    #[must_use]
+    pub fn is_extended(&self) -> bool {
+        self.inner.is_extended()
+    }
+
     /// Return the pool's chain ID.
     #[wasm_bindgen(getter, js_name = chainId)]
     #[must_use]
