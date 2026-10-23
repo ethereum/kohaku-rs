@@ -26,7 +26,7 @@ impl Deposit {
     /// Return the core's deposit call as plain JavaScript data.
     #[wasm_bindgen(js_name = depositData)]
     pub fn deposit_data(&self) -> Result<Ts<Call>, JsError> {
-        Ok(Call::from(self.inner.deposit_data()).into_ts()?)
+        Ok(Call::from(self.inner.deposit()).into_ts()?)
     }
 
     /// Return the core's ERC20 approval call, or undefined for native pools.
@@ -36,7 +36,7 @@ impl Deposit {
     pub fn approval_data(&self) -> Result<Option<Ts<Call>>, JsError> {
         Ok(self
             .inner
-            .approval_data()
+            .approval()
             .map(|call| Call::from(call).into_ts())
             .transpose()?)
     }
