@@ -14,11 +14,6 @@ pub struct Field(Fr);
 pub struct FieldNotInRangeError;
 
 impl Field {
-    #[cfg(test)]
-    pub(crate) fn from_usize(value: usize) -> Self {
-        Self(Fr::from(value as u64))
-    }
-
     pub(crate) fn from_fr(fr: Fr) -> Self {
         Self(fr)
     }
@@ -38,6 +33,13 @@ impl From<Field> for B256 {
     fn from(value: Field) -> Self {
         let u256: U256 = value.into();
         u256.into()
+    }
+}
+
+impl From<u32> for Field {
+    fn from(value: u32) -> Self {
+        let fr = Fr::from(value);
+        Self(fr)
     }
 }
 
@@ -122,7 +124,7 @@ mod tests {
 
     #[test]
     fn serialize_deserialize_field() {
-        let field = Field::from_usize(123_456_789);
+        let field = Field::from(123_456_789u32);
         let serialized = serde_json::to_string(&field).unwrap();
         let deserialized: Field = serde_json::from_str(&serialized).unwrap();
         assert_eq!(field, deserialized);
@@ -130,7 +132,7 @@ mod tests {
 
     #[test]
     fn display_field() {
-        let field = Field::from_usize(123_456_789);
+        let field = Field::from(123_456_789u32);
         let display = format!("{field}");
         assert_eq!(
             display,
