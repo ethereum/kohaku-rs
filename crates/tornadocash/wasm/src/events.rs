@@ -2,7 +2,7 @@ use alloy::{
     primitives::{Address, B256},
     rpc::types::Log,
 };
-use kohaku_tornadocash::syncer::SyncEvent;
+use kohaku_tornadocash_core::event::SyncEvent;
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
