@@ -4,7 +4,7 @@
 //! ```no_run
 //! # use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
 //! # use kohaku_tornadocash::{
-//! #     merkle_tree::MerkleTree,
+//! #     merkle_tree::{MerkleTree, MerkleTreeExt},
 //! #     Note,
 //! #     Pool,
 //! #     Withdrawal,

@@ -15,7 +15,7 @@
 //! #     providers::{DynProvider, Provider},
 //! # };
 //! # use kohaku_tornadocash::{
-//! #     merkle_tree::MerkleTree,
+//! #     merkle_tree::{MerkleTree, MerkleTreeExt},
 //! #     Note,
 //! #     Pool,
 //! #     Withdrawal,
