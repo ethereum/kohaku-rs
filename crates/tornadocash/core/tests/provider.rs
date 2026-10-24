@@ -4,7 +4,10 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use kohaku_fork_kit::pool::deploy_pool;
-use kohaku_tornadocash::{Deposit, Withdrawal, merkle_tree::MerkleTree};
+use kohaku_tornadocash::{
+    Deposit, Withdrawal,
+    merkle_tree::{MerkleTree, MerkleTreeExt},
+};
 
 #[tokio::test]
 #[ignore = "run with `cargo test --release -- --ignored`"]
