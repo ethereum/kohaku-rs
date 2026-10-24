@@ -43,7 +43,7 @@ kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-rpc-provider = { path = "rpc-provider" }
 kohaku-tor-rpc = { path = "tor-rpc" }
 kohaku-tornadocash-circuit = { path = "tornadocash/circuit" }
-kohaku-tornadocash-core = { path = "tornadocash/core" }
+kohaku-tornadocash = { path = "tornadocash/core" }
 kohaku-tornadocash-keychain = { path = "tornadocash/keychain" }
 kohaku-tornadocash-paymaster = { path = "tornadocash/paymaster" }
 kohaku-tornadocash-relayer = { path = "tornadocash/relayer" }

@@ -1,6 +1,6 @@
 use alloy::{providers::Provider, rpc::types::Filter};
 use kohaku_rpc_provider::{StreamedEvent, StreamedEventConfig};
-use kohaku_tornadocash_core::{
+use kohaku_tornadocash::{
     Pool,
     event::{Snapshot, SyncEvent},
 };
@@ -22,9 +22,9 @@ enum RpcSyncerError {
     #[error("RPC error: {0}")]
     RpcError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
     #[error("Field conversion error: {0}")]
-    Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
+    Field(#[from] kohaku_tornadocash::FieldNotInRangeError),
     #[error("Snapshot error: {0}")]
-    Snapshot(#[from] kohaku_tornadocash_core::event::SnapshotError),
+    Snapshot(#[from] kohaku_tornadocash::event::SnapshotError),
 }
 
 impl<P: Provider> RpcSyncer<P> {
@@ -124,7 +124,7 @@ mod tests {
         sol_types::SolEvent,
         transports::mock::Asserter,
     };
-    use kohaku_tornadocash_core::event::{DepositEvent, WithdrawalEvent};
+    use kohaku_tornadocash::event::{DepositEvent, WithdrawalEvent};
 
     use super::*;
 

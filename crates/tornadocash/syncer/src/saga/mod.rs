@@ -1,4 +1,4 @@
-use kohaku_tornadocash_core::{Pool, event::Snapshot};
+use kohaku_tornadocash::{Pool, event::Snapshot};
 use thiserror::Error;
 use tracing::info;
 
@@ -15,7 +15,7 @@ mod manifest;
 /// [saga-sync](https://github.com/fatlabsxyz/saga-sync) protocol.
 ///
 /// Fetches the protocol's manifest, verifies each overlapping chunk's sha256 digest against it,
-/// and decodes the chunk's events into [`SyncEvent`](kohaku_tornadocash_core::event::SyncEvent)s.
+/// and decodes the chunk's events into [`SyncEvent`](kohaku_tornadocash::event::SyncEvent)s.
 ///
 /// Does not currently implement chunk caching or chunk signature verification.
 /// - Chunk caching could be added to reduce redundant network downloads, but is not required for
@@ -48,9 +48,9 @@ enum SagaSyncError {
     #[error("Event at block {block} outside chunk range [{from}, {to})")]
     OutOfRange { block: u64, from: u64, to: u64 },
     #[error("Field conversion error: {0}")]
-    Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
+    Field(#[from] kohaku_tornadocash::FieldNotInRangeError),
     #[error("Snapshot error: {0}")]
-    Snapshot(#[from] kohaku_tornadocash_core::event::SnapshotError),
+    Snapshot(#[from] kohaku_tornadocash::event::SnapshotError),
     #[error("Missing manifest entry for pool {0}")]
     MissingManifestEntry(Pool),
 }

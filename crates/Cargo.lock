@@ -4535,7 +4535,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "kohaku-tornadocash-relayer",
  "kohaku-userop-kit",
  "tokio",
@@ -4579,23 +4579,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kohaku-tornadocash-circuit"
-version = "0.1.0"
-dependencies = [
- "brotli",
- "criterion 0.8.2",
- "postcard",
- "rand 0.10.2",
- "ruint",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "websnark-rs",
-]
-
-[[package]]
-name = "kohaku-tornadocash-core"
+name = "kohaku-tornadocash"
 version = "0.1.0"
 dependencies = [
  "alloy",
@@ -4620,12 +4604,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "kohaku-tornadocash-circuit"
+version = "0.1.0"
+dependencies = [
+ "brotli",
+ "criterion 0.8.2",
+ "postcard",
+ "rand 0.10.2",
+ "ruint",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "websnark-rs",
+]
+
+[[package]]
 name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 dependencies = [
  "alloy",
  "cfg_aliases",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "thiserror 2.0.20",
  "tokio",
 ]
@@ -4640,7 +4640,7 @@ dependencies = [
  "insta",
  "kohaku-fork-kit",
  "kohaku-merkle-tree",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "kohaku-tornadocash-syncer",
  "kohaku-userop-kit",
  "rand 0.10.2",
@@ -4659,7 +4659,7 @@ dependencies = [
  "cfg_aliases",
  "insta",
  "kohaku-fork-kit",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "kohaku-tornadocash-syncer",
  "rand 0.10.2",
  "reqwest 0.13.4",
@@ -4683,7 +4683,7 @@ dependencies = [
  "insta",
  "kohaku-fork-kit",
  "kohaku-rpc-provider",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "reqwest 0.13.4",
  "serde",
  "serde_json",
@@ -4703,7 +4703,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "js-sys",
- "kohaku-tornadocash-core",
+ "kohaku-tornadocash",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

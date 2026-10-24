@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
-use kohaku_tornadocash_core::{Asset, Payer, Pool};
+use kohaku_tornadocash::{Asset, Payer, Pool};
 use ruint::uint;
 use serde::{Deserialize, Serialize};
 

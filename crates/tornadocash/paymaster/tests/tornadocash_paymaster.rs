@@ -11,7 +11,7 @@ use kohaku_fork_kit::{
     pool::deploy_pool,
     simple_account::deploy_simple_account,
 };
-use kohaku_tornadocash_core::{
+use kohaku_tornadocash::{
     Deposit, PaymasterInfo, TornadoProviderExt, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };

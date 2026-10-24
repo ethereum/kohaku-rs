@@ -1,4 +1,4 @@
-use kohaku_tornadocash_core::NoteString as CoreNoteString;
+use kohaku_tornadocash::NoteString as CoreNoteString;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -6,7 +6,7 @@ use crate::{bigint::JsU64, hex::Hex, note::Note};
 
 /// A portable tornadocash deposit note.
 ///
-/// See [`kohaku_tornadocash_core::NoteString`] for more details.
+/// See [`kohaku_tornadocash::NoteString`] for more details.
 #[wasm_bindgen]
 pub struct NoteString {
     pub(crate) inner: CoreNoteString,
@@ -121,7 +121,7 @@ impl NoteString {
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
-    use kohaku_tornadocash_core::Note as CoreNote;
+    use kohaku_tornadocash::Note as CoreNote;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::{Note, NoteString};

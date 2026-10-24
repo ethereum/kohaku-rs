@@ -1,5 +1,5 @@
 use alloy::primitives::{Address, B256, U256};
-use kohaku_tornadocash_core::{
+use kohaku_tornadocash::{
     Pool,
     event::{DepositEvent, Snapshot, SyncEvent, WithdrawalEvent},
 };
@@ -45,9 +45,9 @@ enum RemoteSyncerError {
     #[error("Serde error: {0}")]
     JsonError(#[from] serde_json::Error),
     #[error("Field conversion error: {0}")]
-    Field(#[from] kohaku_tornadocash_core::FieldNotInRangeError),
+    Field(#[from] kohaku_tornadocash::FieldNotInRangeError),
     #[error("Snapshot error: {0}")]
-    Snapshot(#[from] kohaku_tornadocash_core::event::SnapshotError),
+    Snapshot(#[from] kohaku_tornadocash::event::SnapshotError),
 }
 
 impl RemoteSyncer {

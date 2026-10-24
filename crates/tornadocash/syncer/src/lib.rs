@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use kohaku_tornadocash_core::{Pool, event::Snapshot};
+use kohaku_tornadocash::{Pool, event::Snapshot};
 use thiserror::Error;
 
 #[cfg(feature = "saga-sync")]

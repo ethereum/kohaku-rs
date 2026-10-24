@@ -1,5 +1,5 @@
 use alloy::primitives::B256;
-use kohaku_tornadocash_core::{Pool, event::SyncEvent};
+use kohaku_tornadocash::{Pool, event::SyncEvent};
 #[cfg(feature = "saga-sync")]
 use kohaku_tornadocash_syncer::saga::SagaSyncer;
 use kohaku_tornadocash_syncer::{Syncer, remote::RemoteSyncer};
