@@ -16,7 +16,7 @@ alloy = { workspace = true, features = [
     "sol-types",
     "reqwest",
 ] }
-kohaku-tornadocash-core = { workspace = true }
+kohaku-tornadocash = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["rustls"] }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }

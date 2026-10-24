@@ -4,7 +4,7 @@ use alloy::{
     primitives::{Address, B256},
     sol_types::SolEvent,
 };
-use kohaku_tornadocash_core::event::{DepositEvent, SyncEvent, WithdrawalEvent};
+use kohaku_tornadocash::event::{DepositEvent, SyncEvent, WithdrawalEvent};
 use sha2::{Digest as _, Sha256};
 use tracing::warn;
 

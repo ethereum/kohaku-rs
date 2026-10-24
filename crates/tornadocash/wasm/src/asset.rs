@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use alloy::primitives::Address;
-use kohaku_tornadocash_core::Asset as CoreAsset;
+use kohaku_tornadocash::Asset as CoreAsset;
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -10,7 +10,7 @@ use crate::{bigint::JsU8, hex::Hex};
 
 /// Represents an asset in a tornadocash pool.
 ///
-/// See [`kohaku_tornadocash_core::Asset`] for more details.
+/// See [`kohaku_tornadocash::Asset`] for more details.
 #[wasm_bindgen]
 pub struct Asset {
     pub(crate) inner: CoreAsset,
@@ -122,7 +122,7 @@ mod tests {
     use std::borrow::Cow;
 
     use alloy::primitives::Address;
-    use kohaku_tornadocash_core::Asset as CoreAsset;
+    use kohaku_tornadocash::Asset as CoreAsset;
     use tsify::Ts;
     use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen_test::wasm_bindgen_test;

@@ -1,6 +1,5 @@
 use alloy::primitives::Address;
-use kohaku_tornadocash_core::Pool as CorePool;
-use kohaku_tornadocash_paymaster::PaymasterInfo as CorePaymasterInfo;
+use kohaku_tornadocash::{PaymasterInfo as CorePaymasterInfo, Pool as CorePool};
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -14,7 +13,7 @@ use crate::{
 
 /// A tornadocash pool.
 ///
-/// See [`kohaku_tornadocash_core::Pool`] for more details.
+/// See [`kohaku_tornadocash::Pool`] for more details.
 #[wasm_bindgen]
 pub struct Pool {
     pub(crate) inner: CorePool,

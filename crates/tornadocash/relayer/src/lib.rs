@@ -14,7 +14,7 @@
 //! #     primitives::{Address, U256},
 //! #     providers::{DynProvider, Provider},
 //! # };
-//! # use kohaku_tornadocash_core::{
+//! # use kohaku_tornadocash::{
 //! #     merkle_tree::MerkleTree,
 //! #     Note,
 //! #     Pool,
@@ -54,7 +54,7 @@ use alloy::{
     primitives::{TxHash, U256},
     providers::Provider,
 };
-use kohaku_tornadocash_core::{Field, Payer, Pool, ProvenWithdrawal, TornadoProviderExt};
+use kohaku_tornadocash::{Field, Payer, Pool, ProvenWithdrawal, TornadoProviderExt};
 use serde::{Deserialize, Serialize};
 
 mod status;

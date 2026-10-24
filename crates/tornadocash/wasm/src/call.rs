@@ -1,4 +1,4 @@
-use kohaku_tornadocash_core::Call as CoreCall;
+use kohaku_tornadocash::Call as CoreCall;
 use serde::Serialize;
 use tsify::Tsify;
 

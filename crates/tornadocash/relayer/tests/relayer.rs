@@ -8,7 +8,7 @@ use kohaku_fork_kit::{
     pool::{deploy_pool, deploy_proxy},
     relayer::RelayerBuilder,
 };
-use kohaku_tornadocash_core::{
+use kohaku_tornadocash::{
     Deposit, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };

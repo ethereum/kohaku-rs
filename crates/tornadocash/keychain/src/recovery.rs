@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::signers::Signer;
-use kohaku_tornadocash_core::{
+use kohaku_tornadocash::{
     Field, Pool,
     event::{DepositEvent, Snapshot, SyncEvent, WithdrawalEvent},
 };
@@ -154,7 +154,7 @@ mod tests {
         primitives::{Address, U256},
         signers::local::PrivateKeySigner,
     };
-    use kohaku_tornadocash_core::Note;
+    use kohaku_tornadocash::Note;
 
     use super::*;
 

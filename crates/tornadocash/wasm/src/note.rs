@@ -1,4 +1,4 @@
-use kohaku_tornadocash_core::{Note as CoreNote, Nullifier, Secret};
+use kohaku_tornadocash::{Note as CoreNote, Nullifier, Secret};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -6,7 +6,7 @@ use crate::hex::Hex;
 
 /// A tornadocash deposit note.
 ///
-/// See [`kohaku_tornadocash_core::Note`] for more details.
+/// See [`kohaku_tornadocash::Note`] for more details.
 #[wasm_bindgen]
 pub struct Note {
     pub(crate) inner: CoreNote,
