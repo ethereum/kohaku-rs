@@ -1,4 +1,4 @@
-use kohaku_tornadocash::merkle_tree::{MerkleProof as CoreMerkleProof, TornadoHasher};
+use kohaku_tornadocash_core::merkle_tree::{MerkleProof as CoreMerkleProof, TornadoHasher};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 

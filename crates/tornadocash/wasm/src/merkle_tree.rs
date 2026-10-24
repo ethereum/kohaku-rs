@@ -1,4 +1,4 @@
-use kohaku_tornadocash::{Field, merkle_tree::MerkleTree as CoreMerkleTree};
+use kohaku_tornadocash_core::{Field, merkle_tree::MerkleTree as CoreMerkleTree};
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
