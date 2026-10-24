@@ -46,11 +46,11 @@ impl Pool {
         Ok(CorePool::from_address(address).map(|inner| Self { inner }))
     }
 
-    /// Whether this pool belongs to the opt-in Extended family.
-    #[wasm_bindgen(getter, js_name = isExtended)]
+    /// Whether this is an official Tornado Cash deployment.
+    #[wasm_bindgen(getter)]
     #[must_use]
-    pub fn is_extended(&self) -> bool {
-        self.inner.is_extended()
+    pub fn canonical(&self) -> bool {
+        self.inner.canonical
     }
 
     /// Return the pool's chain ID.
