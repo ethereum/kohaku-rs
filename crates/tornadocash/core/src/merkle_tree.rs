@@ -110,7 +110,7 @@ mod tests {
     fn splice_is_deterministic() {
         let mut tree = crate::merkle_tree::MerkleTree::new();
 
-        let leaves: [Field; 10] = from_fn(|i| Field::from_usize(i + 1));
+        let leaves: [Field; 10] = from_fn(|i| Field::from((i + 1) as u32));
         tree.splice(0, &leaves).unwrap();
 
         let root: U256 = tree.root().unwrap().into();

@@ -112,7 +112,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn from_leaves_converts_commitments_in_order() {
-        let leaves = [Field::from(0xab_usize), Field::from(1_usize)];
+        let leaves = [Field::from(0xab), Field::from(1)];
         let commitments = Commitments(leaves.into_iter().map(Hex::from).collect())
             .into_ts()
             .unwrap();
@@ -124,13 +124,13 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn splice_converts_the_whole_batch_before_mutating() {
-        let initial = Commitments(vec![Hex::from(Field::from(1_usize))])
+        let initial = Commitments(vec![Hex::from(Field::from(1))])
             .into_ts()
             .unwrap();
         let mut tree = MerkleTree::from_leaves(&initial).unwrap();
         let before = tree.inner.root().unwrap();
         let malformed = Commitments(vec![
-            Hex::from(Field::from(2_usize)),
+            Hex::from(Field::from(2)),
             Hex::from([0xff; 32].as_slice()),
         ])
         .into_ts()
@@ -138,34 +138,28 @@ mod wasm_tests {
 
         assert!(tree.splice(0_u32.into(), &malformed).is_err());
         assert_eq!(tree.inner.root().unwrap(), before);
-        assert_eq!(tree.inner.leaves(), &[Field::from(1_usize)]);
+        assert_eq!(tree.inner.leaves(), &[Field::from(1)]);
     }
 
     #[wasm_bindgen_test]
     fn splice_maps_commitments_and_start_index() {
-        let initial = Commitments(vec![
-            Hex::from(Field::from(1_usize)),
-            Hex::from(Field::from(2_usize)),
-        ])
-        .into_ts()
-        .unwrap();
+        let initial = Commitments(vec![Hex::from(Field::from(1)), Hex::from(Field::from(2))])
+            .into_ts()
+            .unwrap();
         let mut tree = MerkleTree::from_leaves(&initial).unwrap();
-        let leaves = [Field::from(3_usize), Field::from(4_usize)];
+        let leaves = [Field::from(3), Field::from(4)];
         let batch = Commitments(leaves.into_iter().map(Hex::from).collect())
             .into_ts()
             .unwrap();
 
         tree.splice(1_u32.into(), &batch).unwrap();
 
-        assert_eq!(
-            tree.inner.leaves(),
-            &[Field::from(1_usize), leaves[0], leaves[1]]
-        );
+        assert_eq!(tree.inner.leaves(), &[Field::from(1), leaves[0], leaves[1]]);
     }
 
     #[wasm_bindgen_test]
     fn proof_delegates_the_selected_leaf_and_encodes_metadata() {
-        let leaves = [Field::from(1_usize), Field::from(0xab_usize)];
+        let leaves = [Field::from(1), Field::from(0xab)];
         let batch = Commitments(leaves.into_iter().map(Hex::from).collect())
             .into_ts()
             .unwrap();

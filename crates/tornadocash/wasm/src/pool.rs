@@ -97,12 +97,10 @@ impl Pool {
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests {
-    use tsify::Tsify;
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::{CorePool, Pool};
-    use crate::hex::Hex;
 
     #[wasm_bindgen_test]
     fn pool_address_is_checksummed_hex() {

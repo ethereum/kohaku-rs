@@ -127,7 +127,7 @@ mod wasm_tests {
     use js_sys::{Array, Object, Reflect};
     use kohaku_tornadocash::{
         Field,
-        syncer::{Deposit, Withdrawal},
+        event::{DepositEvent, WithdrawalEvent},
     };
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -135,8 +135,8 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn maps_deposit_fields() {
-        let expected_commitment = Field::from(0xab_usize);
-        let event = SyncEvent::Deposit(Deposit {
+        let expected_commitment = Field::from(0xab);
+        let event = SyncEvent::Deposit(DepositEvent {
             commitment: expected_commitment,
             leaf_index: 7,
             block_number: 9_007_199_254_740_993,
@@ -159,9 +159,9 @@ mod wasm_tests {
     fn maps_withdrawal_fields() {
         let recipient = Address::with_last_byte(0xab);
         let expected_relayer = Address::with_last_byte(0xcd);
-        let expected_nullifier = Field::from(7_usize);
+        let expected_nullifier = Field::from(7);
         let expected_fee = (U256::from(1) << 200) + U256::from(17);
-        let event = SyncEvent::Withdrawal(Withdrawal {
+        let event = SyncEvent::Withdrawal(WithdrawalEvent {
             to: recipient,
             nullifier_hash: expected_nullifier,
             relayer: expected_relayer,

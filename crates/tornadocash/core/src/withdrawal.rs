@@ -221,7 +221,7 @@ mod tests {
             (Pool::ETHEREUM_DAI_100, U256::from(42)),
         ] {
             let withdrawal = ProvenWithdrawal {
-                root: Field::from_usize(7_usize),
+                root: Field::from(7u32),
                 // Call encoding only needs proof coordinates; no proof generation is exercised.
                 proof: Proof {
                     a: G1Affine::default(),
