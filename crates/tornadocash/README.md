@@ -73,21 +73,22 @@ provider.send_transaction(withdrawal.call().into()).await?.watch().await?;
 # }
 ```
 
-### Extended ETH pools
+### Pool catalog
 
-The pool catalog includes the 0.01, 0.03, 0.3, 3 and 30 ETH Extended pools on Ethereum mainnet and Sepolia. `Pool::is_extended()` identifies this family without changing serialized pool records or note identifiers. `Pool::EXTENDED_POOLS` lists those entries explicitly. Deployment blocks come from each contract's creation transaction on the respective Blockscout explorer. Paymaster metadata remains `None` for these entries.
+`Pool::POOLS` includes both official Tornado Cash deployments (`canonical: true`) and the non-canonical extended ETH pools (`canonical: false`). The extended denominations are 0.01, 0.03, 0.3, 3 and 30 ETH on Ethereum mainnet and Sepolia. Deployment blocks were verified from each contract's creation transaction on Blockscout; their paymaster metadata remains `None`.
 
-SDK consumers instantiate one pool set. All known pools are enabled by default; canonical-only support is an explicit override:
+The SDK supplies metadata. Consumers choose which pools to use and how to split amounts into deposits:
 
 ```rust
-use kohaku_tornadocash::{PoolSelection, PoolSet};
+use kohaku_tornadocash::Pool;
 
-let pools = PoolSet::new(1); // All pools, including Extended.
-let canonical_only = PoolSet::new(1).with_selection(PoolSelection::Classic);
-// pools.pools() lists the active set.
-// pools.deposit_pools(amount) packs native ETH using that same set.
+let chain_id = 1;
+let all_pools: Vec<_> = Pool::POOLS.iter()
+    .filter(|pool| pool.chain_id == chain_id)
+    .collect();
+let official_pools: Vec<_> = all_pools.into_iter()
+    .filter(|pool| pool.canonical)
+    .collect();
 ```
 
-`Pool::POOLS` remains the complete catalog; address and note lookup recognize both families regardless of selection. WASM exposes the corresponding `isExtended` property. Wallets should consistently apply their chosen selection to synchronization, recovery, deposits and note packing.
-
-`PoolSelection::default()` includes Extended pools. Keep the configured set for the consumer's lifetime. Canonical/Extended membership is maintained in the catalog, so a later promotion can make a pool available to canonical-only consumers without changing its identity or stored history. Classification is not an anonymity score.
+Note lookup recognizes every entry in the catalog. WASM exposes the same `canonical` boolean. The flag describes deployment provenance, not anonymity or safety. Note identifiers are unchanged. The new field changes serialized `Pool` records; consumers persisting those records must account for it when upgrading.

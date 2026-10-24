@@ -42,18 +42,18 @@ noteString.free();
 
 ### Known pools
 
+`new Pool(chainId, address, asset, amountWei, deployedBlock, paymaster?)`
+constructs a custom, non-canonical pool. The supplied asset is borrowed and cloned.
+
 - `Pool.known()` returns independently owned wrappers for every entry in the core's
-  `Pool::POOLS` catalog, including Extended pools. `pool.isExtended` explicitly
-  identifies the Extended family; consumers can filter it out when support is disabled.
+  `Pool::POOLS` catalog, including non-canonical extended pools. `pool.canonical`
+  identifies official Tornado Cash deployments; consumers choose their own filters.
 - `Pool.fromNote(noteString)` borrows the note and finds a pool using its symbol,
   amount text and chain ID. The note remains usable after the lookup.
-- `Pool.fromAddress(address)` finds a pool by its contract address, without a
-  chain-ID parameter. The input is a typed `Hex` string and must decode to 20 bytes.
-  Input checksum validation is not required.
 
-Lookups delegate to the core and preserve its matching rules, including exact
-amount text matching. A valid lookup without a match returns `undefined`;
-malformed address input throws a JavaScript `Error`.
+
+Note lookups delegate to the core and preserve exact amount text matching.
+A lookup without a match returns `undefined`.
 
 Read-only properties expose the pool metadata:
 
@@ -63,7 +63,7 @@ Read-only properties expose the pool metadata:
 | `address` | `Hex` | The checksummed Tornado pool contract address. |
 | `asset` | `Asset` | A new, independently owned wrapper for the pool's asset. |
 | `amountWei` | `bigint` | The fixed deposit amount in asset base units, from the core's `u128`. |
-| `isExtended` | `boolean` | Whether this pool belongs to the Extended family. |
+| `canonical` | `boolean` | Whether this is an official Tornado Cash deployment. |
 | `deployedBlock` | `bigint` | The deployment block, from the core's `u64`. |
 
 The integer properties retain their exact values. `amountWei` is the denomination
@@ -104,12 +104,6 @@ try {
   console.log(asset.kind, asset.symbol, asset.decimals);
   // native eth 18
 
-  const byAddress = Pool.fromAddress(pool.address);
-  try {
-    console.log(byAddress?.id()); // eth-0.1-1
-  } finally {
-    byAddress?.free();
-  }
   console.log(note.toString()); // The borrowed note remains usable.
 } finally {
   asset?.free();
