@@ -73,3 +73,23 @@ provider.send_transaction(withdrawal.data().into()).await?.watch().await?;
 # Ok(())
 # }
 ```
+
+### Pool catalog
+
+`Pool::POOLS` includes both official Tornado Cash deployments (`canonical: true`) and the non-canonical extended ETH pools (`canonical: false`). The extended denominations are 0.01, 0.03, 0.3, 3 and 30 ETH on Ethereum mainnet and Sepolia. Deployment blocks were verified from each contract's creation transaction on Blockscout; their paymaster metadata remains `None`.
+
+The SDK supplies metadata. Consumers choose which pools to use and how to split amounts into deposits:
+
+```rust
+use kohaku_tornadocash::Pool;
+
+let chain_id = 1;
+let all_pools: Vec<_> = Pool::POOLS.iter()
+    .filter(|pool| pool.chain_id == chain_id)
+    .collect();
+let official_pools: Vec<_> = all_pools.into_iter()
+    .filter(|pool| pool.canonical)
+    .collect();
+```
+
+Address and note lookup recognize every entry in the catalog. WASM exposes the same `canonical` boolean. The flag describes deployment provenance, not anonymity or safety. Note identifiers are unchanged. The new field changes serialized `Pool` records; consumers persisting those records must account for it when upgrading.

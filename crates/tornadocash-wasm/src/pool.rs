@@ -46,6 +46,13 @@ impl Pool {
         Ok(CorePool::from_address(address).map(|inner| Self { inner }))
     }
 
+    /// Whether this is an official Tornado Cash deployment.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn canonical(&self) -> bool {
+        self.inner.canonical
+    }
+
     /// Return the pool's chain ID.
     #[wasm_bindgen(getter, js_name = chainId)]
     #[must_use]

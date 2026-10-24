@@ -43,7 +43,8 @@ noteString.free();
 ### Known pools
 
 - `Pool.known()` returns independently owned wrappers for every entry in the core's
-  `Pool::POOLS` catalog.
+  `Pool::POOLS` catalog, including non-canonical extended pools. `pool.canonical`
+  identifies official Tornado Cash deployments; consumers choose their own filters.
 - `Pool.fromNote(noteString)` borrows the note and finds a pool using its symbol,
   amount text and chain ID. The note remains usable after the lookup.
 - `Pool.fromAddress(address)` finds a pool by its contract address, without a
@@ -62,6 +63,7 @@ Read-only properties expose the pool metadata:
 | `address` | `Hex` | The checksummed Tornado pool contract address. |
 | `asset` | `Asset` | A new, independently owned wrapper for the pool's asset. |
 | `amountWei` | `bigint` | The fixed deposit amount in asset base units, from the core's `u128`. |
+| `canonical` | `boolean` | Whether this is an official Tornado Cash deployment. |
 | `deployedBlock` | `bigint` | The deployment block, from the core's `u64`. |
 
 The integer properties retain their exact values. `amountWei` is the denomination
