@@ -10,7 +10,7 @@ use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
 use crate::{
     Note,
     crypto::mimc::mimc_sponge_hash,
-    event::{DepositEvent, SyncEvent},
+    event::{DepositEvent, Snapshot, SyncEvent},
     field::Field,
 };
 
@@ -31,7 +31,7 @@ pub trait MerkleTreeExt {
     ///
     /// # Errors
     /// Returns an error if the events are non-contiguous or if the splicing fails.
-    fn splice_events(&mut self, events: &[SyncEvent]) -> Result<(), MerkleTreeError>;
+    fn splice_events(&mut self, events: &Snapshot) -> Result<(), MerkleTreeError>;
 }
 
 /// `MiMC` sponge hasher for Tornado Cash Merkle tree.
@@ -60,7 +60,8 @@ impl MerkleTreeExt for MerkleTree {
         self.leaf_proof(note.commitment())
     }
 
-    fn splice_events(&mut self, events: &[SyncEvent]) -> Result<(), MerkleTreeError> {
+    fn splice_events(&mut self, s: &Snapshot) -> Result<(), MerkleTreeError> {
+        let events = s.events();
         let deposits: Vec<&DepositEvent> = events
             .iter()
             .filter_map(|e| match e {
