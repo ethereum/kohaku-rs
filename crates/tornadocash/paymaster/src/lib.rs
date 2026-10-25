@@ -94,7 +94,7 @@ pub trait UserOperationPaymasterExt: Sized {
         provider: &impl Provider,
         bundler: &B,
         rng: &mut R,
-    ) -> impl std::future::Future<Output = Result<Self, TornadoPaymasterError>>
+    ) -> impl std::future::Future<Output = Result<Self, PaymasterError>>
     where
         R: rand::CryptoRng,
         B: Bundler + ?Sized;
@@ -102,7 +102,7 @@ pub trait UserOperationPaymasterExt: Sized {
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum TornadoPaymasterError {
+pub enum PaymasterError {
     #[error("Pool missing paymaster: {0}")]
     PoolMissingPaymaster(Pool),
     #[error("Pool denomination cannot cover the operation's gas: {required} > {denomination}")]
@@ -126,7 +126,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         provider: &impl Provider,
         bundler: &B,
         rng: &mut R,
-    ) -> Result<Self, TornadoPaymasterError>
+    ) -> Result<Self, PaymasterError>
     where
         R: rand::CryptoRng,
         B: Bundler + ?Sized,
@@ -134,7 +134,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         let pool = &withdrawal.pool;
         let info = pool
             .paymaster
-            .ok_or_else(|| TornadoPaymasterError::PoolMissingPaymaster(pool.clone()))?;
+            .ok_or_else(|| PaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
         let (builder, fee) =
             estimate_fee(self, &withdrawal, info, merkle_proof, provider, bundler).await?;
@@ -161,7 +161,7 @@ async fn estimate_fee<S, B>(
     merkle_proof: &MerkleProof,
     provider: &impl Provider,
     bundler: &B,
-) -> Result<(UserOperationBuilder<S>, U256), TornadoPaymasterError>
+) -> Result<(UserOperationBuilder<S>, U256), PaymasterError>
 where
     B: Bundler + ?Sized,
 {
@@ -194,7 +194,7 @@ where
     let cost = gas_cost(provider, pool, &builder).await?;
     let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
     if fee > denomination {
-        return Err(TornadoPaymasterError::InsufficientDenomination {
+        return Err(PaymasterError::InsufficientDenomination {
             required: fee,
             denomination,
         });
@@ -210,7 +210,7 @@ where
 async fn verifier_override(
     provider: &impl Provider,
     pool: &Pool,
-) -> Result<StateOverride, TornadoPaymasterError> {
+) -> Result<StateOverride, PaymasterError> {
     let verifier = provider.verifier(pool).await?;
     let code = provider.get_code_at(verifier).await?;
 
@@ -225,7 +225,7 @@ async fn gas_cost<S>(
     provider: &impl Provider,
     pool: &Pool,
     builder: &UserOperationBuilder<S>,
-) -> Result<U256, TornadoPaymasterError> {
+) -> Result<U256, PaymasterError> {
     let user_op = builder.build();
     let gas = U256::from(user_op.total_gas_limit());
     let price = U256::from(user_op.user_op.max_fee_per_gas);
