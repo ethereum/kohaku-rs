@@ -1,8 +1,10 @@
 [package]
 name = "kohaku-tor-rpc"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 description = "Alloy JSON-RPC over Arti with shared or session-isolated circuits"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 alloy = { workspace = true, features = [
