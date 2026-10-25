@@ -228,8 +228,7 @@ async fn gas_cost<S>(
 ) -> Result<U256, TornadoPaymasterError> {
     let user_op = builder.build();
     let gas = U256::from(user_op.total_gas_limit());
-    let price =
-        U256::from(user_op.user_op.max_fee_per_gas + user_op.user_op.max_priority_fee_per_gas);
+    let price = U256::from(user_op.user_op.max_fee_per_gas);
 
     Ok(provider.quote_wei_in_fee_token(pool, gas * price).await?)
 }
