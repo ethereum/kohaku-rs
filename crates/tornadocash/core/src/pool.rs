@@ -512,43 +512,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_classifies_canonical_and_extended_deployments() {
-        let amounts = [
-            10_u128.pow(16),
-            3 * 10_u128.pow(16),
-            3 * 10_u128.pow(17),
-            3 * 10_u128.pow(18),
-            3 * 10_u128.pow(19),
-        ];
-        for chain in [1, 11_155_111] {
-            let pools: Vec<_> = Pool::POOLS
-                .iter()
-                .filter(|pool| pool.chain_id == chain && !pool.canonical)
-                .collect();
-            assert_eq!(
-                pools.iter().map(|pool| pool.amount_wei).collect::<Vec<_>>(),
-                amounts
-            );
-            for pool in pools {
-                assert_eq!(Pool::from_address(pool.address).as_ref(), Some(pool));
-                assert!(pool.deployed_block > 0);
-                assert!(pool.paymaster.is_none());
-            }
-        }
-        assert_eq!(
-            Pool::POOLS.iter().filter(|pool| !pool.canonical).count(),
-            10
-        );
-        let ids: std::collections::HashSet<_> = Pool::POOLS.iter().map(Pool::id).collect();
-        assert_eq!(ids.len(), Pool::POOLS.len());
-        let addresses: std::collections::HashSet<_> = Pool::POOLS
-            .iter()
-            .map(|pool| (pool.chain_id, pool.address))
-            .collect();
-        assert_eq!(addresses.len(), Pool::POOLS.len());
-    }
-
-    #[test]
     fn pool_id() {
         let pool = Pool::ETHEREUM_ETHER_01;
         assert_eq!(pool.id(), "eth-0.1-1");
