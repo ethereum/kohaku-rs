@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use websnark_rs::circuit::Value;
 
 /// Tornadocash circuit inputs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CircuitInputs {
     /// Merkle root for the inclusion proof.
     root: U256,
