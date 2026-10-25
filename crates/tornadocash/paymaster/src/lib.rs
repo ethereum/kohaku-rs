@@ -115,8 +115,6 @@ pub enum TornadoPaymasterError {
     Transport(#[from] alloy::transports::TransportError),
     #[error("Withdrawal error: {0}")]
     Withdrawal(#[from] WithdrawalError),
-    #[error("Merkle tree error: {0}")]
-    MerkleTree(#[from] kohaku_merkle_tree::MerkleTreeError),
 }
 
 impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {

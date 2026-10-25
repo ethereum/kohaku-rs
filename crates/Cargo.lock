@@ -4639,7 +4639,6 @@ dependencies = [
  "cfg_aliases",
  "insta",
  "kohaku-fork-kit",
- "kohaku-merkle-tree",
  "kohaku-tornadocash",
  "kohaku-tornadocash-syncer",
  "kohaku-userop-kit",

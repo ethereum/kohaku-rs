@@ -16,7 +16,6 @@ alloy = { workspace = true, features = [
     "sol-types",
     "reqwest",
 ] }
-kohaku-merkle-tree = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 kohaku-userop-kit = { workspace = true }
 rand = { workspace = true }
