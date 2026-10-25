@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [features]
-default = ["saga-sync"]
+default = []
 saga-sync = ["dep:flate2", "dep:sha2"]
 
 [dependencies]
