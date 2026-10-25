@@ -101,6 +101,7 @@ pub trait UserOperationPaymasterExt: Sized {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum TornadoPaymasterError {
     #[error("Pool missing paymaster: {0}")]
     PoolMissingPaymaster(Pool),
