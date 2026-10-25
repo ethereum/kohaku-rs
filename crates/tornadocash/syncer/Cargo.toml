@@ -2,6 +2,7 @@
 name = "kohaku-tornadocash-syncer"
 version = "0.1.0"
 edition = "2024"
+description = "Tornado Cash event syncing utilities"
 
 [lib]
 crate-type = ["rlib"]

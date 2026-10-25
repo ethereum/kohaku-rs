@@ -2,6 +2,7 @@
 name = "kohaku-tornadocash-circuit"
 version = "0.1.0"
 edition = "2024"
+description = "Tornado Cash circuit gadget and prover"
 
 [features]
 default = []

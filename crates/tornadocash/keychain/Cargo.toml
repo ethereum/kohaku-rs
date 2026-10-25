@@ -2,6 +2,7 @@
 name = "kohaku-tornadocash-keychain"
 version = "0.1.0"
 edition = "2024"
+description = "Tornado Cash deterministic keyring"
 
 [dependencies]
 alloy = { workspace = true, features = ["eip712"] }

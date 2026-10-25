@@ -2,12 +2,18 @@
 name = "kohaku-rpc-provider"
 version = "0.1.0"
 edition = "2024"
+description = "Kohaku RPC provider utilities"
 
 [lib]
 crate-type = ["rlib"]
 
 [dependencies]
-alloy = { workspace = true, features = ["network", "providers", "rpc-types", "transports"] }
+alloy = { workspace = true, features = [
+    "network",
+    "providers",
+    "rpc-types",
+    "transports",
+] }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["time"] }
 tracing = { workspace = true }

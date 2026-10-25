@@ -2,6 +2,7 @@
 name = "kohaku-tornadocash-relayer"
 version = "0.1.0"
 edition = "2024"
+description = "Tornado Cash relayer client"
 
 [lib]
 crate-type = ["rlib"]
