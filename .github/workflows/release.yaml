@@ -33,6 +33,10 @@ jobs:
       run: |
         crate="${GITHUB_REF_NAME%-v*}"
         version="${GITHUB_REF_NAME##*-v}"
+        if ! [[ "$crate" =~ ^[a-z0-9-]+$ ]]; then
+          echo "::error::Invalid crate name '$crate' from tag $GITHUB_REF_NAME"
+          exit 1
+        fi
         actual=$(nix develop .#ci --command bash -c "cd crates && cargo pkgid -p $crate" | sed 's/.*@//')
         if [ "$actual" != "$version" ]; then
           echo "::error::Tag $GITHUB_REF_NAME does not match $crate@$actual"
