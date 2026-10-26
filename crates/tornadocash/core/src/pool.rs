@@ -449,6 +449,7 @@ impl Pool {
         paymaster: None,
     };
 
+    #[must_use]
     pub const fn new(
         chain_id: u64,
         address: Address,
