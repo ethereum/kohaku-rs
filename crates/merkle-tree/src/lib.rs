@@ -68,11 +68,6 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
         &self.nodes[0]
     }
 
-    /// Returns the tree's nodes.
-    pub fn nodes(&self) -> &[Vec<E>] {
-        &self.nodes
-    }
-
     /// Returns the inclusion proof for the leaf at the given index.
     ///
     /// # Errors
