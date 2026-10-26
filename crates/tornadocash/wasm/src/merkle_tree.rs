@@ -89,7 +89,7 @@ impl MerkleTree {
     #[wasm_bindgen(js_name = leafProof)]
     pub fn leaf_proof(&self, commitment: &Ts<Hex>) -> Result<MerkleProof, JsError> {
         let leaf = Field::try_from(commitment.to_rust()?)?;
-        Ok(self.inner.leaf_proof(leaf)?.into())
+        Ok(self.inner.leaf_proof(&leaf)?.into())
     }
 }
 
