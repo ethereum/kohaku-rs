@@ -32,8 +32,6 @@ pub enum MerkleTreeError {
     MissingLeaf,
     #[error("Index {0} is out of bounds")]
     IndexOutOfBounds(usize),
-    #[error("Other: {0}")]
-    Other(String),
 }
 
 impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
