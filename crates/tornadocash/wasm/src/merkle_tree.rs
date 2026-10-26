@@ -67,7 +67,7 @@ impl MerkleTree {
 
     /// Return the tree's root as lowercase, 32-byte hex.
     pub fn root(&self) -> Result<Ts<Hex>, JsError> {
-        Ok(Hex::from(self.inner.root()?).into_ts()?)
+        Ok(Hex::from(self.inner.root()).into_ts()?)
     }
 
     /// Return an independently owned inclusion proof capturing the current root.

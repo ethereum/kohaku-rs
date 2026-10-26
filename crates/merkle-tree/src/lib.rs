@@ -61,8 +61,8 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
     }
 
     /// Returns the tree's root hash.
-    pub fn root(&self) -> Result<E, MerkleTreeError> {
-        Ok(self.node(DEPTH, 0))
+    pub fn root(&self) -> E {
+        self.node(DEPTH, 0)
     }
 
     /// Returns the tree's leaves.
@@ -100,7 +100,7 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
         }
 
         let leaf = self.nodes[0][index].clone();
-        Ok(proof::MerkleProof::new(leaf, siblings, path, self.root()?))
+        Ok(proof::MerkleProof::new(leaf, siblings, path, self.root()))
     }
 
     /// Inserts a single leaf at `index`. If a leaf already exists at that index, it is
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn root_is_deterministic() {
         let tree = tree();
-        assert_eq!(tree.root().unwrap(), 102);
+        assert_eq!(tree.root(), 102);
     }
 
     #[test]
@@ -281,19 +281,19 @@ mod tests {
 
         let tree_b = TestTree::from_leaves(tree_a.leaves()).unwrap();
 
-        assert_eq!(tree_a.root().unwrap(), tree_b.root().unwrap());
+        assert_eq!(tree_a.root(), tree_b.root());
     }
 
     #[test]
     fn insert_changes_root() {
         let mut tree = tree();
-        let root_a = tree.root().unwrap();
+        let root_a = tree.root();
 
         tree.insert(0, 1).unwrap();
-        let root_b = tree.root().unwrap();
+        let root_b = tree.root();
 
         tree.insert(0, 2).unwrap();
-        let root_c = tree.root().unwrap();
+        let root_c = tree.root();
 
         assert_ne!(root_a, root_b);
         assert_ne!(root_b, root_c);
@@ -311,7 +311,7 @@ mod tests {
         let mut spliced = tree();
         spliced.splice(0, &leaves).unwrap();
 
-        assert_eq!(inserted.root().unwrap(), spliced.root().unwrap());
+        assert_eq!(inserted.root(), spliced.root());
     }
 
     #[test]
@@ -320,31 +320,31 @@ mod tests {
         let mut full = tree();
         full.splice(0, &leaves).unwrap();
 
-        let root_before = full.root().unwrap();
+        let root_before = full.root();
         full.splice(0, &leaves).unwrap();
 
-        assert_eq!(full.root().unwrap(), root_before);
+        assert_eq!(full.root(), root_before);
     }
 
     #[test]
     fn inserting_same_leaf_no_op() {
         let mut tree = tree();
         tree.insert(0, 1).unwrap();
-        let root_before = tree.root().unwrap();
+        let root_before = tree.root();
 
         tree.insert(0, 1).unwrap();
-        assert_eq!(tree.root().unwrap(), root_before);
+        assert_eq!(tree.root(), root_before);
     }
 
     #[test]
     fn inserting_different_leaf_replaces_it() {
         let mut tree = tree();
         tree.insert(0, 1).unwrap();
-        let root_before = tree.root().unwrap();
+        let root_before = tree.root();
 
         tree.insert(0, 2).unwrap();
 
-        assert_ne!(tree.root().unwrap(), root_before);
+        assert_ne!(tree.root(), root_before);
         assert_eq!(tree.leaf_proof(2).unwrap().leaf, 2);
     }
 

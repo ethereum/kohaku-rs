@@ -124,7 +124,7 @@ mod tests {
         let leaves: [Field; 10] = from_fn(|i| Field::from((i + 1) as u32));
         tree.splice(0, &leaves).unwrap();
 
-        let root: U256 = tree.root().unwrap().into();
+        let root: U256 = tree.root().into();
         let expected = uint!(
             15200063891796499502721825879098395282261979630510984497744981505913469850275_U256
         );
