@@ -54,7 +54,8 @@ use alloy::{
     sol_types::SolValue,
 };
 use kohaku_tornadocash::{
-    Payer, PaymasterInfo, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal, WithdrawalError,
+    Asset, Payer, PaymasterInfo, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal,
+    WithdrawalError,
     merkle_tree::MerkleProof,
 };
 use kohaku_userop_kit::{
@@ -62,7 +63,7 @@ use kohaku_userop_kit::{
     bundler::{Bundler, BundlerExt},
 };
 
-use crate::abis::{PaymasterData, TornadoAdapterData};
+use crate::abis::{PaymasterData, TornadoAdapterData, TornadoPaymaster};
 
 mod abis;
 
@@ -191,7 +192,7 @@ where
         .with_gas_estimate(bundler, Some(&overrides))
         .await?;
 
-    let cost = gas_cost(provider, pool, &builder).await?;
+    let cost = gas_cost(provider, pool, info.address, &builder).await?;
     let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
     if fee > denomination {
         return Err(PaymasterError::InsufficientDenomination {
@@ -224,13 +225,22 @@ async fn verifier_override(
 async fn gas_cost<S>(
     provider: &impl Provider,
     pool: &Pool,
+    paymaster: Address,
     builder: &UserOperationBuilder<S>,
 ) -> Result<U256, PaymasterError> {
     let user_op = builder.build();
     let gas = U256::from(user_op.total_gas_limit());
     let price = U256::from(user_op.user_op.max_fee_per_gas);
+    let cost = gas * price;
 
-    Ok(provider.quote_wei_in_fee_token(pool, gas * price).await?)
+    let Asset::Erc20 { address: token, .. } = pool.asset else {
+        return Ok(cost);
+    };
+
+    Ok(TornadoPaymaster::new(paymaster, provider)
+        .quoteWeiInToken(token, cost)
+        .call()
+        .await?)
 }
 
 fn encode_paymaster_data(adapter: Address, withdrawal: &ProvenWithdrawal) -> Bytes {
