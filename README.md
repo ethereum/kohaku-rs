@@ -29,7 +29,7 @@ Kohaku-rs is a collection of rust crates for working with Ethereum privacy proto
 Experiments are incomplete and unstable features that are not ready for production use. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more information.
 
 - [`kohaku-privacy-rpc`](https://github.com/ethereum/kohaku-rs/tree/experiments/pir-v1/crates/privacy-rpc) - dual-endpoint Ethereum provider: PIR for private account reads, fallback JSON-RPC for everything else. Can also enable Tor for network level anonymity.
-- [`kohaku-railgun](https://github.com/ethereum/kohaku-rs/tree/feat/kohaku-railgun) - [Railgun](https://docs.railgun.org/wiki) privacy protocol client library.
+- [`kohaku-railgun`](https://github.com/ethereum/kohaku-rs/tree/feat/kohaku-railgun) - [Railgun](https://docs.railgun.org/wiki) privacy protocol client library.
 - [`tint`](https://github.com/Robert-MacWha/tint) - Experimental immutable privacy protocol targeting Hegota.
 - [`msp`](https://github.com/soispoke/minimal-shielded-pool) - Experimental immutable & permissionless privacy protocol targeting Hegota. 
 
