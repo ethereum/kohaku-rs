@@ -13,7 +13,7 @@ changelog crate:
     git cliff --include-path "$(realpath --relative-to=. "$dir")/**" --tag-pattern '^{{crate}}-v[0-9]' --unreleased
 
 # Dry-run publish
-release crate:
+prepare crate:
     #!/usr/bin/env bash
     set -euo pipefail
     cd crates
