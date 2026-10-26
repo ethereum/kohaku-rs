@@ -57,7 +57,7 @@ impl Hasher<2, Field> for TornadoHasher {
 
 impl MerkleTreeExt for MerkleTree {
     fn note_proof(&self, note: &Note) -> Result<MerkleProof, MerkleTreeError> {
-        self.leaf_proof(note.commitment())
+        self.leaf_proof(&note.commitment())
     }
 
     fn splice_events(&mut self, s: &Snapshot) -> Result<(), MerkleTreeError> {

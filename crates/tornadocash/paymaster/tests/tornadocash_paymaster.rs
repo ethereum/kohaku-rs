@@ -106,7 +106,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         }]);
 
     let withdrawal = Withdrawal::new(&pool, note.clone(), owner.address());
-    let withdrawal_merkle_proof = tree.leaf_proof(withdrawal.note.commitment())?;
+    let withdrawal_merkle_proof = tree.note_proof(&withdrawal.note)?;
     let builder = builder
         .with_tornado_paymaster(
             withdrawal,
@@ -212,7 +212,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
 
     info!("Withdrawing {spend} wei and spending it in the same operation");
     let withdrawal = Withdrawal::new(&pool, note, owner.address());
-    let withdrawal_merkle_proof = tree.leaf_proof(withdrawal.note.commitment())?;
+    let withdrawal_merkle_proof = tree.note_proof(&withdrawal.note)?;
     let builder = builder
         .with_tornado_paymaster(
             withdrawal,

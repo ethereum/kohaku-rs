@@ -177,11 +177,11 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element + PartialEq, H: Hasher<A
     /// Returns an error if the leaf is not found in the tree.
     pub fn leaf_proof(
         &self,
-        leaf: E,
+        leaf: &E,
     ) -> Result<proof::MerkleProof<DEPTH, ARITY, E>, MerkleTreeError> {
         let len = self.nodes[0].len();
         for index in 0..len {
-            if self.nodes[0][index] == leaf {
+            if &self.nodes[0][index] == leaf {
                 return self.proof(index);
             }
         }
@@ -345,7 +345,7 @@ mod tests {
         tree.insert(0, 2).unwrap();
 
         assert_ne!(tree.root(), root_before);
-        assert_eq!(tree.leaf_proof(2).unwrap().leaf, 2);
+        assert_eq!(tree.leaf_proof(&2).unwrap().leaf, 2);
     }
 
     #[test]
@@ -376,7 +376,7 @@ mod tests {
         tree.insert(0, 1).unwrap();
 
         assert!(matches!(
-            tree.leaf_proof(9),
+            tree.leaf_proof(&9),
             Err(MerkleTreeError::MissingLeaf)
         ));
     }
