@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use alloy::primitives::keccak256;
 use ark_bn254::Fr;
 use ark_ff::PrimeField;
-use kohaku_merkle_tree::{MerkleTreeError, hasher::Hasher};
+use kohaku_merkle_tree::{Hasher, MerkleTreeError};
 
 use crate::{
     Note,
@@ -18,7 +18,7 @@ use crate::{
 pub type MerkleTree = kohaku_merkle_tree::MerkleTree<20, 2, Field, TornadoHasher>;
 
 /// `MerkleProof` type used in Tornado Cash.
-pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<20, 2, Field>;
+pub type MerkleProof = kohaku_merkle_tree::MerkleProof<20, 2, Field>;
 
 /// `MerkleTree` extension trait for Tornado Cash.
 pub trait MerkleTreeExt {

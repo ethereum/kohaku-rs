@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use kohaku_merkle_tree::{MerkleTree, hasher::Hasher};
+use kohaku_merkle_tree::{Hasher, MerkleTree};
 use rand::RngExt;
 
 type Tree = MerkleTree<20, 2, u64, BenchHasher>;

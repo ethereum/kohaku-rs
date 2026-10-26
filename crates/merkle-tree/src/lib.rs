@@ -2,11 +2,13 @@
 
 use std::array::from_fn;
 
-use crate::{element::Element, hasher::Hasher};
+mod element;
+mod hasher;
+mod proof;
 
-pub mod element;
-pub mod hasher;
-pub mod proof;
+pub use element::Element;
+pub use hasher::Hasher;
+pub use proof::MerkleProof;
 
 /// Number of parents in a level below which parallel hashing costs more than it saves.
 const PARALLEL_THRESHOLD: usize = 256;
