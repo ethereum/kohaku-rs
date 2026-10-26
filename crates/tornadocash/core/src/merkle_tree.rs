@@ -38,7 +38,6 @@ pub trait MerkleTreeExt {
 ///
 /// Reference implementation:
 /// [contracts/Classic/MerkleTreeWithHistory.sol](https://github.com/tornado-dao/tornado-contracts/blob/cc57528ae13e762c36ae715f37e018528d6e0605/contracts/Classic/MerkleTreeWithHistory.sol#L57)
-#[derive(Copy, Clone)]
 pub struct TornadoHasher;
 
 impl Hasher<2, Field> for TornadoHasher {

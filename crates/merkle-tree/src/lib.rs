@@ -12,7 +12,6 @@ pub mod proof;
 const PARALLEL_THRESHOLD: usize = 256;
 
 /// A Merkle tree with a fixed depth and arity.
-#[derive(Clone)]
 pub struct MerkleTree<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> {
     /// `nodes[0]` holds the leaves; `nodes[level]` holds the hashes at `level`.
     nodes: Vec<Vec<E>>,
@@ -191,6 +190,18 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> De
     }
 }
 
+impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> Clone
+    for MerkleTree<DEPTH, ARITY, E, H>
+{
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            zeros: self.zeros.clone(),
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 /// Hashes each `ARITY`-wide chunk of `children` into the matching slot of `parents`.
 #[cfg_attr(not(feature = "parallel"), expect(unused_variables))]
 fn hash_level<const ARITY: usize, E: Element, H: Hasher<ARITY, E>>(
@@ -239,7 +250,6 @@ mod tests {
 
     type TestTree = MerkleTree<3, 2, u128, TestHasher>;
 
-    #[derive(Copy, Clone)]
     struct TestHasher;
 
     impl<const ARITY: usize> Hasher<ARITY, u128> for TestHasher {

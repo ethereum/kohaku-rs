@@ -6,7 +6,6 @@ use rand::RngExt;
 
 type Tree = MerkleTree<20, 2, u64, BenchHasher>;
 
-#[derive(Copy, Clone)]
 struct BenchHasher;
 
 impl Hasher<2, u64> for BenchHasher {
