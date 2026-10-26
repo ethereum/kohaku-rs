@@ -35,7 +35,7 @@ Experiments are incomplete and unstable features that are not ready for producti
 
 ## Development
 
-kohaku-rs primarily uses [nix flakes](https://wiki.nixos.org/wiki/Flakes) for development. See the [flake.nix](./flake.nix) file for details on required dependencies. To enter the dev shell, run:
+kohaku-rs primarily uses [nix flakes](https://wiki.nixos.org/wiki/Flakes) for development. See the [flake.nix](./flake.nix) file for details on required dependencies. Only dependencies listed in the `ci` shell are required for development. To enter the dev shell, run:
 
 ```bash
 nix develop --extra-experimental-features "nix-command flakes"
