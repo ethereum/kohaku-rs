@@ -128,7 +128,7 @@ mod wasm_tests {
             .into_ts()
             .unwrap();
         let mut tree = MerkleTree::from_leaves(&initial).unwrap();
-        let before = tree.inner.root().unwrap();
+        let before = tree.inner.root();
         let malformed = Commitments(vec![
             Hex::from(Field::from(2)),
             Hex::from([0xff; 32].as_slice()),
@@ -137,7 +137,7 @@ mod wasm_tests {
         .unwrap();
 
         assert!(tree.splice(0_u32.into(), &malformed).is_err());
-        assert_eq!(tree.inner.root().unwrap(), before);
+        assert_eq!(tree.inner.root(), before);
         assert_eq!(tree.inner.leaves(), &[Field::from(1)]);
     }
 
