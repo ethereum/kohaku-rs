@@ -1,6 +1,6 @@
 [package]
 name = "kohaku-tornadocash-wasm"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 description = "Tornado Cash wasm bindings"
 license.workspace = true
