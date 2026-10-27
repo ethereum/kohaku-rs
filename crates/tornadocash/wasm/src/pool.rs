@@ -165,7 +165,7 @@ mod wasm_tests {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    use super::{CorePaymasterInfo, CorePool, PaymasterInfo, Pool};
+    use super::{CorePool, PaymasterInfo, Pool};
     use crate::{asset::Asset, hex::Hex};
 
     fn address() -> Ts<Hex> {
@@ -199,16 +199,8 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn custom_paymaster_maps_input_and_output_fields() {
-        let expected = CorePaymasterInfo {
-            address: Address::with_last_byte(0xab),
-            adapter: Address::with_last_byte(0xcd),
-        };
-        let input = PaymasterInfo {
-            address: Hex::from(expected.address),
-            adapter: Hex::from(expected.adapter),
-        }
-        .into_ts()
-        .unwrap();
+        let expected = Address::with_last_byte(0xab);
+        let input = Hex::from(expected).into_ts().unwrap();
         let pool = Pool::new(
             0_u64.into(),
             &address(),
@@ -219,9 +211,8 @@ mod wasm_tests {
         )
         .unwrap();
         assert_eq!(pool.inner.paymaster, Some(expected));
-        let output = pool.paymaster().unwrap().unwrap().to_rust().unwrap();
-        assert_eq!(Address::try_from(output.address).unwrap(), expected.address);
-        assert_eq!(Address::try_from(output.adapter).unwrap(), expected.adapter);
+        let value = pool.paymaster().unwrap().unwrap().to_rust().unwrap();
+        assert_eq!(Address::try_from(value).unwrap(), expected.address);
     }
 
     #[wasm_bindgen_test]
