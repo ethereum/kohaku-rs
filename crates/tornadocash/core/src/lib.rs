@@ -18,6 +18,6 @@ pub use call::Call;
 pub use deposit::Deposit;
 pub use field::{Field, FieldNotInRangeError};
 pub use note::{Note, NoteError, NoteString, Nullifier, Secret};
-pub use pool::{PaymasterInfo, Pool};
+pub use pool::Pool;
 pub use provider::TornadoProviderExt;
 pub use withdrawal::{Payer, ProvenWithdrawal, Withdrawal, WithdrawalError};

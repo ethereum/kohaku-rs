@@ -1,6 +1,5 @@
 use alloy::primitives::Address;
-use kohaku_tornadocash::{PaymasterInfo as CorePaymasterInfo, Pool as CorePool};
-use serde::{Deserialize, Serialize};
+use kohaku_tornadocash::Pool as CorePool;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -17,35 +16,6 @@ use crate::{
 #[wasm_bindgen]
 pub struct Pool {
     pub(crate) inner: CorePool,
-}
-
-/// Privacy-paymaster metadata for a pool.
-///
-/// See [`kohaku_tornadocash::PaymasterInfo`] for more details.
-#[derive(Serialize, Deserialize, Tsify)]
-pub struct PaymasterInfo {
-    pub address: Hex,
-    pub adapter: Hex,
-}
-
-impl TryFrom<PaymasterInfo> for CorePaymasterInfo {
-    type Error = crate::hex::HexError;
-
-    fn try_from(value: PaymasterInfo) -> Result<Self, Self::Error> {
-        Ok(Self {
-            address: value.address.try_into()?,
-            adapter: value.adapter.try_into()?,
-        })
-    }
-}
-
-impl From<CorePaymasterInfo> for PaymasterInfo {
-    fn from(value: CorePaymasterInfo) -> Self {
-        Self {
-            address: value.address.into(),
-            adapter: value.adapter.into(),
-        }
-    }
 }
 
 #[wasm_bindgen]
@@ -66,16 +36,14 @@ impl Pool {
         asset: &Asset,
         amount_wei: JsU128,
         deployed_block: JsU64,
-        paymaster: Option<Ts<PaymasterInfo>>,
+        paymaster: Option<Ts<Hex>>,
     ) -> Result<Self, JsError> {
         let chain_id = u64::try_from(chain_id)?;
         let address = Address::try_from(address.to_rust()?)?;
         let amount_wei = u128::try_from(amount_wei)?;
         let deployed_block = u64::try_from(deployed_block)?;
         let paymaster = paymaster
-            .map(|value| -> Result<_, JsError> {
-                Ok(CorePaymasterInfo::try_from(value.to_rust()?)?)
-            })
+            .map(|value| -> Result<_, JsError> { Ok(Address::try_from(value.to_rust()?)?) })
             .transpose()?;
 
         Ok(Self {
@@ -156,10 +124,10 @@ impl Pool {
     ///
     /// The returned JavaScript object requires no `free()` call.
     #[wasm_bindgen(getter)]
-    pub fn paymaster(&self) -> Result<Option<Ts<PaymasterInfo>>, JsError> {
+    pub fn paymaster(&self) -> Result<Option<Ts<Hex>>, JsError> {
         self.inner
             .paymaster
-            .map(|value| PaymasterInfo::from(value).into_ts())
+            .map(|value| Hex::from(value).into_ts())
             .transpose()
             .map_err(Into::into)
     }

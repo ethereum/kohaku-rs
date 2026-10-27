@@ -54,8 +54,7 @@ use alloy::{
     sol_types::SolValue,
 };
 use kohaku_tornadocash::{
-    Asset, Payer, PaymasterInfo, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal,
-    WithdrawalError,
+    Asset, Payer, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal, WithdrawalError,
     merkle_tree::MerkleProof,
 };
 use kohaku_userop_kit::{
@@ -63,7 +62,7 @@ use kohaku_userop_kit::{
     bundler::{Bundler, BundlerExt},
 };
 
-use crate::abis::{PaymasterData, TornadoAdapterData, TornadoPaymaster};
+use crate::abis::{TornadoPaymaster, TornadoPaymasterData};
 
 mod abis;
 
@@ -133,24 +132,30 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         B: Bundler + ?Sized,
     {
         let pool = &withdrawal.pool;
-        let info = pool
+        let paymaster_address = pool
             .paymaster
             .ok_or_else(|| PaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
-        let (builder, fee) =
-            estimate_fee(self, &withdrawal, info, merkle_proof, provider, bundler).await?;
+        let (builder, fee) = estimate_fee(
+            self,
+            &withdrawal,
+            paymaster_address,
+            merkle_proof,
+            provider,
+            bundler,
+        )
+        .await?;
 
         //? The placeholder costs what a real proof does, so the estimate holds once proven.
         let proven = withdrawal
             .with_payer(Payer {
-                address: info.address,
+                address: paymaster_address,
                 fee,
                 refund: U256::ZERO,
             })
             .prove(merkle_proof, rng)?;
 
-        Ok(builder
-            .with_paymaster_and_data(info.address, encode_paymaster_data(info.adapter, &proven)))
+        Ok(builder.with_paymaster_and_data(paymaster_address, encode_paymaster_data(&proven)))
     }
 }
 
@@ -158,7 +163,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
 async fn estimate_fee<S, B>(
     builder: UserOperationBuilder<S>,
     withdrawal: &Withdrawal,
-    info: PaymasterInfo,
+    paymaster_address: Address,
     merkle_proof: &MerkleProof,
     provider: &impl Provider,
     bundler: &B,
@@ -177,7 +182,7 @@ where
     let placeholder = withdrawal
         .clone()
         .with_payer(Payer {
-            address: info.address,
+            address: paymaster_address,
             fee: seed,
             refund: U256::ZERO,
         })
@@ -185,14 +190,11 @@ where
 
     let overrides = verifier_override(provider, pool).await?;
     let builder = builder
-        .with_paymaster_and_data(
-            info.address,
-            encode_paymaster_data(info.adapter, &placeholder),
-        )
+        .with_paymaster_and_data(paymaster_address, encode_paymaster_data(&placeholder))
         .with_gas_estimate(bundler, Some(&overrides))
         .await?;
 
-    let cost = gas_cost(provider, pool, info.address, &builder).await?;
+    let cost = gas_cost(provider, pool, paymaster_address, &builder).await?;
     let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
     if fee > denomination {
         return Err(PaymasterError::InsufficientDenomination {
@@ -243,19 +245,14 @@ async fn gas_cost<S>(
         .await?)
 }
 
-fn encode_paymaster_data(adapter: Address, withdrawal: &ProvenWithdrawal) -> Bytes {
-    let adapter_data = TornadoAdapterData {
+fn encode_paymaster_data(withdrawal: &ProvenWithdrawal) -> Bytes {
+    let data = TornadoPaymasterData {
+        instance: withdrawal.pool().address,
         proof: withdrawal.solidity_proof(),
         root: withdrawal.root().into(),
         nullifierHash: withdrawal.note().nullifier_hash().into(),
         recipient: withdrawal.recipient(),
-        relayer: withdrawal.payer().address,
         fee: withdrawal.payer().fee,
-        refund: withdrawal.payer().refund,
-    };
-    let data = PaymasterData {
-        adapter,
-        adapterData: adapter_data.abi_encode().into(),
     };
 
     data.abi_encode().into()

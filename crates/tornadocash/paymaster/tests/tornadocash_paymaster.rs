@@ -7,12 +7,12 @@ use alloy::{
 use kohaku_fork_kit::{
     alto::AltoBuilder,
     entry_point::deploy_entry_point,
-    paymaster::{deploy_fee_adapter, deploy_paymaster},
+    paymaster::{allow_instance, deploy_paymaster},
     pool::deploy_pool,
     simple_account::deploy_simple_account,
 };
 use kohaku_tornadocash::{
-    Deposit, PaymasterInfo, TornadoProviderExt, Withdrawal,
+    Deposit, TornadoProviderExt, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
 use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
@@ -58,12 +58,8 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    let adapter_address =
-        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
-    pool.paymaster = Some(PaymasterInfo {
-        address: paymaster_address,
-        adapter: adapter_address,
-    });
+    allow_instance(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");
@@ -160,12 +156,8 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    let adapter_address =
-        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
-    pool.paymaster = Some(PaymasterInfo {
-        address: paymaster_address,
-        adapter: adapter_address,
-    });
+    allow_instance(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");

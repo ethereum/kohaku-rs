@@ -5,6 +5,8 @@ use alloy::{
     providers::DynProvider,
 };
 
+use crate::paymaster::sol::PrivacyPaymaster;
+
 mod sol {
     use alloy::sol;
 
@@ -12,11 +14,6 @@ mod sol {
         #[sol(rpc)]
         PrivacyPaymaster,
         "fixtures/privacy_paymaster.json"
-    );
-    sol!(
-        #[sol(rpc)]
-        TornadoFeeAdapter,
-        "fixtures/tornado_fee_adapter.json"
     );
 }
 
@@ -51,37 +48,32 @@ pub async fn deploy_paymaster(
         .value(U256::from(PAYMASTER_DEPOSIT_WEI))
         .send()
         .await?
-        .get_receipt()
+        .watch()
         .await?;
     paymaster
         .addStake(PAYMASTER_UNSTAKE_DELAY_SEC)
         .value(U256::from(PAYMASTER_STAKE_WEI))
         .send()
         .await?
-        .get_receipt()
+        .watch()
         .await?;
 
     Ok(*paymaster.address())
 }
 
-/// Deploys a new `TornadoFeeAdapter` for `pool_address`.
-///
-/// Automatically approves on `paymaster`. Returns the adapter's address.
-///
-/// # Errors
-/// Returns an error if the deploy or approval transactions fail.
-pub async fn deploy_fee_adapter(
+/// Allows a tornadocash pool instance on the given paymaster
+pub async fn allow_instance(
     provider: DynProvider,
     paymaster: Address,
     pool_address: Address,
-) -> Result<Address, anyhow::Error> {
-    let adapter = sol::TornadoFeeAdapter::deploy(&provider, pool_address).await?;
-    sol::PrivacyPaymaster::new(paymaster, &provider)
-        .setApprovedAdapter(*adapter.address(), true)
+) -> Result<(), anyhow::Error> {
+    let paymaster = PrivacyPaymaster::new(paymaster, provider);
+    paymaster
+        .setInstance(pool_address, true)
         .send()
         .await?
-        .get_receipt()
+        .watch()
         .await?;
 
-    Ok(*adapter.address())
+    Ok(())
 }
