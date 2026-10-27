@@ -47,7 +47,7 @@ kohaku-merkle-tree = { version = "0.1.0", path = "merkle-tree" }
 kohaku-rpc-provider = { version = "0.0.1", path = "rpc-provider" }
 kohaku-tor-rpc = { version = "0.0.1", path = "tor-rpc" }
 kohaku-tornadocash-circuit = { version = "0.1.0", path = "tornadocash/circuit" }
-kohaku-tornadocash = { version = "0.1.0", path = "tornadocash/core" }
+kohaku-tornadocash = { version = "0.2.0", path = "tornadocash/core" }
 kohaku-tornadocash-keychain = { version = "0.0.1", path = "tornadocash/keychain" }
 kohaku-tornadocash-paymaster = { version = "0.0.1", path = "tornadocash/paymaster" }
 kohaku-tornadocash-relayer = { version = "0.0.1", path = "tornadocash/relayer" }
