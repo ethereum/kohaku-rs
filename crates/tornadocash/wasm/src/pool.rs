@@ -165,7 +165,7 @@ mod wasm_tests {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    use super::{CorePool, PaymasterInfo, Pool};
+    use super::{CorePool, Pool};
     use crate::{asset::Asset, hex::Hex};
 
     fn address() -> Ts<Hex> {
@@ -212,7 +212,7 @@ mod wasm_tests {
         .unwrap();
         assert_eq!(pool.inner.paymaster, Some(expected));
         let value = pool.paymaster().unwrap().unwrap().to_rust().unwrap();
-        assert_eq!(Address::try_from(value).unwrap(), expected.address);
+        assert_eq!(Address::try_from(value).unwrap(), expected);
     }
 
     #[wasm_bindgen_test]
