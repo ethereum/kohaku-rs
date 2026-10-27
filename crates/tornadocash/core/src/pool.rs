@@ -30,6 +30,9 @@ pub struct Pool {
 const SEPOLIA_PAYMASTER: Option<Address> =
     Some(address!("0x835cE2dA8AD0d1f5D5a8462a58594006514C39b0"));
 
+const MAINNET_PAYMASTER: Option<Address> =
+    Some(address!("0xB0FfCdC890E969579D348F519a9C3920C2DD04a5"));
+
 #[allow(clippy::unreadable_literal)]
 impl Pool {
     /// Complete known pool catalog, including canonical and non-canonical deployments.
@@ -76,7 +79,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(16),
         deployed_block: 26198980,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
@@ -88,7 +91,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(16),
         deployed_block: 26198980,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
@@ -100,7 +103,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(17),
         deployed_block: 26198980,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
@@ -112,7 +115,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(18),
         deployed_block: 26198980,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
@@ -124,7 +127,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(19),
         deployed_block: 26198983,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
@@ -234,7 +237,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(17),
         deployed_block: 9116966,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_ETHER_1: Pool = Pool {
@@ -244,7 +247,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(18),
         deployed_block: 9_117_609,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_ETHER_10: Pool = Pool {
@@ -254,7 +257,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(19),
         deployed_block: 9_117_720,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_ETHER_100: Pool = Pool {
@@ -264,7 +267,7 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_161_895,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_DAI_100: Pool = Pool {
@@ -274,7 +277,7 @@ impl Pool {
         asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(20),
         deployed_block: 9_117_612,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_DAI_1000: Pool = Pool {
@@ -284,7 +287,7 @@ impl Pool {
         asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(21),
         deployed_block: 9_161_917,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_DAI_10000: Pool = Pool {
@@ -294,7 +297,7 @@ impl Pool {
         asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(22),
         deployed_block: 12_066_007,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_DAI_100000: Pool = Pool {
@@ -304,7 +307,7 @@ impl Pool {
         asset: Asset::ETHEREUM_DAI,
         amount_wei: 10_u128.pow(23),
         deployed_block: 12_066_048,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_USDC_100: Pool = Pool {
@@ -314,7 +317,7 @@ impl Pool {
         asset: Asset::ETHEREUM_USDC,
         amount_wei: 10_u128.pow(8),
         deployed_block: 9_161_958,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_USDC_1000: Pool = Pool {
@@ -324,7 +327,7 @@ impl Pool {
         asset: Asset::ETHEREUM_USDC,
         amount_wei: 10_u128.pow(9),
         deployed_block: 9_161_965,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_USDT_100: Pool = Pool {
@@ -334,7 +337,7 @@ impl Pool {
         asset: Asset::ETHEREUM_USDT,
         amount_wei: 10_u128.pow(8),
         deployed_block: 9_162_005,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_USDT_1000: Pool = Pool {
@@ -344,7 +347,7 @@ impl Pool {
         asset: Asset::ETHEREUM_USDT,
         amount_wei: 10_u128.pow(9),
         deployed_block: 9_162_012,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_WBTC_01: Pool = Pool {
@@ -354,7 +357,7 @@ impl Pool {
         asset: Asset::ETHEREUM_WBTC,
         amount_wei: 10_u128.pow(7),
         deployed_block: 12_067_529,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_WBTC_1: Pool = Pool {
@@ -364,7 +367,7 @@ impl Pool {
         asset: Asset::ETHEREUM_WBTC,
         amount_wei: 10_u128.pow(8),
         deployed_block: 12_066_652,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const ETHEREUM_WBTC_10: Pool = Pool {
@@ -374,7 +377,7 @@ impl Pool {
         asset: Asset::ETHEREUM_WBTC,
         amount_wei: 10_u128.pow(9),
         deployed_block: 12_067_591,
-        paymaster: None,
+        paymaster: MAINNET_PAYMASTER,
     };
 
     pub const POLYGON_MATIC_100: Pool = Pool {
