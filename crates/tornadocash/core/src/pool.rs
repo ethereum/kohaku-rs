@@ -37,26 +37,24 @@ const MAINNET_PAYMASTER: Option<Address> =
 impl Pool {
     /// Complete known pool catalog, including canonical and non-canonical deployments.
     pub const POOLS: &[Pool] = &[
-        Pool::ETHEREUM_ETHER_001,
-        Pool::ETHEREUM_ETHER_003,
-        Pool::ETHEREUM_ETHER_03,
-        Pool::ETHEREUM_ETHER_3,
-        Pool::ETHEREUM_ETHER_30,
         Pool::SEPOLIA_ETHER_001,
         Pool::SEPOLIA_ETHER_003,
-        Pool::SEPOLIA_ETHER_03,
-        Pool::SEPOLIA_ETHER_3,
-        Pool::SEPOLIA_ETHER_30,
         Pool::SEPOLIA_ETHER_01,
+        Pool::SEPOLIA_ETHER_03,
         Pool::SEPOLIA_ETHER_1,
+        Pool::SEPOLIA_ETHER_3,
         Pool::SEPOLIA_ETHER_10,
+        Pool::SEPOLIA_ETHER_30,
         Pool::SEPOLIA_DAI_100,
+        Pool::ETHEREUM_ETHER_001,
+        Pool::ETHEREUM_ETHER_003,
         Pool::ETHEREUM_ETHER_01,
+        Pool::ETHEREUM_ETHER_03,
         Pool::ETHEREUM_ETHER_1,
+        Pool::ETHEREUM_ETHER_3,
         Pool::ETHEREUM_ETHER_10,
+        Pool::ETHEREUM_ETHER_30,
         Pool::ETHEREUM_ETHER_100,
-        Pool::POLYGON_MATIC_100,
-        Pool::POLYGON_MATIC_1000,
         Pool::ETHEREUM_DAI_100,
         Pool::ETHEREUM_DAI_1000,
         Pool::ETHEREUM_DAI_10000,
@@ -68,67 +66,9 @@ impl Pool {
         Pool::ETHEREUM_WBTC_01,
         Pool::ETHEREUM_WBTC_1,
         Pool::ETHEREUM_WBTC_10,
+        Pool::POLYGON_MATIC_100,
+        Pool::POLYGON_MATIC_1000,
     ];
-
-    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
-    /// transaction.
-    pub const ETHEREUM_ETHER_001: Pool = Pool {
-        canonical: false,
-        chain_id: 1,
-        address: address!("0x199112eb461ea7eec1d75b33343542e1d069b41c"),
-        asset: Asset::ETH,
-        amount_wei: 10_u128.pow(16),
-        deployed_block: 26198980,
-        paymaster: MAINNET_PAYMASTER,
-    };
-
-    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
-    /// transaction.
-    pub const ETHEREUM_ETHER_003: Pool = Pool {
-        canonical: false,
-        chain_id: 1,
-        address: address!("0x398971a7ae0fed4ae435f353ef00d3d4e4c18fd4"),
-        asset: Asset::ETH,
-        amount_wei: 3 * 10_u128.pow(16),
-        deployed_block: 26198980,
-        paymaster: MAINNET_PAYMASTER,
-    };
-
-    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
-    /// transaction.
-    pub const ETHEREUM_ETHER_03: Pool = Pool {
-        canonical: false,
-        chain_id: 1,
-        address: address!("0xf22487b84a618192aa68c0e1da24e9bbd892f774"),
-        asset: Asset::ETH,
-        amount_wei: 3 * 10_u128.pow(17),
-        deployed_block: 26198980,
-        paymaster: MAINNET_PAYMASTER,
-    };
-
-    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
-    /// transaction.
-    pub const ETHEREUM_ETHER_3: Pool = Pool {
-        canonical: false,
-        chain_id: 1,
-        address: address!("0x74185a3f30b873c0ce1f4257298d1cda61be2f9f"),
-        asset: Asset::ETH,
-        amount_wei: 3 * 10_u128.pow(18),
-        deployed_block: 26198980,
-        paymaster: MAINNET_PAYMASTER,
-    };
-
-    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
-    /// transaction.
-    pub const ETHEREUM_ETHER_30: Pool = Pool {
-        canonical: false,
-        chain_id: 1,
-        address: address!("0xc11197f71c7730c8b5db7c84191e07575f1db896"),
-        asset: Asset::ETH,
-        amount_wei: 3 * 10_u128.pow(19),
-        deployed_block: 26198983,
-        paymaster: MAINNET_PAYMASTER,
-    };
 
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
     /// transaction.
@@ -154,6 +94,16 @@ impl Pool {
         paymaster: SEPOLIA_PAYMASTER,
     };
 
+    pub const SEPOLIA_ETHER_01: Pool = Pool {
+        canonical: true,
+        chain_id: 11155111,
+        address: address!("0x8C4A04d872a6C1BE37964A21ba3a138525dFF50b"),
+        asset: Asset::ETH,
+        amount_wei: 10_u128.pow(17),
+        deployed_block: 5_594_400,
+        paymaster: SEPOLIA_PAYMASTER,
+    };
+
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
     /// transaction.
     pub const SEPOLIA_ETHER_03: Pool = Pool {
@@ -163,6 +113,16 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(17),
         deployed_block: 11949080,
+        paymaster: SEPOLIA_PAYMASTER,
+    };
+
+    pub const SEPOLIA_ETHER_1: Pool = Pool {
+        canonical: true,
+        chain_id: 11155111,
+        address: address!("0x8cc930096B4Df705A007c4A039BDFA1320Ed2508"),
+        asset: Asset::ETH,
+        amount_wei: 10_u128.pow(18),
+        deployed_block: 5_594_401,
         paymaster: SEPOLIA_PAYMASTER,
     };
 
@@ -178,6 +138,16 @@ impl Pool {
         paymaster: SEPOLIA_PAYMASTER,
     };
 
+    pub const SEPOLIA_ETHER_10: Pool = Pool {
+        canonical: true,
+        chain_id: 11155111,
+        address: address!("0x8D10d506D29Fc62ABb8A290B99F66dB27Fc43585"),
+        asset: Asset::ETH,
+        amount_wei: 10_u128.pow(19),
+        deployed_block: 5_594_402,
+        paymaster: SEPOLIA_PAYMASTER,
+    };
+
     /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
     /// transaction.
     pub const SEPOLIA_ETHER_30: Pool = Pool {
@@ -187,36 +157,6 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 3 * 10_u128.pow(19),
         deployed_block: 11949082,
-        paymaster: SEPOLIA_PAYMASTER,
-    };
-
-    pub const SEPOLIA_ETHER_01: Pool = Pool {
-        canonical: true,
-        chain_id: 11155111,
-        address: address!("0x8C4A04d872a6C1BE37964A21ba3a138525dFF50b"),
-        asset: Asset::ETH,
-        amount_wei: 10_u128.pow(17),
-        deployed_block: 5_594_400,
-        paymaster: SEPOLIA_PAYMASTER,
-    };
-
-    pub const SEPOLIA_ETHER_1: Pool = Pool {
-        canonical: true,
-        chain_id: 11155111,
-        address: address!("0x8cc930096B4Df705A007c4A039BDFA1320Ed2508"),
-        asset: Asset::ETH,
-        amount_wei: 10_u128.pow(18),
-        deployed_block: 5_594_401,
-        paymaster: SEPOLIA_PAYMASTER,
-    };
-
-    pub const SEPOLIA_ETHER_10: Pool = Pool {
-        canonical: true,
-        chain_id: 11155111,
-        address: address!("0x8D10d506D29Fc62ABb8A290B99F66dB27Fc43585"),
-        asset: Asset::ETH,
-        amount_wei: 10_u128.pow(19),
-        deployed_block: 5_594_402,
         paymaster: SEPOLIA_PAYMASTER,
     };
 
@@ -230,6 +170,30 @@ impl Pool {
         paymaster: SEPOLIA_PAYMASTER,
     };
 
+    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
+    /// transaction.
+    pub const ETHEREUM_ETHER_001: Pool = Pool {
+        canonical: false,
+        chain_id: 1,
+        address: address!("0x199112eb461ea7eec1d75b33343542e1d069b41c"),
+        asset: Asset::ETH,
+        amount_wei: 10_u128.pow(16),
+        deployed_block: 26198980,
+        paymaster: MAINNET_PAYMASTER,
+    };
+
+    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
+    /// transaction.
+    pub const ETHEREUM_ETHER_003: Pool = Pool {
+        canonical: false,
+        chain_id: 1,
+        address: address!("0x398971a7ae0fed4ae435f353ef00d3d4e4c18fd4"),
+        asset: Asset::ETH,
+        amount_wei: 3 * 10_u128.pow(16),
+        deployed_block: 26198980,
+        paymaster: MAINNET_PAYMASTER,
+    };
+
     pub const ETHEREUM_ETHER_01: Pool = Pool {
         canonical: true,
         chain_id: 1,
@@ -237,6 +201,18 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(17),
         deployed_block: 9116966,
+        paymaster: MAINNET_PAYMASTER,
+    };
+
+    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
+    /// transaction.
+    pub const ETHEREUM_ETHER_03: Pool = Pool {
+        canonical: false,
+        chain_id: 1,
+        address: address!("0xf22487b84a618192aa68c0e1da24e9bbd892f774"),
+        asset: Asset::ETH,
+        amount_wei: 3 * 10_u128.pow(17),
+        deployed_block: 26198980,
         paymaster: MAINNET_PAYMASTER,
     };
 
@@ -250,6 +226,18 @@ impl Pool {
         paymaster: MAINNET_PAYMASTER,
     };
 
+    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
+    /// transaction.
+    pub const ETHEREUM_ETHER_3: Pool = Pool {
+        canonical: false,
+        chain_id: 1,
+        address: address!("0x74185a3f30b873c0ce1f4257298d1cda61be2f9f"),
+        asset: Asset::ETH,
+        amount_wei: 3 * 10_u128.pow(18),
+        deployed_block: 26198980,
+        paymaster: MAINNET_PAYMASTER,
+    };
+
     pub const ETHEREUM_ETHER_10: Pool = Pool {
         canonical: true,
         chain_id: 1,
@@ -257,6 +245,18 @@ impl Pool {
         asset: Asset::ETH,
         amount_wei: 10_u128.pow(19),
         deployed_block: 9_117_720,
+        paymaster: MAINNET_PAYMASTER,
+    };
+
+    /// Non-canonical extended pool. Deployment block verified via Blockscout's creation
+    /// transaction.
+    pub const ETHEREUM_ETHER_30: Pool = Pool {
+        canonical: false,
+        chain_id: 1,
+        address: address!("0xc11197f71c7730c8b5db7c84191e07575f1db896"),
+        asset: Asset::ETH,
+        amount_wei: 3 * 10_u128.pow(19),
+        deployed_block: 26198983,
         paymaster: MAINNET_PAYMASTER,
     };
 
