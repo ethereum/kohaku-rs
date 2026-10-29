@@ -15,8 +15,6 @@ use crate::{
     },
     merkle_tree::{MerkleTreeError, MerkleTreeVerifier, UtxoLeafHash, UtxoMerkleTree},
     note::utxo::{NoteError, UtxoNote},
-    railgun_database::{DatabaseError, RailgunDB, write_utxo_snapshot},
-    state::RailgunState,
 };
 
 /// Utxo indexer that maintains the set of UTXO merkle trees and tracks accounts
@@ -26,15 +24,17 @@ pub struct UtxoIndexer {
     pub utxo_trees: BTreeMap<u32, UtxoMerkleTree>,
     accounts: Vec<IndexedAccount>,
 
-    db: RailgunState,
+    inactive_accounts:
+        HashMap<RailgunAddress, crate::indexer::indexed_account::IndexedAccountState>,
     utxo_syncer: Arc<dyn UtxoSyncer>,
     utxo_verifier: Arc<dyn MerkleTreeVerifier>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
-pub(crate) struct UtxoIndexerState {
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct UtxoIndexerState {
     pub synced_block: u64,
-    pub trees: Vec<u32>,
+    pub trees: BTreeMap<u32, crate::merkle_tree::MerkleTreeState>,
+    pub accounts: HashMap<RailgunAddress, crate::indexer::indexed_account::IndexedAccountState>,
 }
 
 #[derive(Debug, Error)]
@@ -45,8 +45,6 @@ pub enum UtxoIndexerError {
     VerificationError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("Note error: {0}")]
     NoteError(#[from] NoteError),
-    #[error("Database error: {0}")]
-    DatabaseError(#[from] DatabaseError),
     #[error("Merkle tree error: {0}")]
     MerkleTree(#[from] MerkleTreeError),
     #[error("Timed out waiting for commitments")]
@@ -54,30 +52,26 @@ pub enum UtxoIndexerError {
 }
 
 impl UtxoIndexer {
-    pub async fn new(
-        db: RailgunState,
+    pub fn new(
+        state: UtxoIndexerState,
         utxo_syncer: Arc<dyn UtxoSyncer>,
         utxo_verifier: Arc<dyn MerkleTreeVerifier>,
     ) -> Result<Self, UtxoIndexerError> {
-        let state = db.get_utxo_indexer().await?;
-
         let mut utxo_trees = BTreeMap::new();
-        for number in state.trees.clone() {
-            let tree_state = db.get_utxo_tree(number).await?;
-            if let Some(tree_state) = tree_state {
-                utxo_trees.insert(number, UtxoMerkleTree::from_state(tree_state)?);
-            }
+        for (number, tree_state) in state.trees {
+            utxo_trees.insert(number, UtxoMerkleTree::from_state(tree_state)?);
         }
 
         info!(
             "Loaded UTXO indexer state: synced_block={}, trees={:?}",
-            state.synced_block, state.trees
+            state.synced_block,
+            utxo_trees.keys().collect::<Vec<_>>()
         );
         Ok(UtxoIndexer {
             synced_block: state.synced_block,
             utxo_trees,
             accounts: vec![],
-            db,
+            inactive_accounts: state.accounts,
             utxo_syncer,
             utxo_verifier,
         })
@@ -94,12 +88,9 @@ impl UtxoIndexer {
 
     /// Registers a signer with the indexer. The indexer will track UTXOs for the associated
     /// address.
-    pub async fn register(
-        &mut self,
-        signer: Arc<dyn RailgunSigner>,
-    ) -> Result<(), UtxoIndexerError> {
+    pub fn register(&mut self, signer: Arc<dyn RailgunSigner>) -> Result<(), UtxoIndexerError> {
         let addr = signer.address();
-        let state = self.db.get_account(&addr).await?;
+        let state = self.inactive_accounts.remove(&addr).unwrap_or_default();
 
         let account = IndexedAccount::from_state(signer, state);
         self.accounts.push(account);
@@ -200,9 +191,6 @@ impl UtxoIndexer {
             account.set_synced_block(to_block);
         }
 
-        // Save
-        candidate.save().await?;
-
         *self = candidate;
 
         Ok(())
@@ -222,7 +210,7 @@ impl UtxoIndexer {
                 .iter()
                 .map(|account| IndexedAccount::from_state(account.signer(), account.state()))
                 .collect(),
-            db: self.db.clone(),
+            inactive_accounts: self.inactive_accounts.clone(),
             utxo_syncer: self.utxo_syncer.clone(),
             utxo_verifier: self.utxo_verifier.clone(),
         }
@@ -324,181 +312,27 @@ impl UtxoIndexer {
         Ok(())
     }
 
-    /// Save trees, account notes and all cursors in one backend-atomic batch.
-    async fn save(&self) -> Result<(), DatabaseError> {
-        let trees: Vec<_> = self
+    /// A coherent checkpoint of trees, account notes and cursors.
+    pub fn state(&self) -> UtxoIndexerState {
+        let trees = self
             .utxo_trees
             .iter()
             .map(|(number, tree)| (*number, tree.state()))
             .collect();
-        let accounts: Vec<_> = self
-            .accounts
-            .iter()
-            .map(|account| (account.address(), account.state()))
-            .collect();
-        let state = UtxoIndexerState {
+        let mut accounts = self.inactive_accounts.clone();
+        accounts.extend(
+            self.accounts
+                .iter()
+                .map(|account| (account.address(), account.state())),
+        );
+        UtxoIndexerState {
             synced_block: self.synced_block,
-            trees: self.utxo_trees.keys().copied().collect(),
-        };
-        write_utxo_snapshot(&self.db, &state, &trees, &accounts).await
+            trees,
+            accounts,
+        }
     }
 }
 
 #[cfg(all(test, native))]
-mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use ruint::aliases::U256;
-
-    use super::*;
-    use crate::{
-        indexer::syncer::{LegacyCommitment, SyncEvent, SyncerError, UtxoSyncer},
-        merkle_tree::MerkleRoot,
-        state::{
-            RailgunState,
-            test_support::{
-                backend::{StateBackend, StateWriteError},
-                memory::MemoryState,
-            },
-        },
-    };
-
-    /// One commitment at block 5 of a 10-block chain.
-    struct OneLeaf;
-
-    #[async_trait::async_trait]
-    impl UtxoSyncer for OneLeaf {
-        async fn latest_block(&self) -> Result<u64, SyncerError> {
-            Ok(10)
-        }
-
-        async fn sync(&self, from: u64, to: u64) -> Result<Vec<SyncEvent>, SyncerError> {
-            let leaf = LegacyCommitment {
-                hash: U256::from(1),
-                tree_number: 0,
-                leaf_index: 0,
-            };
-            Ok(if (from..=to).contains(&5) {
-                vec![SyncEvent::Legacy(leaf, 5)]
-            } else {
-                vec![]
-            })
-        }
-    }
-
-    /// Answers every root with the same verdict.
-    struct Verifier(bool);
-
-    #[async_trait::async_trait]
-    impl MerkleTreeVerifier for Verifier {
-        async fn verify_root(
-            &self,
-            _tree_number: u32,
-            _tree_index: u32,
-            _root: MerkleRoot,
-        ) -> Result<bool, Box<dyn std::error::Error + Send + Sync + 'static>> {
-            Ok(self.0)
-        }
-    }
-
-    /// In-memory backend that can be told to fail every write of one key: a process stopping
-    /// in the middle of a save.
-    #[derive(Clone)]
-    struct Faulty {
-        inner: Arc<MemoryState>,
-        fail_on: Arc<Mutex<Option<Vec<u8>>>>,
-    }
-
-    impl Faulty {
-        fn new() -> Self {
-            Self {
-                inner: Arc::new(MemoryState::new()),
-                fail_on: Arc::new(Mutex::new(None)),
-            }
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl StateBackend for Faulty {
-        async fn get_batch(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, StateWriteError> {
-            self.inner.get_batch(keys).await
-        }
-
-        async fn put_batch(&self, items: &[(&[u8], &[u8])]) -> Result<(), StateWriteError> {
-            if let Some(key) = self.fail_on.lock().unwrap().as_deref() {
-                if items.iter().any(|(k, _)| *k == key) {
-                    return Err(StateWriteError::from(Box::<
-                        dyn std::error::Error + Send + Sync,
-                    >::from(
-                        "simulated interruption"
-                    )));
-                }
-            }
-            self.inner.put_batch(items).await
-        }
-    }
-
-    #[tokio::test]
-    async fn a_root_the_chain_never_had_stops_the_sync() {
-        let mut indexer = UtxoIndexer::new(
-            RailgunState::new(MemoryState::new()),
-            Arc::new(OneLeaf),
-            Arc::new(Verifier(false)),
-        )
-        .await
-        .unwrap();
-
-        let err = indexer.sync_to(10).await.unwrap_err();
-        assert!(
-            err.to_string().contains("root the chain never had"),
-            "got: {err}"
-        );
-        assert_eq!(
-            indexer.synced_block(),
-            0,
-            "a rejected tree must not advance the sync"
-        );
-    }
-
-    #[tokio::test]
-    async fn an_interrupted_save_never_claims_unsaved_leaves() {
-        let backend = Faulty::new();
-        *backend.fail_on.lock().unwrap() = Some(b"utxo_tree:0".to_vec());
-
-        let mut indexer = UtxoIndexer::new(
-            RailgunState::new(backend.clone()),
-            Arc::new(OneLeaf),
-            Arc::new(Verifier(true)),
-        )
-        .await
-        .unwrap();
-        assert!(
-            indexer.sync_to(10).await.is_err(),
-            "the tree write was made to fail"
-        );
-
-        // Next run: the saved synced block must not be ahead of the saved tree.
-        *backend.fail_on.lock().unwrap() = None;
-        let mut reloaded = UtxoIndexer::new(
-            RailgunState::new(backend.clone()),
-            Arc::new(OneLeaf),
-            Arc::new(Verifier(true)),
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            reloaded.synced_block(),
-            0,
-            "blocks claimed whose leaves were never saved"
-        );
-
-        // And it recovers: the leaf is fetched again.
-        reloaded.sync_to(10).await.unwrap();
-        assert_eq!(reloaded.synced_block(), 10);
-        assert_eq!(reloaded.utxo_trees.get(&0).map(|t| t.leaves_len()), Some(1));
-    }
-}
-
-#[cfg(all(test, native))]
-#[path = "utxo_snapshot_tests.rs"]
-mod snapshot_tests;
+#[path = "utxo_state_tests.rs"]
+mod state_tests;
