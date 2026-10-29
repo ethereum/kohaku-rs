@@ -2,23 +2,25 @@ use std::{sync::Arc, time::Duration};
 
 use alloy::{
     consensus::TxReceipt,
-    node_bindings::Anvil,
+    node_bindings::{Anvil, AnvilInstance},
     primitives::{Address, U256, b256},
-    providers::{Provider, ProviderBuilder},
+    providers::{DynProvider, Provider, ProviderBuilder},
     sol,
 };
 use kohaku_fork_kit::{
-    alto::AltoBuilder,
+    alto::{AltoBuilder, AltoInstance},
     entry_point::deploy_entry_point,
     paymaster::{deploy_paymaster, deploy_railgun_fee_adapter},
     railgun::deploy_railgun,
-    simple_account::deploy_simple_account,
+    simple_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, deploy_simple_account},
 };
 use kohaku_railgun::{
     account::signer::{PrivateKeySigner, RailgunSigner},
     builder::RailgunBuilder,
     caip::AssetId,
+    chain_config::ChainConfig,
     indexer::syncer::RpcSyncer,
+    provider::RailgunProvider,
 };
 use kohaku_userop_kit::{
     bundler::Bundler,
@@ -56,89 +58,22 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
 }
 
 async fn broadcast_locally() -> Result<(), anyhow::Error> {
-    let anvil = Anvil::new().try_spawn()?;
-    let provider = ProviderBuilder::new()
-        .wallet(anvil.wallet().expect("anvil supplies a disposable wallet"))
-        .connect_http(anvil.endpoint_url())
-        .erased();
-    let entrypoint = deploy_entry_point(&provider).await?;
-    deploy_simple_account(&provider).await?;
-    let mut chain = deploy_railgun(provider.clone()).await?;
-    let paymaster = deploy_paymaster(
-        provider.clone(),
-        entrypoint,
-        Address::ZERO,
-        chain.wrapped_base_token,
-    )
-    .await?;
-    let adapter = deploy_railgun_fee_adapter(
-        provider.clone(),
-        paymaster,
-        chain.railgun_smart_wallet,
-        PAYMASTER_MASTER_PUBLIC_KEY,
-    )
-    .await?;
-    chain.privacy_paymaster = Some(paymaster);
-    chain.railgun_fee_adapter = Some(adapter);
-
-    let executor = alloy::signers::local::PrivateKeySigner::random();
-    let utility = alloy::signers::local::PrivateKeySigner::random();
-    let alto = AltoBuilder::new(
-        anvil.endpoint(),
-        entrypoint,
-        format!("{:#x}", executor.to_bytes()),
-        format!("{:#x}", utility.to_bytes()),
-    )
-    .prefund(&provider)
-    .await?
-    .spawn()
-    .await?;
-
-    let syncer = Arc::new(
-        RpcSyncer::new(chain.clone(), provider.clone())
-            .with_batch_size(1000)
-            .with_batch_delay(Duration::ZERO),
-    );
-    let mut railgun = RailgunBuilder::new(chain.clone(), provider.clone())
-        .with_utxo_syncer(syncer)
-        .build()
-        .await?;
-    let railgun_signer = PrivateKeySigner::new_evm(rand::random(), rand::random(), chain.id);
-    railgun.register(railgun_signer.clone()).await?;
-    for tx in railgun
-        .shield()
-        .shield_native(railgun_signer.address(), SHIELD_AMOUNT)
-        .build(&mut rand::rng())?
-    {
-        assert!(
-            provider
-                .send_transaction(tx)
-                .await?
-                .get_receipt()
-                .await?
-                .status()
-        );
-    }
-    railgun.sync().await?;
+    let (anvil, provider, chain) = local_chain().await?;
+    let alto = local_bundler(&anvil, &provider).await?;
+    let (mut railgun, railgun_signer, initial_private) =
+        shielded_account(&chain, &provider).await?;
     let weth = AssetId::Erc20(chain.wrapped_base_token);
-    let initial_private = railgun
-        .balance(railgun_signer.address())
-        .await
-        .into_iter()
-        .find(|entry| entry.asset == weth)
-        .expect("shielded WETH")
-        .amount;
-    assert_eq!(initial_private, SHIELD_AMOUNT - SHIELD_AMOUNT * 25 / 10_000);
+    let paymaster = chain.privacy_paymaster.expect("deployed paymaster");
 
     // The recipient starts without gas ETH: the private fee note pays the paymaster.
     let owner = alloy::signers::local::PrivateKeySigner::random();
     let smart_account =
         SimpleSmartAccount::new(owner.address(), chain.id, Arc::new(provider.clone()));
     let weth_contract = WETH::new(chain.wrapped_base_token, provider.clone());
-    let pre_eth = provider.get_balance(owner.address()).await?;
-    let pre_weth = weth_contract.balanceOf(owner.address()).call().await?;
-    assert_eq!(pre_eth, U256::ZERO);
-    assert_eq!(pre_weth, U256::ZERO);
+    let native_before = provider.get_balance(owner.address()).await?;
+    let tokens_before = weth_contract.balanceOf(owner.address()).call().await?;
+    assert_eq!(native_before, U256::ZERO);
+    assert_eq!(tokens_before, U256::ZERO);
     let spends = railgun
         .unshield_amount(
             railgun_signer.clone(),
@@ -214,16 +149,110 @@ async fn broadcast_locally() -> Result<(), anyhow::Error> {
         UNSHIELD_AMOUNT - UNSHIELD_AMOUNT * u128::from(chain.unshield_fee_bps) / 10_000;
     assert_eq!(
         weth_contract.balanceOf(owner.address()).call().await?,
-        pre_weth + U256::from(net_unshield - UNWRAP_AMOUNT)
+        tokens_before + U256::from(net_unshield - UNWRAP_AMOUNT)
     );
     assert_eq!(
         provider.get_balance(owner.address()).await?,
-        pre_eth + U256::from(UNWRAP_AMOUNT)
+        native_before + U256::from(UNWRAP_AMOUNT)
     );
     let code = provider.get_code_at(owner.address()).await?;
-    assert!(
-        code.starts_with(&[0xef, 0x01, 0x00]),
-        "7702 delegation was not installed"
+    assert_eq!(code.len(), 23, "7702 delegation was not installed");
+    assert_eq!(&code[..3], &[0xef, 0x01, 0x00]);
+    assert_eq!(
+        &code[3..],
+        SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08.as_slice()
     );
     Ok(())
+}
+
+async fn local_chain() -> Result<(AnvilInstance, DynProvider, ChainConfig), anyhow::Error> {
+    let anvil = Anvil::new().try_spawn()?;
+    let provider = ProviderBuilder::new()
+        .wallet(anvil.wallet().expect("anvil supplies a disposable wallet"))
+        .connect_http(anvil.endpoint_url())
+        .erased();
+    let entrypoint = deploy_entry_point(&provider).await?;
+    deploy_simple_account(&provider).await?;
+    let mut chain = deploy_railgun(provider.clone()).await?;
+    let paymaster = deploy_paymaster(
+        provider.clone(),
+        entrypoint,
+        Address::ZERO,
+        chain.wrapped_base_token,
+    )
+    .await?;
+    let adapter = deploy_railgun_fee_adapter(
+        provider.clone(),
+        paymaster,
+        chain.railgun_smart_wallet,
+        PAYMASTER_MASTER_PUBLIC_KEY,
+    )
+    .await?;
+    chain.privacy_paymaster = Some(paymaster);
+    chain.railgun_fee_adapter = Some(adapter);
+
+    Ok((anvil, provider, chain))
+}
+
+async fn local_bundler(
+    anvil: &AnvilInstance,
+    provider: &DynProvider,
+) -> Result<AltoInstance, anyhow::Error> {
+    let executor = alloy::signers::local::PrivateKeySigner::random();
+    let utility = alloy::signers::local::PrivateKeySigner::random();
+    let alto = AltoBuilder::new(
+        anvil.endpoint(),
+        kohaku_userop_kit::entry_point::ENTRY_POINT_08,
+        format!("{:#x}", executor.to_bytes()),
+        format!("{:#x}", utility.to_bytes()),
+    )
+    .prefund(provider)
+    .await?
+    .spawn()
+    .await?;
+
+    Ok(alto)
+}
+
+async fn shielded_account(
+    chain: &ChainConfig,
+    provider: &DynProvider,
+) -> Result<(RailgunProvider, Arc<dyn RailgunSigner>, u128), anyhow::Error> {
+    let syncer = Arc::new(
+        RpcSyncer::new(chain.clone(), provider.clone())
+            .with_batch_size(1000)
+            .with_batch_delay(Duration::ZERO),
+    );
+    let mut railgun = RailgunBuilder::new(chain.clone(), provider.clone())
+        .with_utxo_syncer(syncer)
+        .build()
+        .await?;
+    let railgun_signer = PrivateKeySigner::new_evm(rand::random(), rand::random(), chain.id);
+    railgun.register(railgun_signer.clone()).await?;
+    for tx in railgun
+        .shield()
+        .shield_native(railgun_signer.address(), SHIELD_AMOUNT)
+        .build(&mut rand::rng())?
+    {
+        assert!(
+            provider
+                .send_transaction(tx)
+                .await?
+                .get_receipt()
+                .await?
+                .status()
+        );
+    }
+    railgun.sync().await?;
+    let weth = AssetId::Erc20(chain.wrapped_base_token);
+    let initial_private = railgun
+        .balance(railgun_signer.address())
+        .await
+        .into_iter()
+        .find(|entry| entry.asset == weth)
+        .expect("shielded WETH")
+        .amount;
+    assert_eq!(initial_private, SHIELD_AMOUNT - SHIELD_AMOUNT * 25 / 10_000);
+
+    Ok((railgun, railgun_signer, initial_private))
 }

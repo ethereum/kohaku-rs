@@ -49,10 +49,15 @@ jobs:
         with:
           workspaces: crates
       - name: Run the local ERC-4337 broadcast test
-        run: >-
-          env -u RPC_URL_SEPOLIA -u SEPOLIA_RPC_URL
-          -u DEV_KEY -u DEV_SPENDING_KEY -u DEV_VIEWING_KEY
-          nix develop .#ci --command bash -c
-          'cd crates && cargo test --locked --release -p kohaku-railgun
-          --test integration broadcast_utxo::test_broadcast_utxo
-          -- --ignored --exact --nocapture'
+        run: |
+          env -u RPC_URL_SEPOLIA -u SEPOLIA_RPC_URL \
+            -u DEV_KEY -u DEV_SPENDING_KEY -u DEV_VIEWING_KEY \
+            nix develop .#ci --command bash -e -o pipefail -c '
+              cd crates
+              cargo test --locked --release -p kohaku-railgun \
+                --test integration broadcast_utxo::test_broadcast_utxo \
+                -- --ignored --exact --nocapture \
+                | tee "$RUNNER_TEMP/railgun-local-broadcast.log"
+              grep -Eq "^test result: ok[.] 1 passed; 0 failed; 0 ignored;" \
+                "$RUNNER_TEMP/railgun-local-broadcast.log"
+            '
