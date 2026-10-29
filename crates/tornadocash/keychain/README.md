@@ -15,53 +15,53 @@ Nonces are used to derive tornadocash note secrets from a keychain. Nonces shoul
 ### Deposit
 
 ```rust,no_run
-use alloy::signers::Signer;
-use kohaku_tornadocash::{Deposit, Pool};
-use kohaku_tornadocash_keychain::Keychain;
-
-async fn example<S: Signer + Send + Sync>(
-    keychain: &Keychain<S>,
-    pool: &Pool,
-    nonce: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
+# use alloy::signers::Signer;
+# use kohaku_tornadocash::{Deposit, Pool};
+# use kohaku_tornadocash_keychain::Keychain;
+# 
+# async fn example<S: Signer + Send + Sync>(
+#     keychain: &Keychain<S>,
+#     pool: &Pool,
+#     nonce: u64,
+# ) -> Result<(), Box<dyn std::error::Error>> {
     let note = keychain.note(nonce, pool).await?;
     let deposit = Deposit::new(pool, note.note);
 
-    Ok(())
-}
+#     Ok(())
+# }
 ```
 
 ### Withdraw
 
 ```rust,no_run
-use alloy::signers::Signer;
-use kohaku_tornadocash::{Pool, Withdrawal};
-use kohaku_tornadocash_keychain::Keychain;
-
-async fn example<S: Signer + Send + Sync>(
-    keychain: &Keychain<S>,
-    pool: &Pool,
-    nonce: u64,
-    recipient: alloy::primitives::Address,
-) -> Result<(), Box<dyn std::error::Error>> {
+# use alloy::signers::Signer;
+# use kohaku_tornadocash::{Pool, Withdrawal};
+# use kohaku_tornadocash_keychain::Keychain;
+# 
+# async fn example<S: Signer + Send + Sync>(
+#     keychain: &Keychain<S>,
+#     pool: &Pool,
+#     nonce: u64,
+#     recipient: alloy::primitives::Address,
+# ) -> Result<(), Box<dyn std::error::Error>> {
     let note = keychain.note(nonce, pool).await?;
     let withdrawal = Withdrawal::new(pool, note.note, recipient);
 
-    Ok(())
-}
+#     Ok(())
+# }
 ```
 
 ### Note Recovery
 
 ```rust,no_run
-use alloy::signers::Signer;
-use kohaku_tornadocash::event::Snapshot;
-use kohaku_tornadocash_keychain::{Keychain, next_nonce, recover};
-
-async fn example<S: Signer + Send + Sync>(
-    keychain: &Keychain<S>,
-    batches: &[Snapshot],
-) -> Result<(), Box<dyn std::error::Error>> {
+# use alloy::signers::Signer;
+# use kohaku_tornadocash::event::Snapshot;
+# use kohaku_tornadocash_keychain::{Keychain, next_nonce, recover};
+# 
+# async fn example<S: Signer + Send + Sync>(
+#     keychain: &Keychain<S>,
+#     batches: &[Snapshot],
+# ) -> Result<(), Box<dyn std::error::Error>> {
     let notes = recover(keychain, batches, None).await?;
     for note in &notes {
         println!("{} ({}): leaf {}", note.nonce, note.pool, note.deposit.leaf_index);
@@ -70,6 +70,6 @@ async fn example<S: Signer + Send + Sync>(
     let next_nonce = next_nonce(keychain, batches, None).await?;
     // Or calculate manually:
     // let next_nonce = notes.last().map(|note| note.nonce + 1).unwrap_or(0);
-    Ok(())
-}
+#     Ok(())
+# }
 ```

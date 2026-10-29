@@ -1,4 +1,4 @@
-//! Traits and types for syncing Tornadocash events.
+#![doc = include_str!("../README.md")]
 
 use std::{
     ops::{Bound, Range, RangeBounds},

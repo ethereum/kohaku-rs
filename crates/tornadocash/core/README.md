@@ -67,3 +67,22 @@ provider.send_transaction(withdrawal.call().into()).await?.watch().await?;
 # Ok(())
 # }
 ```
+
+## Overview
+
+Kohaku-tornadocash is composed of the following crates:
+- [`core`] - Core library for Tornado Cash
+- [`circuit`] - Circuit artifacts
+- [`syncer`] - Event syncing helpers
+- [`relayer`] - Relayer support
+- [`paymaster`] - Paymaster support
+- [`keychain`] - Deterministic note derivation and recovery
+- [`wasm`] - Typescript WASM bindings for Tornado Cash 
+
+[`core`]: https://docs.rs/kohaku-tornadocash/latest/
+[`circuit`]: https://docs.rs/kohaku-tornadocash-circuit/latest/
+[`syncer`]: https://docs.rs/kohaku-tornadocash-syncer/latest/
+[`relayer`]: https://docs.rs/kohaku-tornadocash-relayer/latest/
+[`paymaster`]: https://docs.rs/kohaku-tornadocash-paymaster/latest/
+[`keychain`]: https://docs.rs/kohaku-tornadocash-keychain/latest/
+[`wasm`]: https://docs.rs/kohaku-tornadocash-wasm/latest/
