@@ -25,6 +25,7 @@ use kohaku_railgun::{
 use kohaku_userop_kit::{
     bundler::Bundler,
     smart_account::simple_smart_account::{self, SimpleSmartAccount},
+    user_operation::{UserOperationHash, UserOperationReceipt},
 };
 use tracing_subscriber::EnvFilter;
 
@@ -125,12 +126,7 @@ async fn broadcast_locally() -> Result<(), anyhow::Error> {
     let signed = signable.sign(&owner).await?;
     let hash = alto.send_user_operation(&signed).await?;
     let receipt = alto.wait_for_receipt(hash).await?;
-    assert!(receipt.success, "broadcast failed: {receipt:?}");
-    assert!(receipt.receipt.inner.status());
-    assert_eq!(receipt.user_op_hash, hash.0);
-    assert_eq!(receipt.sender, owner.address());
-    assert!(receipt.actual_gas_cost > U256::ZERO);
-    assert!(receipt.actual_gas_cost <= U256::from(report.fee));
+    assert_broadcast_receipt(&receipt, hash, owner.address(), report.fee);
 
     // A mined receipt is the synchronization boundary; no fixed sleeps are needed.
     railgun.sync().await?;
@@ -255,4 +251,18 @@ async fn shielded_account(
     assert_eq!(initial_private, SHIELD_AMOUNT - SHIELD_AMOUNT * 25 / 10_000);
 
     Ok((railgun, railgun_signer, initial_private))
+}
+
+fn assert_broadcast_receipt(
+    receipt: &UserOperationReceipt,
+    hash: UserOperationHash,
+    sender: Address,
+    fee: u128,
+) {
+    assert!(receipt.success, "broadcast failed: {receipt:?}");
+    assert!(receipt.receipt.inner.status());
+    assert_eq!(receipt.user_op_hash, hash.0);
+    assert_eq!(receipt.sender, sender);
+    assert!(receipt.actual_gas_cost > U256::ZERO);
+    assert!(receipt.actual_gas_cost <= U256::from(fee));
 }
