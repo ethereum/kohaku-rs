@@ -6,6 +6,7 @@ use alloy::{
     primitives::{Address, U256, b256},
     providers::{DynProvider, Provider, ProviderBuilder},
     sol,
+    sol_types::{SolType, sol_data},
 };
 use kohaku_fork_kit::{
     alto::{AltoBuilder, AltoInstance},
@@ -24,6 +25,7 @@ use kohaku_railgun::{
 };
 use kohaku_userop_kit::{
     bundler::Bundler,
+    signable_user_operation::SignableUserOperation,
     smart_account::simple_smart_account::{self, SimpleSmartAccount},
     user_operation::{UserOperationHash, UserOperationReceipt},
 };
@@ -34,6 +36,22 @@ sol! {
     contract WETH {
         function balanceOf(address account) external view returns (uint256);
         function withdraw(uint256 amount) external;
+    }
+}
+
+mod verifier {
+    use alloy::sol;
+
+    sol!(
+        #[sol(rpc)]
+        RailgunSmartWallet,
+        "../fork-kit/fixtures/railgun/smart_wallet.json"
+    );
+    sol! {
+        struct PaymasterData {
+            address adapter;
+            bytes adapterData;
+        }
     }
 }
 
@@ -127,6 +145,7 @@ async fn broadcast_locally() -> Result<(), anyhow::Error> {
     let hash = alto.send_user_operation(&signed).await?;
     let receipt = alto.wait_for_receipt(hash).await?;
     assert_broadcast_receipt(&receipt, hash, owner.address(), report.fee);
+    assert_real_verifier(&provider, &chain, &signable).await?;
 
     // A mined receipt is the synchronization boundary; no fixed sleeps are needed.
     railgun.sync().await?;
@@ -265,4 +284,63 @@ fn assert_broadcast_receipt(
     assert_eq!(receipt.sender, sender);
     assert!(receipt.actual_gas_cost > U256::ZERO);
     assert!(receipt.actual_gas_cost <= U256::from(fee));
+}
+
+async fn assert_real_verifier(
+    provider: &DynProvider,
+    chain: &ChainConfig,
+    signable: &SignableUserOperation,
+) -> Result<(), anyhow::Error> {
+    use verifier::{PaymasterData, RailgunSmartWallet};
+
+    let data = <PaymasterData as SolType>::abi_decode(
+        signable
+            .user_op
+            .paymaster_data
+            .as_ref()
+            .expect("paymaster data"),
+    )?;
+    assert_eq!(Some(data.adapter), chain.railgun_fee_adapter);
+    let (_, _, _, transactions) = <(
+        sol_data::FixedBytes<16>,
+        sol_data::Address,
+        sol_data::Uint<120>,
+        sol_data::Array<RailgunSmartWallet::Transaction>,
+    ) as SolType>::abi_decode(&data.adapterData)?;
+    assert_eq!(transactions.len(), 1, "one genuine proof was submitted");
+    let wallet = RailgunSmartWallet::new(chain.railgun_smart_wallet, provider.clone());
+    for transaction in transactions {
+        // Explicitly exclude the deployed bytecode's 0xdead verification-bypass origin.
+        assert!(
+            wallet
+                .verify(transaction.clone())
+                .from(Address::ZERO)
+                .call()
+                .await?
+                ._0
+        );
+
+        let mut bad_proof = transaction.clone();
+        std::mem::swap(&mut bad_proof.proof.a, &mut bad_proof.proof.c);
+        assert!(
+            !wallet
+                .verify(bad_proof)
+                .from(Address::ZERO)
+                .call()
+                .await?
+                ._0
+        );
+
+        let mut bad_input = transaction;
+        bad_input.boundParams.minGasPrice += alloy::primitives::aliases::U72::from(1_u8);
+        assert!(
+            !wallet
+                .verify(bad_input)
+                .from(Address::ZERO)
+                .call()
+                .await?
+                ._0
+        );
+    }
+    Ok(())
 }

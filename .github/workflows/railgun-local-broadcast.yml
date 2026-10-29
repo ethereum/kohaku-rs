@@ -4,26 +4,14 @@ on:
   pull_request:
     branches: [master, feat/kohaku-railgun]
     paths:
-      - 'crates/railgun/**'
-      - 'crates/fork-kit/**'
-      - 'crates/userop-kit/**'
-      - 'crates/crypto/**'
-      - 'crates/merkle-tree/**'
-      - 'crates/poseidon-rust/**'
-      - 'crates/Cargo.*'
+      - 'crates/**'
       - 'flake.*'
       - 'nix/alto/**'
       - '.github/workflows/railgun-local-broadcast.yml'
   push:
     branches: [master]
     paths:
-      - 'crates/railgun/**'
-      - 'crates/fork-kit/**'
-      - 'crates/userop-kit/**'
-      - 'crates/crypto/**'
-      - 'crates/merkle-tree/**'
-      - 'crates/poseidon-rust/**'
-      - 'crates/Cargo.*'
+      - 'crates/**'
       - 'flake.*'
       - 'nix/alto/**'
       - '.github/workflows/railgun-local-broadcast.yml'
@@ -38,7 +26,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       NO_PROXY: localhost,127.0.0.1
-      RUST_LOG: kohaku_railgun=info,kohaku_fork_kit=info
+      RUST_LOG: kohaku_railgun=warn,kohaku_fork_kit=info
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31

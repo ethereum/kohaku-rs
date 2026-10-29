@@ -110,5 +110,8 @@ release-mode proving. `railgun-local-broadcast.yml` runs this exact test on
 relevant PRs to both `master` and the Railgun feature branch. It checks the
 UserOperation and transaction receipts, installed 7702 delegation, private
 change plus fee conservation, and exact WETH/native recipient deltas from the
-unshield and unwrap call. Successful receipts provide the scan boundary rather
-than fixed sleeps. All other live-service tests retain their existing gates.
+unshield and unwrap call. A direct call to the deployed wallet verifies the
+submitted proof and rejects a tampered proof and a changed public input, from
+an origin outside the bytecode's verification bypass. Successful receipts provide
+the scan boundary rather than fixed sleeps. All other live-service tests retain
+their existing gates.
