@@ -1,0 +1,58 @@
+name: Railgun local broadcast
+
+on:
+  pull_request:
+    branches: [master, feat/kohaku-railgun]
+    paths:
+      - 'crates/railgun/**'
+      - 'crates/fork-kit/**'
+      - 'crates/userop-kit/**'
+      - 'crates/crypto/**'
+      - 'crates/merkle-tree/**'
+      - 'crates/poseidon-rust/**'
+      - 'crates/Cargo.*'
+      - 'flake.*'
+      - 'nix/alto/**'
+      - '.github/workflows/railgun-local-broadcast.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'crates/railgun/**'
+      - 'crates/fork-kit/**'
+      - 'crates/userop-kit/**'
+      - 'crates/crypto/**'
+      - 'crates/merkle-tree/**'
+      - 'crates/poseidon-rust/**'
+      - 'crates/Cargo.*'
+      - 'flake.*'
+      - 'nix/alto/**'
+      - '.github/workflows/railgun-local-broadcast.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  broadcast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      NO_PROXY: localhost,127.0.0.1
+      RUST_LOG: kohaku_railgun=info,kohaku_fork_kit=info
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+      - name: Run the local ERC-4337 broadcast test
+        run: >-
+          env -u RPC_URL_SEPOLIA -u SEPOLIA_RPC_URL
+          -u DEV_KEY -u DEV_SPENDING_KEY -u DEV_VIEWING_KEY
+          nix develop .#ci --command bash -c
+          'cd crates && cargo test --locked --release -p kohaku-railgun
+          --test integration broadcast_utxo::test_broadcast_utxo
+          -- --ignored --exact --nocapture'

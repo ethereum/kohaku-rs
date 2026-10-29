@@ -28,7 +28,7 @@ jobs:
     - run: nix develop .#ci --command bash -c "cd crates && cargo check --all-targets --all-features"
     - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --all-targets --all-features"
     - run: nix develop .#ci --command bash -c "cd crates && cargo test --all-targets --all-features --release"
-    # Railgun ignored integration tests need RPC/dev-key secrets; run them in a dedicated workflow.
+    # Remaining Railgun ignored tests still need live services; railgun-local-broadcast.yml runs the local broadcast test.
     - run: nix develop .#ci --command bash -c "cd crates && cargo test --workspace --exclude kohaku-railgun --all-targets --all-features --release -- --ignored"
 
   test-wasm:
