@@ -34,7 +34,7 @@ struct PoolIndex<'a> {
 ///
 /// Nonces are shared across all pools, so this is one past the highest nonce recovered in any
 /// pool. See [`recover`] for details on how notes are recovered.
-pub async fn next_nonce<S: Signer + Send + Sync>(
+pub async fn next_nonce<#[cfg(native)] S: Signer + Send + Sync, #[cfg(wasm)] S: Signer>(
     keychain: &Keychain<S>,
     batches: &[Snapshot],
     gap_limit: Option<u64>,
@@ -58,7 +58,7 @@ pub async fn next_nonce<S: Signer + Send + Sync>(
 ///
 /// # Errors
 /// Returns an error if the keychain cannot derive a nonce's material.
-pub async fn recover<S: Signer + Send + Sync>(
+pub async fn recover<#[cfg(native)] S: Signer + Send + Sync, #[cfg(wasm)] S: Signer>(
     keychain: &Keychain<S>,
     batches: &[Snapshot],
     gap_limit: Option<u64>,
