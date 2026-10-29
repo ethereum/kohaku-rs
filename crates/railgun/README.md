@@ -89,29 +89,3 @@ up, a commitment that is not already in the tree is `Unavailable`.
 The loopback control test uses only public dummy state. When running behind a
 system HTTP proxy, include `127.0.0.1,localhost` in `NO_PROXY` so the fixture
 traffic stays local.
-
-## Local broadcasting integration test
-
-The ERC-4337 broadcasting test deploys a fresh Railgun wallet, WETH, EntryPoint,
-7702 account implementation, PrivacyPaymaster and Railgun fee adapter on Anvil.
-It starts a local Alto bundler with disposable generated keys. No Sepolia RPC,
-funded account, developer-key variables, Subsquid or public bundler is used.
-The existing prover downloads its commit-pinned public artifacts; this is not
-an offline artifact-loader test. POI and TXID service integration remain separate.
-
-```sh
-nix develop .#ci --command bash -c 'cd crates && cargo test --locked --release \
-  -p kohaku-railgun --test integration broadcast_utxo::test_broadcast_utxo \
-  -- --ignored --exact --nocapture'
-```
-
-The test is ignored in the general suite because it requires Anvil, Alto and
-release-mode proving. `railgun-local-broadcast.yml` runs this exact test on
-relevant PRs to both `master` and the Railgun feature branch. It checks the
-UserOperation and transaction receipts, installed 7702 delegation, private
-change plus fee conservation, and exact WETH/native recipient deltas from the
-unshield and unwrap call. A direct call to the deployed wallet verifies the
-submitted proof and rejects a tampered proof and a changed public input, from
-an origin outside the bytecode's verification bypass. Successful receipts provide
-the scan boundary rather than fixed sleeps. All other live-service tests retain
-their existing gates.

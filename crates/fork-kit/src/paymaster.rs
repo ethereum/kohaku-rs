@@ -18,6 +18,7 @@ mod sol {
         TornadoFeeAdapter,
         "fixtures/tornado_fee_adapter.json"
     );
+    // https://etherscan.io/address/0xD73A1dE75B1D4A3aF1D9f664fBcFA327bD2Cd59d#code
     sol!(
         #[sol(rpc)]
         RailgunFeeAdapter,
