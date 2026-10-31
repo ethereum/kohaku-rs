@@ -66,11 +66,11 @@ production `circuit_size(1, 4)` selection (three private outputs plus unshield).
   failed submissions and can re-prove and POST again on later processing.
   The fixture's immediate `Valid` is synthetic; a real service may report
   `ProofSubmitted` while aggregation is pending.
-- The actual TXID indexer retains its persisted checkpoint/tree on a root-read
-  outage, then restores from a closed/reopened redb store and resumes without
-  losing positions or duplicating leaves.
-- Dropping a sync future while acquisition is pending leaves the persisted
-  checkpoint intact; a reopened indexer can complete the same range.
+- The actual TXID indexer retains its caller-owned checkpoint/tree on a root-read
+  outage, then restores from that checkpoint and resumes without losing
+  positions or duplicating leaves.
+- Dropping a sync future while acquisition is pending leaves the caller-owned
+  checkpoint intact; a restored indexer can complete the same range.
 
 ## Limits
 
@@ -79,9 +79,8 @@ does not authenticate list signatures, index-root membership, finality,
 ownership, or the relation between fixture roots and a live chain. It verifies
 retained public proofs in the normal suite; the opt-in tests below additionally
 exercise `Groth16Prover`. Disk reopen
-is within one test process, and cancellation is before writes, not SIGKILL or
-an interrupted multi-key commit. Scratch redb files contain public data and
-are deliberately retained. The suite grants no durable send/retry authority
+is within one test process, and cancellation is before publication, not SIGKILL.
+The suite grants no durable send/retry authority
 and is not an Alice-to-Bob or mainnet qualification.
 
 Run from `crates/`:

@@ -35,10 +35,11 @@
 
         alto = pkgs.callPackage ./nix/alto/package.nix { };
         tornadocashRelayer = pkgs.callPackage ./nix/tornadocash-relayer/package.nix { };
+        railgunPpoi = pkgs.callPackage ./nix/railgun-ppoi/package.nix { };
       in
       {
         packages = {
-          inherit alto tornadocashRelayer;
+          inherit alto tornadocashRelayer railgunPpoi;
         };
 
         devShells = {
