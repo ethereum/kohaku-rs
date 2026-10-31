@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-/// Fee of the first dummy UserOperation of [`RailgunProvider::simulate_gas_limits`], before the
+/// Fee of the first dummy UserOperation of [`RailgunUserOps::simulate_gas_limits`], before the
 /// bundler has said anything about gas. Its only effect is on which notes get selected.
 const SEED_FEE: u128 = 100_000_000;
 
@@ -91,14 +91,14 @@ impl NoteEntry {
 
 /// An unspent note plus the POI status `balance` and spends read.
 ///
-/// This is the note the amount helpers select from and that [`RailgunProvider::spend`] takes.
+/// This is the note the amount helpers select from and that [`Spend::try_new`] takes.
 #[derive(Debug, Clone)]
 pub struct AnnotatedNote {
     pub note: UtxoNote,
     pub poi_status: Option<PoiStatus>,
 }
 
-/// What [`RailgunProvider::prepare_userop_single_proof`] did, for logs and UIs.
+/// What [`RailgunUserOps::prepare_userop_single_proof`] did, for logs and UIs.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleProofReport {
@@ -131,13 +131,23 @@ fn txid_hex(txid: crate::crypto::railgun_txid::Txid) -> String {
 }
 
 /// Interfaces with the RAILGUN protocol.
-pub struct RailgunProvider {
+pub struct RailgunWallet {
     chain: ChainConfig,
     provider: DynProvider,
     utxo_indexer: UtxoIndexer,
     prover: Groth16Prover,
     poi_provider: Option<PoiProvider>,
     preserved_poi: crate::poi::provider::PoiCheckpoint,
+}
+
+/// Selects and proves Railgun spends against a wallet's current indexed notes.
+pub struct RailgunTransactor<'a> {
+    wallet: &'a mut RailgunWallet,
+}
+
+/// Builds paymaster-backed UserOperations from Railgun spends.
+pub struct RailgunUserOps<'a> {
+    wallet: &'a mut RailgunWallet,
 }
 
 /// Unspent notes a build may spend, plus accounts whose POI status was not observed.
@@ -168,15 +178,12 @@ impl SpendableNotes {
     /// An insufficient balance is an observation failure when this account and asset
     /// still has notes whose POI status could not be read. Valid notes are already
     /// the only inputs, so a covered amount does not take this path.
-    fn explain(
-        &self,
-        result: Result<Vec<Spend>, AmountError>,
-    ) -> Result<Vec<Spend>, RailgunProviderError> {
+    fn explain(&self, result: Result<Vec<Spend>, AmountError>) -> Result<Vec<Spend>, RailgunError> {
         match result {
             Err(AmountError::InsufficientBalance { from, asset, .. })
                 if self.unavailable.contains(&(from.viewing_pubkey(), asset)) =>
             {
-                Err(RailgunProviderError::PoiStatusUnavailable)
+                Err(RailgunError::PoiStatusUnavailable)
             }
             result => result.map_err(Into::into),
         }
@@ -184,7 +191,7 @@ impl SpendableNotes {
 }
 
 #[derive(Debug, Error)]
-pub enum RailgunProviderError {
+pub enum RailgunError {
     #[error("Utxo indexer error: {0}")]
     UtxoIndexer(#[from] UtxoIndexerError),
     #[error("Spend error: {0}")]
@@ -218,7 +225,7 @@ pub enum RailgunProviderError {
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl RailgunProvider {
+impl RailgunWallet {
     pub(crate) fn new(
         chain: ChainConfig,
         provider: DynProvider,
@@ -226,7 +233,7 @@ impl RailgunProvider {
         prover: Groth16Prover,
         poi_provider: Option<PoiProvider>,
         preserved_poi: crate::poi::provider::PoiCheckpoint,
-    ) -> Result<Self, RailgunProviderError> {
+    ) -> Result<Self, RailgunError> {
         Ok(Self {
             chain,
             provider,
@@ -235,6 +242,16 @@ impl RailgunProvider {
             poi_provider,
             preserved_poi,
         })
+    }
+
+    /// Borrow the current wallet state to select and prove transactions.
+    pub fn transactions(&mut self) -> RailgunTransactor<'_> {
+        RailgunTransactor { wallet: self }
+    }
+
+    /// Borrow the current wallet state to prepare ERC-4337 UserOperations.
+    pub fn user_operations(&mut self) -> RailgunUserOps<'_> {
+        RailgunUserOps { wallet: self }
     }
 
     /// Last block the UTXO indexer has been synced to.
@@ -254,12 +271,12 @@ impl RailgunProvider {
         }
     }
 
-    /// Whether POI support is enabled on this provider.
+    /// Whether POI support is enabled on this wallet.
     pub fn poi_enabled(&self) -> bool {
         self.poi_provider.is_some()
     }
 
-    /// POI list keys this provider proves against (their wire strings), empty when POI is off.
+    /// POI list keys this wallet proves against (their wire strings), empty when POI is off.
     pub fn poi_list_keys(&self) -> Vec<String> {
         self.poi_provider
             .as_ref()
@@ -323,34 +340,31 @@ impl RailgunProvider {
             .unwrap_or_default()
     }
 
-    /// Register a signer with the provider. The provider will index and track
+    /// Register a signer with the wallet. The wallet will index and track
     /// UTXOs for the associated address.
-    #[expect(clippy::unused_async, reason = "Preserve the provider's async API")]
-    pub async fn register(
-        &mut self,
-        signer: Arc<dyn RailgunSigner>,
-    ) -> Result<(), RailgunProviderError> {
+    #[expect(clippy::unused_async, reason = "Preserve the registration async API")]
+    pub async fn register(&mut self, signer: Arc<dyn RailgunSigner>) -> Result<(), RailgunError> {
         self.utxo_indexer.register(signer)?;
         Ok(())
     }
 
-    /// Syncs the provider to the latest block and processes pending POI proofs.
+    /// Syncs the wallet to the latest block and processes pending POI proofs.
     /// With POI enabled, this may generate and submit proofs to the POI service.
     ///
     /// # Errors
     /// Returns synchronization or persistence errors. Individual POI processing
     /// failures retain the existing best-effort behavior.
-    pub async fn sync(&mut self) -> Result<(), RailgunProviderError> {
+    pub async fn sync(&mut self) -> Result<(), RailgunError> {
         self.sync_to(u64::MAX).await
     }
 
-    /// Syncs the provider to the specified block and processes pending POI proofs.
+    /// Syncs the wallet to the specified block and processes pending POI proofs.
     /// Use [`Self::sync_to_without_poi_submission`] to defer proof submission.
     ///
     /// # Errors
     /// Returns synchronization or persistence errors. Individual POI processing
     /// failures retain the existing best-effort behavior.
-    pub async fn sync_to(&mut self, to_block: u64) -> Result<(), RailgunProviderError> {
+    pub async fn sync_to(&mut self, to_block: u64) -> Result<(), RailgunError> {
         self.sync_to_without_poi_submission(to_block).await?;
         self.process_pending_poi().await
     }
@@ -361,7 +375,7 @@ impl RailgunProvider {
     ///
     /// # Errors
     /// Returns an error if synchronization, validation or persistence fails.
-    pub async fn sync_without_poi_submission(&mut self) -> Result<(), RailgunProviderError> {
+    pub async fn sync_without_poi_submission(&mut self) -> Result<(), RailgunError> {
         self.sync_to_without_poi_submission(u64::MAX).await
     }
 
@@ -374,7 +388,7 @@ impl RailgunProvider {
     pub async fn sync_to_without_poi_submission(
         &mut self,
         to_block: u64,
-    ) -> Result<(), RailgunProviderError> {
+    ) -> Result<(), RailgunError> {
         self.utxo_indexer.sync_to(to_block).await?;
 
         if let Some(poi_provider) = &mut self.poi_provider {
@@ -396,16 +410,30 @@ impl RailgunProvider {
     /// # Errors
     /// Returns an error if queue persistence fails. Individual processing errors
     /// are logged and their entries remain pending.
-    pub async fn process_pending_poi(&mut self) -> Result<(), RailgunProviderError> {
+    pub async fn process_pending_poi(&mut self) -> Result<(), RailgunError> {
         if let Some(poi_provider) = &mut self.poi_provider {
             poi_provider.process_pending(&self.prover).await?;
         }
         Ok(())
     }
 
+    /// Forgets pending POI proofs for operations that never reached the chain.
+    /// Returns the number of entries dropped. Old unmined operations are also
+    /// dropped automatically during sync after the grace period.
+    #[expect(clippy::unused_async, reason = "Preserve the POI async API")]
+    pub async fn discard_pending_poi(
+        &mut self,
+        operations: &[ProvedOperation],
+    ) -> Result<usize, RailgunError> {
+        match &mut self.poi_provider {
+            Some(p) => Ok(p.discard_ops(operations)?),
+            None => Ok(0),
+        }
+    }
+
     /// Unspent notes for `address`, each with its POI status.
     ///
-    /// This is the list [`Self::spend`] and the amount helpers read. [`Self::balance`]
+    /// This is the list [`Spend::try_new`] and the amount helpers read. [`Self::balance`]
     /// is the sum of these notes grouped by asset and POI status.
     #[allow(clippy::unused_async)]
     pub async fn unspent_notes(&mut self, address: RailgunAddress) -> Vec<AnnotatedNote> {
@@ -468,17 +496,9 @@ impl RailgunProvider {
     pub fn shield(&self) -> ShieldBuilder {
         ShieldBuilder::new(self.chain.clone())
     }
+}
 
-    /// Start a spend of these notes. They must share a tree, an asset, and the signer's
-    /// viewing key. This does not select notes, check POI, or ask the signer to sign.
-    pub fn spend(
-        &self,
-        signer: Arc<dyn RailgunSigner>,
-        inputs: Vec<UtxoNote>,
-    ) -> Result<Spend, SpendError> {
-        Spend::try_new(signer, inputs)
-    }
-
+impl RailgunTransactor<'_> {
     /// Select notes for one transfer and return the spends that cover it.
     ///
     /// A transfer that does not fit on one tree comes back as several spends, one per
@@ -491,7 +511,7 @@ impl RailgunProvider {
         value: u128,
         memo: &str,
         rng: &mut impl CryptoRng,
-    ) -> Result<Vec<Spend>, RailgunProviderError> {
+    ) -> Result<Vec<Spend>, RailgunError> {
         self.resolve_amounts(
             AmountIntents::new().transfer(from, to, asset, value, memo),
             rng,
@@ -509,7 +529,7 @@ impl RailgunProvider {
         asset: AssetId,
         value: u128,
         rng: &mut impl CryptoRng,
-    ) -> Result<Vec<Spend>, RailgunProviderError> {
+    ) -> Result<Vec<Spend>, RailgunError> {
         self.resolve_amounts(AmountIntents::new().unshield(from, to, asset, value)?, rng)
             .await
     }
@@ -523,25 +543,10 @@ impl RailgunProvider {
         &mut self,
         intents: AmountIntents,
         rng: &mut impl CryptoRng,
-    ) -> Result<Vec<Spend>, RailgunProviderError> {
+    ) -> Result<Vec<Spend>, RailgunError> {
         let spendable = self.spendable_notes().await;
         let resolved = intents.resolve(&spendable.notes, rng);
         spendable.explain(resolved)
-    }
-
-    /// Forgets the pending POI proofs of operations that never reached the chain, for instance
-    /// after the submitter did not answer. Returns how many entries were dropped. Entries of
-    /// operations that are never mined are also dropped automatically during sync, once the
-    /// grace period has passed.
-    #[expect(clippy::unused_async, reason = "Preserve the provider's async API")]
-    pub async fn discard_pending_poi(
-        &mut self,
-        operations: &[ProvedOperation],
-    ) -> Result<usize, RailgunProviderError> {
-        match &mut self.poi_provider {
-            Some(p) => Ok(p.discard_ops(operations)?),
-            None => Ok(0),
-        }
     }
 
     /// Builds the transaction with an all-zero proof, for gas estimation only.
@@ -554,9 +559,12 @@ impl RailgunProvider {
         &mut self,
         spends: &[Spend],
         rng: &mut impl CryptoRng,
-    ) -> Result<ProvedTx, RailgunProviderError> {
+    ) -> Result<ProvedTx, RailgunError> {
         let operations = self.prove_spends(spends, rng, false).await?;
-        Ok(ProvedTx::new(self.chain.railgun_smart_wallet, operations))
+        Ok(ProvedTx::new(
+            self.wallet.chain.railgun_smart_wallet,
+            operations,
+        ))
     }
 
     /// Prove spends into one Railgun transaction.
@@ -567,12 +575,23 @@ impl RailgunProvider {
         &mut self,
         spends: &[Spend],
         rng: &mut impl CryptoRng,
-    ) -> Result<ProvedTx, RailgunProviderError> {
+    ) -> Result<ProvedTx, RailgunError> {
         let operations = self.prove_spends(spends, rng, true).await?;
-        if let Some(poi_provider) = &mut self.poi_provider {
+        if let Some(poi_provider) = &mut self.wallet.poi_provider {
             poi_provider.register_ops(&operations)?;
         }
-        Ok(ProvedTx::new(self.chain.railgun_smart_wallet, operations))
+        Ok(ProvedTx::new(
+            self.wallet.chain.railgun_smart_wallet,
+            operations,
+        ))
+    }
+}
+
+impl RailgunUserOps<'_> {
+    fn transactions(&mut self) -> RailgunTransactor<'_> {
+        RailgunTransactor {
+            wallet: &mut *self.wallet,
+        }
     }
 
     /// The UserOperation [`Self::prepare_userop`] would build, with a dummy proof: same
@@ -591,7 +610,7 @@ impl RailgunProvider {
         fee: u128,
         gas: UserOperationGasEstimate,
         rng: &mut impl CryptoRng,
-    ) -> Result<SignableUserOperation, RailgunProviderError> {
+    ) -> Result<SignableUserOperation, RailgunError> {
         let (userop, _) = self
             .dummy_userop_with_operations(
                 spends, sender, fee_payer, fee_token, calldata, fee, gas, rng,
@@ -613,9 +632,10 @@ impl RailgunProvider {
         fee: u128,
         gas: UserOperationGasEstimate,
         rng: &mut impl CryptoRng,
-    ) -> Result<(SignableUserOperation, Vec<ProvedOperation>), RailgunProviderError> {
+    ) -> Result<(SignableUserOperation, Vec<ProvedOperation>), RailgunError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
         let with_fee = self
+            .transactions()
             .spends_with_fee(
                 spends,
                 fee_payer,
@@ -627,7 +647,10 @@ impl RailgunProvider {
             )
             .await?;
         // Unsigned circuit inputs: a gas estimate must not ask the spending signer.
-        let operations = self.prove_spends(&with_fee, rng, false).await?;
+        let operations = self
+            .transactions()
+            .prove_spends(&with_fee, rng, false)
+            .await?;
         let userop = self
             .userop_from(
                 &operations,
@@ -665,13 +688,14 @@ impl RailgunProvider {
         calldata: S::Call,
         gas: UserOperationGasEstimate,
         rng: &mut impl CryptoRng,
-    ) -> Result<(SignableUserOperation, SingleProofReport), RailgunProviderError> {
+    ) -> Result<(SignableUserOperation, SingleProofReport), RailgunError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
         let total_gas = total_gas_limit(&gas);
         let fee = total_gas * gas.max_fee_per_gas;
 
         // The one proof. This is the only place the spending signer is used.
         let with_fee = self
+            .transactions()
             .spends_with_fee(
                 spends,
                 fee_payer,
@@ -682,7 +706,10 @@ impl RailgunProvider {
                 rng,
             )
             .await?;
-        let operations = self.prove_spends(&with_fee, rng, true).await?;
+        let operations = self
+            .transactions()
+            .prove_spends(&with_fee, rng, true)
+            .await?;
         let signable = self
             .userop_from(
                 &operations,
@@ -699,9 +726,9 @@ impl RailgunProvider {
         // Check the limits against the real proof before anything leaves.
         let pmv_limit = gas.paymaster_verification_gas_limit.unwrap_or(0);
         let pmv_measured =
-            estimate_paymaster_verification_gas_limit(&self.provider, &signable).await?;
+            estimate_paymaster_verification_gas_limit(&self.wallet.provider, &signable).await?;
         if pmv_measured > pmv_limit {
-            return Err(RailgunProviderError::LimitsTooLow {
+            return Err(RailgunError::LimitsTooLow {
                 what: "paymaster verification",
                 needed: pmv_measured,
                 limit: pmv_limit,
@@ -732,7 +759,7 @@ impl RailgunProvider {
             ),
         ] {
             if needed > limit {
-                return Err(RailgunProviderError::LimitsTooLow {
+                return Err(RailgunError::LimitsTooLow {
                     what,
                     needed,
                     limit,
@@ -740,7 +767,7 @@ impl RailgunProvider {
             }
         }
 
-        if let Some(poi_provider) = &mut self.poi_provider {
+        if let Some(poi_provider) = &mut self.wallet.poi_provider {
             poi_provider.register_ops(&operations)?;
         }
         let report = SingleProofReport {
@@ -772,7 +799,7 @@ impl RailgunProvider {
         fee_token: Address,
         calldata: &S::Call,
         rng: &mut impl CryptoRng,
-    ) -> Result<UserOperationGasEstimate, RailgunProviderError> {
+    ) -> Result<UserOperationGasEstimate, RailgunError> {
         let mut fee = SEED_FEE;
         let mut estimate = None;
         for _round in 0..2 {
@@ -803,7 +830,8 @@ impl RailgunProvider {
                     op.transaction.commitments.len(),
                 )
             });
-            let overrides = verifier_state_override(self.chain.railgun_smart_wallet, circuits);
+            let overrides =
+                verifier_state_override(self.wallet.chain.railgun_smart_wallet, circuits);
             let gas = bundler.estimate_gas(&dummy, Some(&overrides)).await?;
             fee = total_gas_limit(&gas) * gas.max_fee_per_gas;
             estimate = Some(gas);
@@ -823,7 +851,7 @@ impl RailgunProvider {
         fee_token: Address,
         calldata: S::Call,
         rng: &mut impl CryptoRng,
-    ) -> Result<SignableUserOperation, RailgunProviderError> {
+    ) -> Result<SignableUserOperation, RailgunError> {
         let gas = self
             .simulate_gas_limits(
                 spends,
@@ -853,18 +881,15 @@ impl RailgunProvider {
         Ok(signable)
     }
 
-    fn paymaster_contracts(
-        &self,
-        fee_token: Address,
-    ) -> Result<(Address, Address), RailgunProviderError> {
-        let privacy_paymaster = self.chain.privacy_paymaster.ok_or(
-            RailgunProviderError::PrivacyPaymasterNotConfigured(self.chain.id),
+    fn paymaster_contracts(&self, fee_token: Address) -> Result<(Address, Address), RailgunError> {
+        let privacy_paymaster = self.wallet.chain.privacy_paymaster.ok_or(
+            RailgunError::PrivacyPaymasterNotConfigured(self.wallet.chain.id),
         )?;
-        let railgun_fee_adapter = self.chain.railgun_fee_adapter.ok_or(
-            RailgunProviderError::PrivacyPaymasterNotConfigured(self.chain.id),
+        let railgun_fee_adapter = self.wallet.chain.railgun_fee_adapter.ok_or(
+            RailgunError::PrivacyPaymasterNotConfigured(self.wallet.chain.id),
         )?;
-        if fee_token != self.chain.wrapped_base_token {
-            return Err(RailgunProviderError::Other(Box::new(std::io::Error::new(
+        if fee_token != self.wallet.chain.wrapped_base_token {
+            return Err(RailgunError::Other(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Currently only the wrapped base token is supported for fee payment",
             ))));
@@ -885,7 +910,7 @@ impl RailgunProvider {
         fee_token: Address,
         fee: u128,
         gas: UserOperationGasEstimate,
-    ) -> Result<SignableUserOperation, RailgunProviderError> {
+    ) -> Result<SignableUserOperation, RailgunError> {
         let fee_asset = AssetId::Erc20(fee_token);
         let fee_operation = get_fee_operation(operations, fee_asset, fee)?;
         let fee_note = get_fee_note(fee_operation, fee_asset, fee)?;
@@ -896,7 +921,7 @@ impl RailgunProvider {
         );
         Ok(UserOperationBuilder::new_with_smart_account(sender)
             .await
-            .map_err(|e| RailgunProviderError::Other(Box::new(e)))?
+            .map_err(|e| RailgunError::Other(Box::new(e)))?
             .with_call(calldata)
             .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
             .with_gas(gas)
@@ -918,7 +943,7 @@ impl RailgunProvider {
         fee_token: Address,
         calldata: S::Call,
         rng: &mut impl CryptoRng,
-    ) -> Result<SignableUserOperation, RailgunProviderError> {
+    ) -> Result<SignableUserOperation, RailgunError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
         let fee_asset = AssetId::Erc20(fee_token);
 
@@ -936,6 +961,7 @@ impl RailgunProvider {
                 fee_value
             );
             let with_fee = self
+                .transactions()
                 .spends_with_fee(
                     spends,
                     fee_payer.clone(),
@@ -946,7 +972,10 @@ impl RailgunProvider {
                     rng,
                 )
                 .await?;
-            let operations = self.prove_spends(&with_fee, rng, true).await?;
+            let operations = self
+                .transactions()
+                .prove_spends(&with_fee, rng, true)
+                .await?;
 
             // Get the fee operation & note so the decrypted commitment data can be sent to the
             // paymaster.
@@ -966,7 +995,7 @@ impl RailgunProvider {
             // Construct UserOperation
             let mut signable = UserOperationBuilder::new_with_smart_account(sender)
                 .await
-                .map_err(|e| RailgunProviderError::Other(Box::new(e)))?
+                .map_err(|e| RailgunError::Other(Box::new(e)))?
                 .with_call(&calldata)
                 .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
                 .with_gas_estimate(bundler, None)
@@ -976,7 +1005,7 @@ impl RailgunProvider {
             // Recalculate fee and check for convergence.
             info!("Prepared broadcast transaction: {:?}", signable);
             let estimated_paymaster_verification_gas_limit =
-                estimate_paymaster_verification_gas_limit(&self.provider, &signable).await?;
+                estimate_paymaster_verification_gas_limit(&self.wallet.provider, &signable).await?;
             info!(
                 "Estimated paymaster verification gas limit: {}",
                 estimated_paymaster_verification_gas_limit
@@ -994,7 +1023,7 @@ impl RailgunProvider {
             //? Return once the fee converges within 1% of the previous estimate.
             if new_fee <= fee_value && new_fee.abs_diff(fee_value) <= fee_value / 100 {
                 info!("Fee converged at {}, total gas: {}", new_fee, total_gas);
-                if let Some(poi_provider) = &mut self.poi_provider {
+                if let Some(poi_provider) = &mut self.wallet.poi_provider {
                     poi_provider.register_ops(&operations)?;
                 }
                 return Ok(signable);
@@ -1003,17 +1032,19 @@ impl RailgunProvider {
             info!("Fee updated to {}", new_fee);
         }
 
-        return Err(RailgunProviderError::Other(Box::new(std::io::Error::new(
+        return Err(RailgunError::Other(Box::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             "Failed to converge on fee estimate",
         ))));
     }
+}
 
+impl RailgunTransactor<'_> {
     async fn all_unspent(&mut self) -> Vec<AnnotatedNote> {
-        let addresses = self.utxo_indexer.registered();
+        let addresses = self.wallet.utxo_indexer.registered();
         let mut all_notes = Vec::new();
         for address in addresses {
-            all_notes.extend(self.unspent_notes(address).await);
+            all_notes.extend(self.wallet.unspent_notes(address).await);
         }
         all_notes
     }
@@ -1024,18 +1055,18 @@ impl RailgunProvider {
         spends: &[Spend],
         rng: &mut impl CryptoRng,
         real: bool,
-    ) -> Result<Vec<ProvedOperation>, RailgunProviderError> {
+    ) -> Result<Vec<ProvedOperation>, RailgunError> {
         self.ensure_notes_valid(spends)?;
         let operations = spends
             .iter()
             .cloned()
             .map(Spend::into_operation)
             .collect::<Result<Vec<_>, _>>()?;
-        let prover = real.then_some(&self.prover);
+        let prover = real.then_some(&self.wallet.prover);
         Ok(prove_operations(
             prover,
-            &self.utxo_indexer.utxo_trees,
-            self.chain.id,
+            &self.wallet.utxo_indexer.utxo_trees,
+            self.wallet.chain.id,
             &operations,
             rng,
         )
@@ -1043,7 +1074,7 @@ impl RailgunProvider {
     }
 
     fn ensure_notes_valid(&self, spends: &[Spend]) -> Result<(), SpendError> {
-        let Some(poi) = &self.poi_provider else {
+        let Some(poi) = &self.wallet.poi_provider else {
             return Ok(());
         };
         for spend in spends {
@@ -1070,12 +1101,12 @@ impl RailgunProvider {
         adapt_contract: Address,
         adapt_params: [u8; 32],
         rng: &mut impl CryptoRng,
-    ) -> Result<Vec<Spend>, RailgunProviderError> {
+    ) -> Result<Vec<Spend>, RailgunError> {
         let spendable = self.spendable_notes().await;
         let with_fee = attach_fee(
             spends,
             fee_payer,
-            paymaster_railgun_address(ChainId::evm(self.chain.id)),
+            paymaster_railgun_address(ChainId::evm(self.wallet.chain.id)),
             AssetId::Erc20(fee_token),
             fee,
             &spendable.notes,
@@ -1091,7 +1122,7 @@ impl RailgunProvider {
     /// When POI is on, only `Valid` notes are inputs. `Unavailable` is not an input,
     /// but every build reports it when that is what made the balance look short.
     async fn spendable_notes(&mut self) -> SpendableNotes {
-        SpendableNotes::from_unspent(self.poi_provider.is_some(), self.all_unspent().await)
+        SpendableNotes::from_unspent(self.wallet.poi_provider.is_some(), self.all_unspent().await)
     }
 }
 
@@ -1109,14 +1140,14 @@ fn get_fee_operation<'a>(
     operations: &'a Vec<ProvedOperation>,
     fee_asset: AssetId,
     fee_value: u128,
-) -> Result<&'a ProvedOperation, RailgunProviderError> {
+) -> Result<&'a ProvedOperation, RailgunError> {
     let Some(fee_note_pos) = operations.iter().position(|o| {
         o.inner
             .out_notes()
             .iter()
             .any(|n| is_fee_note(n, fee_asset, fee_value))
     }) else {
-        return Err(RailgunProviderError::FeeNoteNotFound);
+        return Err(RailgunError::FeeNoteNotFound);
     };
     Ok(&operations[fee_note_pos])
 }
@@ -1126,13 +1157,13 @@ fn get_fee_note(
     operation: &ProvedOperation,
     fee_asset: AssetId,
     fee_value: u128,
-) -> Result<Box<dyn Note>, RailgunProviderError> {
+) -> Result<Box<dyn Note>, RailgunError> {
     operation
         .inner
         .out_notes()
         .into_iter()
         .find(|n| is_fee_note(n, fee_asset, fee_value))
-        .ok_or(RailgunProviderError::FeeNoteNotFound)
+        .ok_or(RailgunError::FeeNoteNotFound)
 }
 
 fn is_fee_note(note: &Box<dyn Note>, fee_asset: AssetId, fee_value: u128) -> bool {
@@ -1142,7 +1173,7 @@ fn is_fee_note(note: &Box<dyn Note>, fee_asset: AssetId, fee_value: u128) -> boo
 async fn estimate_paymaster_verification_gas_limit(
     provider: &DynProvider,
     user_op: &SignableUserOperation,
-) -> Result<u128, RailgunProviderError> {
+) -> Result<u128, RailgunError> {
     let entry_point = user_op.entry_point;
     let Some(paymaster) = user_op.user_op.paymaster else {
         return Ok(0);
@@ -1233,7 +1264,7 @@ mod poi_availability_tests {
         }
     }
 
-    async fn fixture(url: &str, poi: bool) -> (RailgunProvider, Arc<dyn RailgunSigner>, AssetId) {
+    async fn fixture(url: &str, poi: bool) -> (RailgunWallet, Arc<dyn RailgunSigner>, AssetId) {
         fixture_with_notes(url, poi, 1).await
     }
 
@@ -1241,7 +1272,7 @@ mod poi_availability_tests {
         url: &str,
         poi: bool,
         count: u32,
-    ) -> (RailgunProvider, Arc<dyn RailgunSigner>, AssetId) {
+    ) -> (RailgunWallet, Arc<dyn RailgunSigner>, AssetId) {
         // Public, never-funded keys. This seeds local state; it is not a scan test.
         let signer = PrivateKeySigner::new_evm(
             SpendingKey::from_bytes([1; 32]),
@@ -1321,7 +1352,7 @@ mod poi_availability_tests {
         assert_eq!(balance[0].poi_status, Some(PoiStatus::Unavailable));
         let result = timeout(
             Duration::from_secs(5),
-            provider.transfer_amount(
+            provider.transactions().transfer_amount(
                 signer.clone(),
                 signer.address(),
                 asset,
@@ -1332,18 +1363,14 @@ mod poi_availability_tests {
         )
         .await
         .unwrap();
-        assert!(matches!(
-            result,
-            Err(RailgunProviderError::PoiStatusUnavailable)
-        ));
+        assert!(matches!(result, Err(RailgunError::PoiStatusUnavailable)));
         let notes = timeout(
             Duration::from_secs(5),
             provider.unspent_notes(signer.address()),
         )
         .await
         .unwrap();
-        let explicit = provider
-            .spend(signer.clone(), vec![notes[0].note.clone()])
+        let explicit = Spend::try_new(signer.clone(), vec![notes[0].note.clone()])
             .unwrap()
             .transfer(signer.address(), 1, "")
             .unwrap()
@@ -1351,13 +1378,13 @@ mod poi_availability_tests {
             .unwrap();
         let explicit = timeout(
             Duration::from_secs(5),
-            provider.prove(&[explicit], &mut rand::rng()),
+            provider.transactions().prove(&[explicit], &mut rand::rng()),
         )
         .await
         .unwrap();
         assert!(matches!(
             explicit,
-            Err(RailgunProviderError::Spend(SpendError::NoteNotValid { .. }))
+            Err(RailgunError::Spend(SpendError::NoteNotValid { .. }))
         ));
         assert!(
             timeout(Duration::from_millis(20), listener.accept())
@@ -1374,7 +1401,7 @@ mod poi_availability_tests {
         assert!(matches!(
             timeout(
                 Duration::from_secs(5),
-                provider.transfer_amount(
+                provider.transactions().transfer_amount(
                     signer.clone(),
                     signer.address(),
                     AssetId::erc20(Address::repeat_byte(0x22)),
@@ -1385,7 +1412,7 @@ mod poi_availability_tests {
             )
             .await
             .unwrap(),
-            Err(RailgunProviderError::Amount(
+            Err(RailgunError::Amount(
                 AmountError::InsufficientBalance { .. }
             ))
         ));
@@ -1530,7 +1557,7 @@ mod spendable_notes_tests {
         }));
         assert!(matches!(
             err,
-            Err(RailgunProviderError::Amount(
+            Err(RailgunError::Amount(
                 AmountError::InsufficientBalance { .. }
             ))
         ));
@@ -1556,7 +1583,7 @@ mod spendable_notes_tests {
         }));
         assert!(matches!(
             err,
-            Err(RailgunProviderError::Amount(
+            Err(RailgunError::Amount(
                 AmountError::InsufficientBalance { .. }
             ))
         ));
@@ -1579,9 +1606,6 @@ mod spendable_notes_tests {
             asset,
             value: 1,
         }));
-        assert!(matches!(
-            err,
-            Err(RailgunProviderError::PoiStatusUnavailable)
-        ));
+        assert!(matches!(err, Err(RailgunError::PoiStatusUnavailable)));
     }
 }

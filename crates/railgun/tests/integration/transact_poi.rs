@@ -9,7 +9,7 @@ use alloy::{
 };
 use kohaku_railgun::{
     account::signer::RailgunSigner, builder::RailgunBuilder, caip::AssetId,
-    chain_config::ChainConfig, indexer::syncer::SubsquidSyncer, provider::RailgunProvider,
+    chain_config::ChainConfig, indexer::syncer::SubsquidSyncer, wallet::RailgunWallet,
 };
 use rand::random;
 use tracing::info;
@@ -116,7 +116,7 @@ async fn test_transact_poi() {
 }
 
 async fn test_shield_poi(
-    railgun: &mut RailgunProvider,
+    railgun: &mut RailgunWallet,
     provider: &impl Provider,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
@@ -143,12 +143,13 @@ async fn test_shield_poi(
 }
 
 async fn test_transfer_poi<P: Provider>(
-    railgun: &mut RailgunProvider,
+    railgun: &mut RailgunWallet,
     provider: &P,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
 ) {
     let spends = railgun
+        .transactions()
         .transfer_amount(
             account_1.clone(),
             account_2.address(),
@@ -159,7 +160,11 @@ async fn test_transfer_poi<P: Provider>(
         )
         .await
         .unwrap();
-    let transfer_tx = railgun.prove(&spends, &mut rand::rng()).await.unwrap();
+    let transfer_tx = railgun
+        .transactions()
+        .prove(&spends, &mut rand::rng())
+        .await
+        .unwrap();
 
     info!("Sending transfer transaction");
     let tx = provider
@@ -177,12 +182,13 @@ async fn test_transfer_poi<P: Provider>(
 }
 
 async fn test_unshield_poi<P: Provider>(
-    railgun: &mut RailgunProvider,
+    railgun: &mut RailgunWallet,
     provider: &P,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
 ) {
     let spends = railgun
+        .transactions()
         .unshield_amount(
             account_1.clone(),
             address!("0xe03747a83E600c3ab6C2e16dd1989C9b419D3a86"),
@@ -192,7 +198,11 @@ async fn test_unshield_poi<P: Provider>(
         )
         .await
         .unwrap();
-    let unshield_tx = railgun.prove(&spends, &mut rand::rng()).await.unwrap();
+    let unshield_tx = railgun
+        .transactions()
+        .prove(&spends, &mut rand::rng())
+        .await
+        .unwrap();
 
     let usdc_contract = ERC20::new(USDC_ADDRESS, provider);
     let pre_unshield_balance_eoa = usdc_contract
@@ -225,7 +235,7 @@ async fn test_unshield_poi<P: Provider>(
 }
 
 async fn await_balance_update(
-    railgun: &mut RailgunProvider,
+    railgun: &mut RailgunWallet,
     account: Arc<dyn RailgunSigner>,
     asset: AssetId,
     expected: Option<u128>,

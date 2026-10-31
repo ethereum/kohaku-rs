@@ -93,7 +93,9 @@ pub enum SpendError {
 }
 
 impl Spend {
-    pub(crate) fn try_new(
+    /// Start a spend of the chosen notes. They must share a tree, an asset,
+    /// and the signer's viewing key. This does not select notes or check POI.
+    pub fn try_new(
         signer: Arc<dyn RailgunSigner>,
         inputs: Vec<UtxoNote>,
     ) -> Result<Self, SpendError> {

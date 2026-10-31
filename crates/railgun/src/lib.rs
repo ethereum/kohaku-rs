@@ -16,8 +16,8 @@ pub use merkle_tree::{
 };
 pub mod note;
 pub mod poi;
-pub mod provider;
 pub mod state;
+pub mod wallet;
 pub use state::RailgunCheckpoint;
 pub mod transact;
 

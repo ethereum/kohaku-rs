@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Several amount intents resolved together, so one selection can cover more
-/// than one output. [`RailgunProvider::transfer_amount`](crate::provider::RailgunProvider::transfer_amount)
+/// than one output. [`RailgunTransactor::transfer_amount`](crate::wallet::RailgunTransactor::transfer_amount)
 /// is the one-intent form.
 #[derive(Clone, Default)]
 pub struct AmountIntents {

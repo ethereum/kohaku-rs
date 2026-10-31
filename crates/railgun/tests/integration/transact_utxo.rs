@@ -8,7 +8,7 @@ use alloy::{
 use kohaku_fork_kit::railgun::deploy_railgun;
 use kohaku_railgun::{
     account::signer::RailgunSigner, builder::RailgunBuilder, caip::AssetId,
-    indexer::syncer::RpcSyncer,
+    indexer::syncer::RpcSyncer, transact::Spend,
 };
 use rand::random;
 use tracing::info;
@@ -27,7 +27,7 @@ sol! {
 /// Tests a full transact flow, including shielding, transferring, and unshielding.
 ///
 /// This integration test ensures that the entire transact flow works correctly using
-/// the public RailgunProvider interface. Includes internal syncing, tx building, UTXO
+/// the public RailgunWallet interface. Includes internal syncing, tx building, UTXO
 /// management, and UTXO proof generation.
 ///
 /// This integration test DOES NOT verify any TXID or POI functionality.
@@ -163,14 +163,17 @@ async fn test_transact_utxo() {
             break;
         }
     }
-    let spend = railgun
-        .spend(account_1.clone(), chosen)
+    let spend = Spend::try_new(account_1.clone(), chosen)
         .unwrap()
         .transfer(account_2.address(), 5_000, "test transfer")
         .unwrap()
         .with_change(&mut rand::rng())
         .unwrap();
-    let transfer_tx = railgun.prove(&[spend], &mut rand::rng()).await.unwrap();
+    let transfer_tx = railgun
+        .transactions()
+        .prove(&[spend], &mut rand::rng())
+        .await
+        .unwrap();
 
     provider
         .send_transaction(transfer_tx.tx_data.into())
@@ -196,6 +199,7 @@ async fn test_transact_utxo() {
     // Test Unshielding
     info!("Testing unshielding");
     let spends = railgun
+        .transactions()
         .unshield_amount(
             account_1.clone(),
             address!("0xe03747a83E600c3ab6C2e16dd1989C9b419D3a86"),
@@ -205,7 +209,11 @@ async fn test_transact_utxo() {
         )
         .await
         .unwrap();
-    let unshield_tx = railgun.prove(&spends, &mut rand::rng()).await.unwrap();
+    let unshield_tx = railgun
+        .transactions()
+        .prove(&spends, &mut rand::rng())
+        .await
+        .unwrap();
 
     provider
         .send_transaction(unshield_tx.tx_data.into())

@@ -1072,7 +1072,7 @@ mod submission_control_tests {
             )),
         )
         .unwrap();
-        let mut runtime = crate::provider::RailgunProvider::new(
+        let mut runtime = crate::wallet::RailgunWallet::new(
             chain,
             rpc,
             utxo,
@@ -1147,7 +1147,7 @@ mod submission_control_tests {
             )),
         )
         .unwrap();
-        let mut runtime = crate::provider::RailgunProvider::new(
+        let mut runtime = crate::wallet::RailgunWallet::new(
             chain,
             rpc,
             utxo,
