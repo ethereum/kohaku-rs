@@ -1,0 +1,31 @@
+[package]
+name = "kohaku-railgun-sync"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+testing = []
+
+[dependencies]
+alloy = { workspace = true }
+async-trait = { workspace = true }
+kohaku-railgun = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+ruint = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+web-time = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["time"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { workspace = true, features = ["futures"] }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
+[lints]
+workspace = true

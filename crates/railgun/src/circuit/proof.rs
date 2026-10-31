@@ -32,7 +32,7 @@ pub struct G2Affine {
 impl Proof {
     /// A placeholder proof for gas estimation: `A` is the generator, `B` and `C` are the point
     /// at infinity. The Railgun verifier accepts it when `tx.origin` is the verification bypass
-    /// address, or under [`crate::transact::verifier_override`]; a bundler's simulation cannot
+    /// address, or under a verifier state override; a bundler's simulation cannot
     /// use the former, so the latter is what makes `eth_estimateUserOperationGas` work on it.
     pub fn dummy() -> Self {
         Proof {

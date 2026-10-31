@@ -5,9 +5,10 @@ use alloy::{
 };
 use tracing::{info, warn};
 
-use crate::{
+use crate::log_to_sync_events;
+use kohaku_railgun::{
     chain_config::ChainConfig,
-    indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer, log_to_sync_events},
+    indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer},
 };
 
 /// JSON-RPC UTXO syncer.
@@ -85,7 +86,7 @@ impl RpcSyncer {
                 .from_block(batch_start)
                 .to_block(batch_end);
             let logs = self.provider.get_logs(&filter).await?;
-            crate::common::sleep(self.batch_delay).await;
+            crate::sleep(self.batch_delay).await;
 
             for log in logs {
                 match log_to_sync_events(log) {

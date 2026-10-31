@@ -178,7 +178,7 @@ async fn fresh_case(has_unshield: bool) {
     let directory = std::env::var_os("KOHAKU_POI_3X3_ARTIFACTS")
         .expect("set KOHAKU_POI_3X3_ARTIFACTS to the provisioned 03x03 directory");
     let artifacts = Artifacts::serve(Path::new(&directory)).await;
-    let prover = Groth16Prover::with_test_artifacts(&artifacts.url);
+    let prover = Groth16Prover::with_artifact_base_url(&artifacts.url);
     let (entry, input, output) = public_entry(has_unshield);
     let txid = entry.txid;
     let mut poi_tree = PoiMerkleTree::new(0);

@@ -8,7 +8,7 @@ use crate::{
 /// Everything one registered account knows about its own history.
 pub struct RecoveryAccount {
     pub spending_pubkey: SpendingPublicKey,
-    pub(crate) nullifying_key: NullifyingKey,
+    pub nullifying_key: NullifyingKey,
     pub unspent: Vec<UtxoNote>,
     pub spent: Vec<UtxoNote>,
     pub sent: Vec<SentNote>,

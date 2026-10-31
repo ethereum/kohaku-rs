@@ -4,9 +4,8 @@ use alloy::{
     network::Ethereum,
     providers::{Provider, ProviderBuilder},
 };
-use kohaku_railgun::{
-    builder::RailgunBuilder, chain_config::ChainConfig, indexer::syncer::SubsquidSyncer,
-};
+use kohaku_railgun::{builder::RailgunBuilder, chain_config::ChainConfig};
+use kohaku_railgun_sync::SubsquidSyncer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 

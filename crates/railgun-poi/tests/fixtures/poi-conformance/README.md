@@ -21,10 +21,10 @@ retains the decimal coordinate/public-signal strings, and adds a synthetic
 `txidMerklerootIndex: 0`. It performs no networking or proof generation.
 
 ```sh
-python3 crates/railgun/tests/fixtures/poi-conformance/generate.py \
+python3 crates/railgun-poi/tests/fixtures/poi-conformance/generate.py \
   /path/to/pinned/railgun-rust /path/to/disposable/output
 diff -r -x README.md -x generate.py \
-  crates/railgun/tests/fixtures/poi-conformance /path/to/disposable/output
+  crates/railgun-poi/tests/fixtures/poi-conformance /path/to/disposable/output
 ```
 
 Compare the seven generated data/license files; the output does not include
@@ -87,7 +87,7 @@ and is not an Alice-to-Bob or mainnet qualification.
 Run from `crates/`:
 
 ```sh
-NO_PROXY=localhost,127.0.0.1 cargo test --locked -p kohaku-railgun --lib conformance_tests
+NO_PROXY=localhost,127.0.0.1 cargo test --locked -p kohaku-railgun-poi --lib conformance_tests
 ```
 
 ## Fresh native proof generation (opt-in)
@@ -121,7 +121,7 @@ done
 cd crates
 NO_PROXY=localhost,127.0.0.1 \
 KOHAKU_POI_3X3_ARTIFACTS=/absolute/provisioned/03x03 \
-cargo test --locked --release -p kohaku-railgun --lib fresh_native_poi -- --ignored
+cargo test --locked --release -p kohaku-railgun-poi --lib fresh_native_poi -- --ignored
 ```
 
 The test authenticates all three SHA-256 digests against the pinned artifact
