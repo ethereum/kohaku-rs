@@ -7,7 +7,7 @@ The optional extensions are separate crates:
 
 - [`kohaku-railgun-sync`](../railgun-sync/) provides RPC, Subsquid, and chained syncers.
 - [`kohaku-railgun-poi`](../railgun-poi/) adds local PPOI lists, TXID indexing, proof recovery, and submission.
-- [`kohaku-railgun-userop`](../railgun-userop/) prepares paymaster-backed ERC-4337 operations.
+- [`kohaku-railgun-paymaster`](../railgun-paymaster/) prepares paymaster-backed ERC-4337 operations.
 
 The core wallet does not contact a PPOI service or prepare paymaster operations.
 Consumers choose a `UtxoSyncer` and supply it through

@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = []
-userop = ["dep:kohaku-railgun-userop"]
+userop = ["dep:kohaku-railgun-paymaster"]
 
 [dependencies]
 alloy = { workspace = true }
@@ -15,7 +15,7 @@ hex = { workspace = true }
 kohaku-crypto = { workspace = true }
 kohaku-merkle-tree = { workspace = true }
 kohaku-railgun = { workspace = true }
-kohaku-railgun-userop = { workspace = true, optional = true }
+kohaku-railgun-paymaster = { workspace = true, optional = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 ruint = { workspace = true }

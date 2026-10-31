@@ -19,7 +19,7 @@ use kohaku_railgun::{
     caip::AssetId,
 };
 use kohaku_railgun_sync::RpcSyncer;
-use kohaku_railgun_userop::RailgunUserOps;
+use kohaku_railgun_paymaster::RailgunUserOps;
 use kohaku_userop_kit::{
     bundler::Bundler,
     smart_account::simple_smart_account::{self, SimpleSmartAccount},

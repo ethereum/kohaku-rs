@@ -42,7 +42,7 @@ pub struct PoiProvider {
 }
 
 #[cfg(feature = "userop")]
-impl kohaku_railgun_userop::UserOpPoiPolicy for PoiProvider {
+impl kohaku_railgun_paymaster::UserOpPoiPolicy for PoiProvider {
     fn status(&self, note: &UtxoNote) -> PoiStatus {
         self.status(note.blinded_commitment.into(), note.commitment_type)
     }

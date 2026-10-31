@@ -1,4 +1,4 @@
-# kohaku-railgun-userop
+# kohaku-railgun-paymaster
 
 Opt-in RAILGUN paymaster and ERC-4337 UserOperation construction for
 [`kohaku-railgun`](../railgun/).

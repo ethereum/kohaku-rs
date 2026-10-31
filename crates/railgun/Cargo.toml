@@ -75,7 +75,7 @@ insta = { workspace = true }
 kohaku-railgun = { path = ".", features = ["testing"] }
 kohaku-railgun-sync = { workspace = true, features = ["testing"] }
 kohaku-railgun-poi = { workspace = true }
-kohaku-railgun-userop = { workspace = true }
+kohaku-railgun-paymaster = { workspace = true }
 kohaku-userop-kit = { workspace = true }
 serial_test = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

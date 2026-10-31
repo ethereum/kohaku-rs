@@ -23,7 +23,7 @@ wallet's commitments, but sync still contacts the configured services.
 
 The `userop` feature adds `PoiWallet::user_operations(provider)` and applies
 the same local note policy to paymaster builds. This feature explicitly opts
-into [`kohaku-railgun-userop`](../railgun-userop/).
+into [`kohaku-railgun-paymaster`](../railgun-paymaster/).
 
 The checkpoint contains unencrypted notes and pending proof inputs. Protect it
 as wallet data. Older combined Railgun checkpoints require a resync.

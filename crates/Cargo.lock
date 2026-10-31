@@ -5316,9 +5316,9 @@ dependencies = [
  "kohaku-fork-kit",
  "kohaku-merkle-tree",
  "kohaku-railgun",
+ "kohaku-railgun-paymaster",
  "kohaku-railgun-poi",
  "kohaku-railgun-sync",
- "kohaku-railgun-userop",
  "kohaku-userop-kit",
  "num-bigint 0.4.8",
  "rand 0.10.2",
@@ -5339,6 +5339,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kohaku-railgun-paymaster"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "kohaku-railgun",
+ "kohaku-userop-kit",
+ "rand 0.10.2",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "kohaku-railgun-poi"
 version = "0.1.0"
 dependencies = [
@@ -5354,8 +5368,8 @@ dependencies = [
  "kohaku-crypto",
  "kohaku-merkle-tree",
  "kohaku-railgun",
+ "kohaku-railgun-paymaster",
  "kohaku-railgun-sync",
- "kohaku-railgun-userop",
  "rand 0.10.2",
  "reqwest 0.13.4",
  "ruint",
@@ -5385,20 +5399,6 @@ dependencies = [
  "tokio",
  "tracing",
  "web-time",
-]
-
-[[package]]
-name = "kohaku-railgun-userop"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "kohaku-railgun",
- "kohaku-userop-kit",
- "rand 0.10.2",
- "serde",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
 ]
 
 [[package]]

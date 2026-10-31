@@ -7,7 +7,7 @@ members = [
     "railgun",
     "railgun-poi",
     "railgun-sync",
-    "railgun-userop",
+    "railgun-paymaster",
     "rpc-provider",
     "tor-rpc",
     "tornadocash",
@@ -61,7 +61,7 @@ kohaku-merkle-tree = { path = "merkle-tree" }
 kohaku-railgun = { path = "railgun" }
 kohaku-railgun-poi = { path = "railgun-poi" }
 kohaku-railgun-sync = { path = "railgun-sync" }
-kohaku-railgun-userop = { path = "railgun-userop" }
+kohaku-railgun-paymaster = { path = "railgun-paymaster" }
 kohaku-rpc-provider = { path = "rpc-provider" }
 kohaku-tor-rpc = { path = "tor-rpc" }
 kohaku-tornadocash = { path = "tornadocash" }

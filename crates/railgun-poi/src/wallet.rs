@@ -23,7 +23,7 @@ use kohaku_railgun::{
     wallet::{AnnotatedNote, BalanceEntry, NoteEntry, RailgunError, RailgunWallet},
 };
 #[cfg(feature = "userop")]
-use kohaku_railgun_userop::RailgunUserOps;
+use kohaku_railgun_paymaster::RailgunUserOps;
 use rand::CryptoRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
