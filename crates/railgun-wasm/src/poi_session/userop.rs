@@ -50,9 +50,16 @@ fn gross_up(amount: u128, fee_bps: u16) -> Result<u128, &'static str> {
         .checked_sub(fee_bps)
         .filter(|v| *v > 0)
         .ok_or("invalid Railgun unshield fee")?;
-    let numerator = U256::from(amount) * U256::from(10_000);
     let divisor = U256::from(divisor);
-    let gross = numerator / divisor + U256::from(numerator % divisor != U256::ZERO);
+    // Railgun transfers gross - floor(gross * fee_bps / 10_000) to the recipient.
+    // This is ceil(gross * divisor / 10_000), so choose the smallest gross
+    // whose net amount equals the requested amount. Ceil(amount * 10_000 /
+    // divisor) can deliver one extra wei and strand WETH after a native unwrap.
+    let gross = if amount == 0 {
+        U256::ZERO
+    } else {
+        (U256::from(amount - 1) * U256::from(10_000)) / divisor + U256::from(1)
+    };
     if gross >= U256::from(1u128 << 120) {
         return Err("unshield amount exceeds Railgun's 120-bit note limit");
     }
@@ -191,8 +198,8 @@ impl PoiSession {
             }
             calls.insert(0, weth_withdraw(weth, amount));
         }
-        let gross_amount = gross_up(amount, self.wallet.chain().unshield_fee_bps)
-            .map_err(JsError::new)?;
+        let gross_amount =
+            gross_up(amount, self.wallet.chain().unshield_fee_bps).map_err(JsError::new)?;
         let signer: Arc<dyn RailgunSigner> = self.signer.clone();
         let spends = self
             .wallet
@@ -216,11 +223,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gross_up_rounds_up_to_cover_protocol_fee() {
-        assert_eq!(gross_up(9_975, 25).unwrap(), 10_000);
-        assert_eq!(gross_up(1, 25).unwrap(), 2);
+    fn gross_up_delivers_exact_requested_net_amount() {
+        assert_eq!(gross_up(9_975, 25).unwrap(), 9_999);
+        assert_eq!(gross_up(1, 25).unwrap(), 1);
+        assert_eq!(gross_up(1_000, 25).unwrap(), 1_002);
+        assert_eq!(
+            gross_up(310_000_000_000_000_000, 25).unwrap(),
+            310_776_942_355_889_724
+        );
         assert!(gross_up((1u128 << 120) - 1, 25).is_err());
         assert_eq!(gross_up((1u128 << 120) - 1, 0).unwrap(), (1u128 << 120) - 1);
+
+        for fee_bps in [0, 1, 25, 50, 500, 5_000] {
+            for requested in 1..=10_000 {
+                let gross = gross_up(requested, fee_bps).unwrap();
+                let net = gross - gross * u128::from(fee_bps) / 10_000;
+                assert_eq!(net, requested, "fee_bps={fee_bps}, requested={requested}");
+                if gross > 1 {
+                    let previous = gross - 1;
+                    let previous_net = previous - previous * u128::from(fee_bps) / 10_000;
+                    assert!(previous_net < requested);
+                }
+            }
+        }
     }
 
     #[test]
