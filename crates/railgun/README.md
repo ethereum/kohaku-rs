@@ -96,3 +96,17 @@ up, a commitment that is not already in the tree is `Unavailable`.
 The loopback control test uses only public dummy state. When running behind a
 system HTTP proxy, include `127.0.0.1,localhost` in `NO_PROXY` so the fixture
 traffic stays local.
+
+## Local tests and PPOI service
+
+The regular Railgun tests use disposable Anvil accounts and a loopback POI
+fixture; no Sepolia RPC, developer key, or live POI endpoint is required. The
+fixture verifies public precomputed proofs but does not reproduce a deployed
+PPOI list provider. Fresh proof generation remains an opt-in test using public,
+pinned circuit artifacts; see the [fixture instructions](./tests/fixtures/poi-conformance/README.md).
+
+`nix build .#railgunPpoi` packages the upstream PPOI node as an executable at
+`result/bin/railgun-ppoi`. This is a separate opt-in service, not part of the
+default development shell or the regular test fixture. Running it requires
+MongoDB and the node configuration described by the
+[upstream project](https://github.com/Railgun-Community/private-proof-of-innocence/tree/4b1eaf6ef19099dbfd6b43b1ca78d2ce0132a752/packages/node).
