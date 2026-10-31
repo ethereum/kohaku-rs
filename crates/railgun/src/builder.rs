@@ -11,11 +11,11 @@ use crate::{
     },
     merkle_tree::SmartWalletUtxoVerifier,
     poi::provider::PoiProvider,
-    provider::{RailgunProvider, RailgunProviderError},
     state::RailgunCheckpoint,
+    wallet::{RailgunError, RailgunWallet},
 };
 
-/// Builder for constructing a `RailgunProvider`.
+/// Builder for constructing a `RailgunWallet`.
 pub struct RailgunBuilder {
     chain: ChainConfig,
     provider: DynProvider,
@@ -44,7 +44,7 @@ impl RailgunBuilder {
         self
     }
 
-    /// Sets a custom UTXO syncer for the provider. If not set, a default subsquid + RPC syncer will
+    /// Sets a custom UTXO syncer for the wallet. If not set, a default subsquid + RPC syncer will
     /// be used.
     #[must_use]
     pub fn with_utxo_syncer(mut self, syncer: Arc<dyn UtxoSyncer>) -> Self {
@@ -55,19 +55,19 @@ impl RailgunBuilder {
     /// Enables POI support.
     ///
     /// Uses the chain's POI endpoint and list keys. Spending selects only notes
-    /// whose local status is `Valid`. [`RailgunProvider::sync`] and
-    /// [`RailgunProvider::sync_to`] copy the list, then
-    /// [`RailgunProvider::process_pending_poi`] submits proofs.
+    /// whose local status is `Valid`. [`RailgunWallet::sync`] and
+    /// [`RailgunWallet::sync_to`] copy the list, then
+    /// [`RailgunWallet::process_pending_poi`] submits proofs.
     #[must_use]
     pub fn with_poi(mut self) -> Self {
         self.poi = true;
         self
     }
 
-    /// Builds the `RailgunProvider` with the specified configuration.
+    /// Builds the `RailgunWallet` with the specified configuration.
     #[must_use]
     #[expect(clippy::unused_async, reason = "Preserve the builder's async API")]
-    pub async fn build(self) -> Result<RailgunProvider, RailgunProviderError> {
+    pub async fn build(self) -> Result<RailgunWallet, RailgunError> {
         let utxo_syncer = self.utxo_syncer.unwrap_or_else(|| {
             Arc::new(
                 ChainedSyncer::new()
@@ -105,7 +105,7 @@ impl RailgunBuilder {
             None
         };
 
-        RailgunProvider::new(
+        RailgunWallet::new(
             self.chain,
             self.provider,
             utxo_indexer,

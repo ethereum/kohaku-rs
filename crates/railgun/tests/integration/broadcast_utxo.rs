@@ -133,6 +133,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
     assert_eq!(native_before, U256::ZERO);
     assert_eq!(tokens_before, U256::ZERO);
     let spends = railgun
+        .transactions()
         .unshield_amount(
             railgun_signer.clone(),
             owner.address(),
@@ -151,6 +152,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
     }];
     // Estimate dummy proofs with temporary state overrides, then generate one genuine proof.
     let gas = railgun
+        .user_operations()
         .simulate_gas_limits(
             &spends,
             &*alto,
@@ -162,6 +164,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
         )
         .await?;
     let (signable, report) = railgun
+        .user_operations()
         .prepare_userop_single_proof(
             &spends,
             &*alto,
