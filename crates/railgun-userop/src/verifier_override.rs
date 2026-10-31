@@ -5,7 +5,7 @@
 //! proof, hence a spending signature. Instead, the estimate call can carry a state override
 //! that zeroes the G2 elements (`beta2`, `gamma2`, `delta2`) of the verifying keys in use. Every
 //! factor of the pairing check becomes `e(·, O) = 1`, so `verify` returns true for the dummy
-//! proof of [`crate::circuit::proof::Proof::dummy`] while running exactly the code and precompiles
+//! proof of [`kohaku_railgun::circuit::proof::Proof::dummy`] while running exactly the code and precompiles
 //! of a real verification: `alpha1` and `ic` are left in place (`verify` requires
 //! `alpha1.x != 0`), and the gas of the ec operations and of the pairing precompile does not
 //! depend on the values.
@@ -107,7 +107,7 @@ mod tests {
 
 /// Against a fork of Sepolia: `verify` accepts the dummy proof under the override and refuses
 /// it without. Needs `RPC_URL_SEPOLIA` and anvil, skipped otherwise.
-#[cfg(all(test, native))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod fork_tests {
     use alloy::{
         network::TransactionBuilder,
@@ -119,7 +119,7 @@ mod fork_tests {
     };
 
     use super::*;
-    use crate::{
+    use kohaku_railgun::{
         abis::railgun::{
             BoundParams, CommitmentCiphertext, CommitmentPreimage, RailgunSmartWallet, Transaction,
             UnshieldType,

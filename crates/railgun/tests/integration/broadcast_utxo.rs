@@ -17,8 +17,9 @@ use kohaku_railgun::{
     account::signer::{PrivateKeySigner, RailgunSigner},
     builder::RailgunBuilder,
     caip::AssetId,
-    indexer::syncer::RpcSyncer,
 };
+use kohaku_railgun_sync::RpcSyncer;
+use kohaku_railgun_userop::RailgunUserOps;
 use kohaku_userop_kit::{
     bundler::Bundler,
     smart_account::simple_smart_account::{self, SimpleSmartAccount},
@@ -151,8 +152,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
             .clone(),
     }];
     // Estimate dummy proofs with temporary state overrides, then generate one genuine proof.
-    let gas = railgun
-        .user_operations()
+    let gas = RailgunUserOps::new(&mut railgun, provider.clone())
         .simulate_gas_limits(
             &spends,
             &*alto,
@@ -163,8 +163,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
             &mut rand::rng(),
         )
         .await?;
-    let (signable, report) = railgun
-        .user_operations()
+    let (signable, report) = RailgunUserOps::new(&mut railgun, provider.clone())
         .prepare_userop_single_proof(
             &spends,
             &*alto,

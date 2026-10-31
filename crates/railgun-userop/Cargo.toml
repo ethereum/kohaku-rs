@@ -1,0 +1,20 @@
+[package]
+name = "kohaku-railgun-userop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy = { workspace = true }
+kohaku-railgun = { workspace = true }
+kohaku-userop-kit = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+alloy = { workspace = true, features = ["provider-anvil-node"] }
+tokio = { workspace = true, features = ["macros", "rt"] }

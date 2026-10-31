@@ -2,11 +2,8 @@ use alloy::primitives::{Address, Bytes, FixedBytes};
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    caip::AssetId,
-    crypto::aes::Ciphertext,
-    indexer::syncer::{self, normalize_tree_position::normalize_tree_position},
-};
+use crate::normalize_tree_position::normalize_tree_position;
+use kohaku_railgun::{caip::AssetId, crypto::Ciphertext, indexer::syncer};
 
 #[derive(Serialize)]
 pub struct GraphqlRequest<V: Serialize> {

@@ -33,8 +33,8 @@ pub enum Groth16ProverError {
 }
 
 impl Groth16Prover {
-    #[cfg(all(test, native))]
-    pub(crate) fn with_test_artifacts(base_url: &str) -> Self {
+    /// Uses an explicit artifact source, for controlled testing or alternate hosting.
+    pub fn with_artifact_base_url(base_url: &str) -> Self {
         Self {
             artifact_loader: RemoteArtifactLoader::new(base_url),
         }
@@ -56,22 +56,12 @@ impl Groth16Prover {
         let commitments = inputs.commitments_out.len();
         let circuit_name = format!("railgun/{:02}x{:02}", nullifiers, commitments);
 
-        self.prove(&circuit_name, inputs.to_circuit_signals()).await
+        self.prove_named(&circuit_name, inputs.to_circuit_signals())
+            .await
     }
 
-    #[tracing::instrument(name = "prove_poi", skip_all)]
-    pub async fn prove_poi(
-        &self,
-        inputs: &crate::circuit::inputs::poi_inputs::PoiCircuitInputs,
-    ) -> Result<Proof, Groth16ProverError> {
-        let nullifiers = inputs.nullifiers.len();
-        let commitments = inputs.commitments.len();
-        let circuit_name = format!("railgun/poi/{:02}x{:02}", nullifiers, commitments);
-
-        self.prove(&circuit_name, inputs.to_circuit_signals()).await
-    }
-
-    async fn prove(
+    /// Proves using explicitly named circuit artifacts and prepared signals.
+    pub async fn prove_named(
         &self,
         circuit_name: &str,
         inputs: HashMap<String, Vec<U256>>,

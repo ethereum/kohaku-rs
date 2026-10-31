@@ -41,6 +41,20 @@ pub struct PoiProvider {
     lists: PoiLists,
 }
 
+#[cfg(feature = "userop")]
+impl kohaku_railgun_userop::UserOpPoiPolicy for PoiProvider {
+    fn status(&self, note: &UtxoNote) -> PoiStatus {
+        self.status(note.blinded_commitment.into(), note.commitment_type)
+    }
+
+    fn register(
+        &mut self,
+        operations: &[ProvedOperation],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.register_ops(operations).map_err(|e| Box::new(e) as _)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct PoiProviderState {
     pub pending: Vec<PendingPoiEntry>,
@@ -561,8 +575,13 @@ impl PoiProvider {
                 txid_tree,
             )?;
 
+            let circuit_name = format!(
+                "railgun/poi/{:02}x{:02}",
+                inputs.nullifiers.len(),
+                inputs.commitments.len()
+            );
             let proof = prover
-                .prove_poi(&inputs)
+                .prove_named(&circuit_name, inputs.to_circuit_signals())
                 .await
                 .map_err(|e| PendingPoiError::Prover(Box::new(e)))?;
             let blinded_commitments_out =
@@ -1063,24 +1082,12 @@ mod submission_control_tests {
             alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
-        let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
-            Arc::new(EmptyUtxo),
-            Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
-                chain.railgun_smart_wallet,
-                rpc.clone(),
-            )),
-        )
-        .unwrap();
-        let mut runtime = crate::wallet::RailgunWallet::new(
-            chain,
-            rpc,
-            utxo,
-            Groth16Prover::new(),
-            Some(provider),
-            PoiCheckpoint::default(),
-        )
-        .unwrap();
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(chain, rpc)
+            .with_utxo_syncer(Arc::new(EmptyUtxo))
+            .build()
+            .await
+            .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
         timeout(
             Duration::from_secs(10),
             runtime.sync_to_without_poi_submission(1),
@@ -1138,24 +1145,12 @@ mod submission_control_tests {
             alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
-        let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
-            Arc::new(EmptyUtxo),
-            Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
-                chain.railgun_smart_wallet,
-                rpc.clone(),
-            )),
-        )
-        .unwrap();
-        let mut runtime = crate::wallet::RailgunWallet::new(
-            chain,
-            rpc,
-            utxo,
-            Groth16Prover::new(),
-            Some(provider),
-            PoiCheckpoint::default(),
-        )
-        .unwrap();
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(chain, rpc)
+            .with_utxo_syncer(Arc::new(EmptyUtxo))
+            .build()
+            .await
+            .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
         timeout(
             Duration::from_secs(10),
             runtime.sync_to_without_poi_submission(1),

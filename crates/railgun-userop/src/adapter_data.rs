@@ -4,7 +4,7 @@ use alloy::{
     sol_types::SolValue,
 };
 
-use crate::{
+use kohaku_railgun::{
     abis::railgun::Transaction,
     account::{address::RailgunAddress, chain::ChainId},
     crypto::keys::{ByteKey, MasterPublicKey, ViewingPublicKey},

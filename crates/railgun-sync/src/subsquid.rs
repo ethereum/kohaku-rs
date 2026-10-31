@@ -2,7 +2,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::{info, warn};
 
-use crate::indexer::syncer::{self, SyncerError, TxidSyncer, UtxoSyncer, subsquid_types::*};
+use crate::subsquid_types::*;
+use kohaku_railgun::indexer::syncer::{self, SyncerError, TxidSyncer, UtxoSyncer};
 
 /// Subsquid UTXO & TXID syncer.
 ///
@@ -275,7 +276,7 @@ impl SubsquidSyncer {
                         "GraphQL request failed (attempt {}/{}): {}",
                         attempt, self.max_retries, e
                     );
-                    crate::common::sleep(self.retry_delay).await;
+                    crate::sleep(self.retry_delay).await;
                 }
             }
         }

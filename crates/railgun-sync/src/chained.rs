@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer};
+use kohaku_railgun::indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer};
 
 /// Helper syncer that chains multiple UTXO syncers together.
 ///

@@ -5316,6 +5316,9 @@ dependencies = [
  "kohaku-fork-kit",
  "kohaku-merkle-tree",
  "kohaku-railgun",
+ "kohaku-railgun-poi",
+ "kohaku-railgun-sync",
+ "kohaku-railgun-userop",
  "kohaku-userop-kit",
  "num-bigint 0.4.8",
  "rand 0.10.2",
@@ -5333,7 +5336,69 @@ dependencies = [
  "tracing-test",
  "tracing-wasm",
  "wasmer",
+]
+
+[[package]]
+name = "kohaku-railgun-poi"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "ark-bn254",
+ "ark-ff 0.6.0",
+ "ark-groth16",
+ "async-trait",
+ "cfg_aliases",
+ "futures",
+ "gloo-timers",
+ "hex",
+ "kohaku-crypto",
+ "kohaku-merkle-tree",
+ "kohaku-railgun",
+ "kohaku-railgun-sync",
+ "kohaku-railgun-userop",
+ "rand 0.10.2",
+ "reqwest 0.13.4",
+ "ruint",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
  "web-time",
+]
+
+[[package]]
+name = "kohaku-railgun-sync"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "async-trait",
+ "cfg_aliases",
+ "gloo-timers",
+ "kohaku-railgun",
+ "reqwest 0.13.4",
+ "ruint",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "web-time",
+]
+
+[[package]]
+name = "kohaku-railgun-userop"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "kohaku-railgun",
+ "kohaku-userop-kit",
+ "rand 0.10.2",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
