@@ -32,7 +32,8 @@ pub mod state {
 pub use client::{PoiClientError, PoiNodeClient};
 pub use lists::{PoiListState, PoiLists, PoiListsState, PoiSyncError};
 pub use provider::{
-    PendingPoiSummary, PoiCheckpoint, PoiProvider, PoiProviderError, PoiProviderState,
+    PendingPoiSummary, PoiCheckpoint, PoiProcessFailure, PoiProcessReport, PoiProvider,
+    PoiProviderError, PoiProviderState,
 };
 pub use txid_indexer::{TxidIndexer, TxidIndexerError, TxidIndexerState};
 

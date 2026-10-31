@@ -29,7 +29,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::provider::{
-    PendingPoiSummary, PoiCheckpoint, PoiProvider, PoiProviderError, list_key_string,
+    PendingPoiSummary, PoiCheckpoint, PoiProcessReport, PoiProvider, PoiProviderError,
+    list_key_string,
 };
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -219,6 +220,12 @@ impl PoiWallet {
     pub async fn process_pending_poi(&mut self) -> Result<(), PoiWalletError> {
         self.poi.process_pending(self.wallet.prover()).await?;
         Ok(())
+    }
+
+    /// Return the outcome of each pending proof attempt. A submitted proof is
+    /// still pending acceptance until a later list sync observes its output.
+    pub async fn process_pending_poi_report(&mut self) -> PoiProcessReport {
+        self.poi.process_pending_report(self.wallet.prover()).await
     }
 
     pub async fn discard_pending_poi(

@@ -17,6 +17,7 @@ pub struct RailgunBuilder {
     provider: DynProvider,
     state: RailgunCheckpoint,
     utxo_syncer: Option<Arc<dyn UtxoSyncer>>,
+    artifact_base_url: Option<String>,
 }
 
 impl RailgunBuilder {
@@ -27,6 +28,7 @@ impl RailgunBuilder {
             provider: provider.erased(),
             state: RailgunCheckpoint::default(),
             utxo_syncer: None,
+            artifact_base_url: None,
         }
     }
 
@@ -45,6 +47,14 @@ impl RailgunBuilder {
         self
     }
 
+    /// Select a caller-controlled circuit source (for example, packaged artifacts
+    /// served by a JavaScript host). The default remains the pinned remote source.
+    #[must_use]
+    pub fn with_artifact_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.artifact_base_url = Some(base_url.into());
+        self
+    }
+
     /// Builds the `RailgunWallet` with the specified configuration.
     #[must_use]
     #[expect(clippy::unused_async, reason = "Preserve the builder's async API")]
@@ -58,7 +68,10 @@ impl RailgunBuilder {
 
         let utxo_indexer = UtxoIndexer::new(self.state.utxo, utxo_syncer, utxo_verifier)?;
 
-        let prover = Groth16Prover::new();
+        let prover = self
+            .artifact_base_url
+            .as_deref()
+            .map_or_else(Groth16Prover::new, Groth16Prover::with_artifact_base_url);
 
         RailgunWallet::new(self.chain, utxo_indexer, prover)
     }

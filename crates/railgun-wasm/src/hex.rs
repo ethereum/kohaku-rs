@@ -4,7 +4,7 @@ use tsify::Tsify;
 
 #[derive(Serialize, Deserialize, Tsify)]
 #[tsify(type = "`0x${string}`")]
-pub struct Hex(String);
+pub struct Hex(pub(crate) String);
 
 #[derive(Debug, thiserror::Error)]
 pub enum HexError {

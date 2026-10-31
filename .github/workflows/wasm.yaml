@@ -72,3 +72,7 @@ jobs:
         run: >-
           nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/${{ matrix.artifact }}.wasm
           --target web --out-dir crates/target/${{ matrix.output }}-web
+
+      - name: Smoke test Railgun Node bindings
+        if: matrix.name == 'Railgun'
+        run: node crates/railgun-wasm/tests/node-smoke.cjs

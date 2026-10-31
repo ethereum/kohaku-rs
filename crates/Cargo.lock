@@ -5411,11 +5411,17 @@ dependencies = [
  "hex",
  "js-sys",
  "kohaku-railgun",
+ "kohaku-railgun-poi",
+ "kohaku-railgun-sync",
+ "kohaku-userop-kit",
  "rand 0.10.2",
+ "reqwest 0.13.4",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tsify",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
 ]
 

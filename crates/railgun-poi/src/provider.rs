@@ -138,6 +138,26 @@ pub struct PendingPoiSummary {
     pub list_keys: Vec<String>,
 }
 
+/// Outcome of one best-effort queue pass. Submission is not POI-list inclusion;
+/// callers must sync lists again before showing an output as Valid.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoiProcessReport {
+    pub pending_before: usize,
+    pub submitted: Vec<String>,
+    pub waiting_for_txid: Vec<String>,
+    pub waiting_for_input_poi: Vec<String>,
+    pub failed: Vec<PoiProcessFailure>,
+    pub pending_after: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoiProcessFailure {
+    pub txid: String,
+    pub error: String,
+}
+
 #[derive(Debug, Error)]
 enum PendingPoiError {
     #[error("POI client error: {0}")]
@@ -226,8 +246,14 @@ impl PoiProvider {
         &mut self,
         prover: &Groth16Prover,
     ) -> Result<(), PoiProviderError> {
-        self.submit_pending(prover).await;
+        let _ = self.process_pending_report(prover).await;
         Ok(())
+    }
+
+    /// Process the queue and return per-operation outcomes. Errors stay queued
+    /// for a later retry; a submitted proof still needs list inclusion.
+    pub async fn process_pending_report(&mut self, prover: &Groth16Prover) -> PoiProcessReport {
+        self.submit_pending(prover).await
     }
 
     pub fn register_ops(&mut self, operations: &[ProvedOperation]) -> Result<(), PoiProviderError> {
@@ -471,25 +497,39 @@ impl PoiProvider {
         self.inner.pending.push(entry_from_op(op, list_keys));
     }
 
-    async fn submit_pending(&mut self, prover: &Groth16Prover) {
+    async fn submit_pending(&mut self, prover: &Groth16Prover) -> PoiProcessReport {
+        let mut report = PoiProcessReport {
+            pending_before: self.inner.pending.len(),
+            ..PoiProcessReport::default()
+        };
         for i in (0..self.inner.pending.len()).rev() {
             let entry = self.inner.pending[i].clone();
+            let txid = format!("{:?}", entry.txid);
             match self.submit_poi(prover, &entry).await {
                 Ok(_) => {
                     info!("Submitted POI for {:?}", entry.txid);
+                    report.submitted.push(txid);
                     self.inner.pending.remove(i);
                 }
                 Err(PendingPoiError::MissingTxid(_)) => {
                     info!("Waiting for txid to be indexed: {:?}", entry.txid);
+                    report.waiting_for_txid.push(txid);
                 }
                 Err(PendingPoiError::ProofNotFound(commitment, list_key)) => {
                     info!("Waiting for input {commitment} to appear in POI list {list_key}");
+                    report.waiting_for_input_poi.push(txid);
                 }
                 Err(e) => {
                     warn!("Failed to submit POI for pending entry: {:?}", e);
+                    report.failed.push(PoiProcessFailure {
+                        txid,
+                        error: e.to_string(),
+                    });
                 }
             }
         }
+        report.pending_after = self.inner.pending.len();
+        report
     }
 
     async fn submit_poi(
@@ -1172,10 +1212,17 @@ mod submission_control_tests {
         // Explicit processing looks for an inclusion proof in the local list.
         // The empty list has none, so this stops before the prover and sends
         // nothing. The entry stays pending.
-        timeout(Duration::from_secs(10), runtime.process_pending_poi())
-            .await
-            .unwrap()
-            .unwrap();
+        let report = timeout(
+            Duration::from_secs(10),
+            runtime.process_pending_poi_report(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(report.pending_before, 1);
+        assert_eq!(report.waiting_for_input_poi.len(), 1);
+        assert!(report.submitted.is_empty());
+        assert!(report.failed.is_empty());
+        assert_eq!(report.pending_after, 1);
         assert_eq!(
             *methods.lock().unwrap(),
             vec![

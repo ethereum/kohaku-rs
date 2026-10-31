@@ -38,4 +38,46 @@ impl Chain {
     pub fn chain_id(&self) -> u64 {
         self.inner.id
     }
+
+    #[wasm_bindgen(getter, js_name = railgunSmartWallet)]
+    #[must_use]
+    pub fn railgun_smart_wallet(&self) -> String {
+        self.inner.railgun_smart_wallet.to_string()
+    }
+
+    #[wasm_bindgen(getter, js_name = wrappedBaseToken)]
+    #[must_use]
+    pub fn wrapped_base_token(&self) -> String {
+        self.inner.wrapped_base_token.to_string()
+    }
+
+    #[wasm_bindgen(getter, js_name = unshieldFeeBps)]
+    #[must_use]
+    pub fn unshield_fee_bps(&self) -> u16 {
+        self.inner.unshield_fee_bps
+    }
+
+    #[wasm_bindgen(getter, js_name = deploymentBlock)]
+    #[must_use]
+    pub fn deployment_block(&self) -> u64 {
+        self.inner.deployment_block
+    }
+
+    #[wasm_bindgen(getter, js_name = poiStartBlock)]
+    #[must_use]
+    pub fn poi_start_block(&self) -> u64 {
+        self.inner.poi_start_block
+    }
+
+    #[wasm_bindgen(getter, js_name = subsquidEndpoint)]
+    #[must_use]
+    pub fn subsquid_endpoint(&self) -> String {
+        self.inner.subsquid_endpoint.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = poiEndpoint)]
+    #[must_use]
+    pub fn poi_endpoint(&self) -> String {
+        self.inner.poi_endpoint.clone()
+    }
 }
