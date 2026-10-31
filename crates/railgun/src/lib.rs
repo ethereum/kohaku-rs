@@ -11,12 +11,14 @@ mod common;
 pub mod crypto;
 pub mod indexer;
 mod merkle_tree;
+pub use merkle_tree::{
+    MerkleTreeState, MerkleTreeVerifier, PoiMerkleTree, TxidMerkleTree, UtxoMerkleTree,
+};
 pub mod note;
 pub mod poi;
 pub mod provider;
-mod railgun_database;
 pub mod state;
-pub use state::{RailgunSnapshot, RailgunState};
+pub use state::RailgunCheckpoint;
 pub mod transact;
 
 #[cfg(all(test, native))]

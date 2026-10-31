@@ -137,6 +137,7 @@ pub struct RailgunProvider {
     utxo_indexer: UtxoIndexer,
     prover: Groth16Prover,
     poi_provider: Option<PoiProvider>,
+    preserved_poi: crate::poi::provider::PoiCheckpoint,
 }
 
 /// Unspent notes a build may spend, plus accounts whose POI status was not observed.
@@ -218,12 +219,13 @@ pub enum RailgunProviderError {
 }
 
 impl RailgunProvider {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         chain: ChainConfig,
         provider: DynProvider,
         utxo_indexer: UtxoIndexer,
         prover: Groth16Prover,
         poi_provider: Option<PoiProvider>,
+        preserved_poi: crate::poi::provider::PoiCheckpoint,
     ) -> Result<Self, RailgunProviderError> {
         Ok(Self {
             chain,
@@ -231,12 +233,25 @@ impl RailgunProvider {
             utxo_indexer,
             prover,
             poi_provider,
+            preserved_poi,
         })
     }
 
     /// Last block the UTXO indexer has been synced to.
     pub fn synced_block(&self) -> u64 {
         self.utxo_indexer.synced_block()
+    }
+
+    /// A coherent typed checkpoint that the caller may persist in any format.
+    pub fn state(&self) -> crate::RailgunCheckpoint {
+        crate::RailgunCheckpoint {
+            utxo: self.utxo_indexer.state(),
+            poi: self
+                .poi_provider
+                .as_ref()
+                .map(PoiProvider::state)
+                .unwrap_or_else(|| self.preserved_poi.clone()),
+        }
     }
 
     /// Whether POI support is enabled on this provider.
@@ -310,11 +325,12 @@ impl RailgunProvider {
 
     /// Register a signer with the provider. The provider will index and track
     /// UTXOs for the associated address.
+    #[expect(clippy::unused_async, reason = "Preserve the provider's async API")]
     pub async fn register(
         &mut self,
         signer: Arc<dyn RailgunSigner>,
     ) -> Result<(), RailgunProviderError> {
-        self.utxo_indexer.register(signer).await?;
+        self.utxo_indexer.register(signer)?;
         Ok(())
     }
 
@@ -517,12 +533,13 @@ impl RailgunProvider {
     /// after the submitter did not answer. Returns how many entries were dropped. Entries of
     /// operations that are never mined are also dropped automatically during sync, once the
     /// grace period has passed.
+    #[expect(clippy::unused_async, reason = "Preserve the provider's async API")]
     pub async fn discard_pending_poi(
         &mut self,
         operations: &[ProvedOperation],
     ) -> Result<usize, RailgunProviderError> {
         match &mut self.poi_provider {
-            Some(p) => Ok(p.discard_ops(operations).await?),
+            Some(p) => Ok(p.discard_ops(operations)?),
             None => Ok(0),
         }
     }
@@ -553,7 +570,7 @@ impl RailgunProvider {
     ) -> Result<ProvedTx, RailgunProviderError> {
         let operations = self.prove_spends(spends, rng, true).await?;
         if let Some(poi_provider) = &mut self.poi_provider {
-            poi_provider.register_ops(&operations).await?;
+            poi_provider.register_ops(&operations)?;
         }
         Ok(ProvedTx::new(self.chain.railgun_smart_wallet, operations))
     }
@@ -724,7 +741,7 @@ impl RailgunProvider {
         }
 
         if let Some(poi_provider) = &mut self.poi_provider {
-            poi_provider.register_ops(&operations).await?;
+            poi_provider.register_ops(&operations)?;
         }
         let report = SingleProofReport {
             total_gas_limit: total_gas,
@@ -978,7 +995,7 @@ impl RailgunProvider {
             if new_fee <= fee_value && new_fee.abs_diff(fee_value) <= fee_value / 100 {
                 info!("Fee converged at {}, total gas: {}", new_fee, total_gas);
                 if let Some(poi_provider) = &mut self.poi_provider {
-                    poi_provider.register_ops(&operations).await?;
+                    poi_provider.register_ops(&operations)?;
                 }
                 return Ok(signable);
             }
@@ -1199,8 +1216,7 @@ mod poi_availability_tests {
             indexed_account::IndexedAccountState,
             syncer::{SyncEvent, SyncerError, UtxoSyncer},
         },
-        railgun_database::RailgunDB,
-        state::RailgunState,
+        state::RailgunCheckpoint,
         transact::SpendError,
     };
 
@@ -1233,10 +1249,10 @@ mod poi_availability_tests {
             11_155_111,
         );
         let asset = AssetId::erc20(Address::repeat_byte(0x11));
-        let db = RailgunState::default();
-        db.set_account(
-            &signer.address(),
-            &IndexedAccountState {
+        let mut state = RailgunCheckpoint::default();
+        state.utxo.accounts.insert(
+            signer.address(),
+            IndexedAccountState {
                 notes: (0..count)
                     .map(|leaf| {
                         UtxoNote::new(
@@ -1253,9 +1269,16 @@ mod poi_availability_tests {
                     .collect(),
                 ..Default::default()
             },
-        )
-        .await
-        .unwrap();
+        );
+        if !poi {
+            state.poi.lists.0.insert(
+                "disabled-list".into(),
+                crate::poi::PoiListState {
+                    trees: Default::default(),
+                    next_index: 42,
+                },
+            );
+        }
         let mut chain = ChainConfig::sepolia();
         chain.poi_endpoint = url.to_owned();
         chain.subsquid_endpoint = url.to_owned();
@@ -1264,7 +1287,7 @@ mod poi_availability_tests {
             .connect_http(url.parse().unwrap())
             .erased();
         let builder = RailgunBuilder::new(chain, rpc)
-            .with_state(db)
+            .with_state(state)
             .with_utxo_syncer(Arc::new(NoSync));
         // The built-in prover's artifact loader is not injectable yet. A failed
         // status must stop build before that loader can be reached.
@@ -1378,6 +1401,10 @@ mod poi_availability_tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let (mut provider, signer, _) = fixture(&url, false).await;
+        assert_eq!(
+            provider.state().poi.lists.0[&"disabled-list".into()].next_index,
+            42
+        );
         assert_eq!(
             timeout(Duration::from_secs(5), provider.notes(signer.address()))
                 .await

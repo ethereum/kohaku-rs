@@ -21,7 +21,6 @@ use crate::{
     indexer::syncer::{Operation, SyncerError},
     merkle_tree::{PoiMerkleTree, TxidLeafHash},
     poi::conformance_tests::assert_fresh_submission,
-    railgun_database::write_poi_snapshot,
 };
 
 // Compressed files in the production loader's pinned artifact commit
@@ -186,18 +185,21 @@ async fn fresh_case(has_unshield: bool) {
     poi_tree
         .insert_leaves(&[U256::from(1), U256::from(2), input.blinded_commitment], 0)
         .unwrap();
-    let store = RailgunState::default();
-    write_poi_snapshot(&store, &entry.list_keys[0], 3, &[(0, poi_tree.state())])
-        .await
-        .unwrap();
+    let mut state = PoiCheckpoint::default();
+    state.lists.0.insert(
+        entry.list_keys[0].clone(),
+        crate::poi::lists::PoiListState {
+            trees: [(0, poi_tree.state())].into(),
+            next_index: 3,
+        },
+    );
     let provider = PoiProvider::new(
         11_155_111,
-        store,
+        state,
         Arc::new(NoSync),
         "http://127.0.0.1:1",
         entry.list_keys.clone(),
     )
-    .await
     .unwrap();
     let mut txid_tree = TxidMerkleTree::new(3);
     let index = UtxoTreeIndex::included(output.tree_number, output.leaf_index);

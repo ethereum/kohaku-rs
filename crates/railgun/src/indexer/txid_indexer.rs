@@ -10,8 +10,6 @@ use crate::{
     indexer::syncer::{Operation, SyncerError, TxidSyncer},
     merkle_tree::{MerkleTreeError, TOTAL_LEAVES, TxidLeafHash, TxidMerkleTree, UtxoTreeIndex},
     poi::client::{PoiClientError, PoiNodeClient},
-    railgun_database::{DatabaseError, RailgunDB, write_txid_snapshot},
-    state::RailgunState,
 };
 
 pub struct TxidIndexer {
@@ -21,14 +19,13 @@ pub struct TxidIndexer {
     /// kept in full in `inner.own_ops`, the others are reduced to a txid leaf as before.
     watched: std::collections::HashSet<U256>,
 
-    db: RailgunState,
     txid_syncer: Arc<dyn TxidSyncer>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
-pub(crate) struct TxidIndexerState {
+pub struct TxidIndexerState {
     pub synced_block: u64,
-    pub trees: Vec<u32>,
+    pub trees: HashMap<u32, crate::merkle_tree::MerkleTreeState>,
     pub pending: Vec<Operation>,
     pub txid_to_utxo_position: HashMap<Txid, (u32, u32)>,
     pub txid_to_txid_position: HashMap<Txid, (u32, u32)>,
@@ -45,38 +42,30 @@ pub enum TxidIndexerError {
     PoiClient(#[from] PoiClientError),
     #[error("TXID tree root mismatch for tree {tree_number}")]
     RootMismatch { tree_number: u32 },
-    #[error("Database error: {0}")]
-    DatabaseError(#[from] DatabaseError),
     #[error("Merkle tree error: {0}")]
     MerkleTree(#[from] MerkleTreeError),
 }
 
 impl TxidIndexer {
-    pub async fn new(
-        db: RailgunState,
+    pub fn new(
+        inner: TxidIndexerState,
         txid_syncer: Arc<dyn TxidSyncer>,
     ) -> Result<Self, TxidIndexerError> {
-        let inner = db.get_txid_indexer().await?;
-
         let mut txid_trees = HashMap::new();
-        for number in inner.trees.clone() {
-            let tree_state = db.get_txid_tree(number).await?;
-            if let Some(tree_state) = tree_state {
-                txid_trees.insert(number, TxidMerkleTree::from_state(tree_state)?);
-            }
+        for (number, tree_state) in &inner.trees {
+            txid_trees.insert(*number, TxidMerkleTree::from_state(tree_state.clone())?);
         }
 
         info!(
             "Loaded Txid indexer state: synced_block={}, trees={:?}, pending_ops={}",
             inner.synced_block,
-            inner.trees,
+            txid_trees.keys().collect::<Vec<_>>(),
             inner.pending.len()
         );
         Ok(TxidIndexer {
             inner,
             trees: txid_trees,
             watched: Default::default(),
-            db,
             txid_syncer,
         })
     }
@@ -135,7 +124,6 @@ impl TxidIndexer {
             trees: self.trees.clone(),
             inner: self.inner.clone(),
             watched: self.watched.clone(),
-            db: self.db.clone(),
             txid_syncer: self.txid_syncer.clone(),
         };
         // Operations fetched by an earlier sync and still waiting for validation.
@@ -149,7 +137,6 @@ impl TxidIndexer {
         staged.inner.synced_block = self.inner.synced_block.max(to_block);
 
         staged.update(poi_client).await?;
-        staged.save().await?;
         *self = staged;
         Ok(())
     }
@@ -252,338 +239,23 @@ impl TxidIndexer {
         Ok(())
     }
 
-    /// Persist trees, mappings, pending operations and checkpoint as one atomic snapshot.
-    /// The in-memory state publishes all snapshot entries under one write lock.
-    async fn save(&self) -> Result<(), DatabaseError> {
-        let state = TxidIndexerState {
+    /// Trees, mappings, pending operations and cursor form one checkpoint.
+    pub fn state(&self) -> TxidIndexerState {
+        TxidIndexerState {
             synced_block: self.inner.synced_block,
-            trees: self.trees.keys().cloned().collect(),
+            trees: self
+                .trees
+                .iter()
+                .map(|(number, tree)| (*number, tree.state()))
+                .collect(),
             pending: self.inner.pending.clone(),
             txid_to_utxo_position: self.inner.txid_to_utxo_position.clone(),
             txid_to_txid_position: self.inner.txid_to_txid_position.clone(),
             own_ops: self.inner.own_ops.clone(),
-        };
-        let trees: Vec<_> = self
-            .trees
-            .iter()
-            .map(|(number, tree)| (*number, tree.state()))
-            .collect();
-        write_txid_snapshot(&self.db, &state, &trees).await?;
-
-        Ok(())
+        }
     }
 }
 
 #[cfg(all(test, native))]
-mod snapshot_tests {
-    use std::sync::{
-        Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    };
-
-    use super::*;
-    use crate::{
-        merkle_tree::MerkleRoot,
-        poi::types::{ListKey, TransactProofData, ValidatedRailgunTxidStatus},
-        state::test_support::{
-            backend::{StateBackend, StateWriteError},
-            memory::MemoryState,
-        },
-    };
-
-    #[derive(Clone)]
-    struct FailCheckpoint {
-        inner: Arc<MemoryState>,
-        fail: Arc<AtomicBool>,
-        after_commit: Arc<AtomicBool>,
-        committed: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
-    }
-    #[async_trait::async_trait]
-    impl StateBackend for FailCheckpoint {
-        async fn get_batch(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, StateWriteError> {
-            self.inner.get_batch(keys).await
-        }
-        async fn put_batch(&self, items: &[(&[u8], &[u8])]) -> Result<(), StateWriteError> {
-            if self.fail.load(Ordering::SeqCst)
-                && items.iter().any(|(key, _)| *key == b"txid_indexer")
-            {
-                if self.after_commit.load(Ordering::SeqCst) {
-                    self.inner.put_batch(items).await?;
-                }
-                return Err(StateWriteError::from(Box::new(std::io::Error::other(
-                    "injected checkpoint write failure",
-                ))
-                    as Box<dyn std::error::Error + Send + Sync>));
-            }
-            self.inner.put_batch(items).await?;
-            let committed = self.committed.lock().unwrap().clone();
-            if let Some(committed) = committed
-                && items.iter().any(|(key, _)| *key == b"txid_indexer")
-            {
-                committed.notify_one();
-                std::future::pending::<()>().await;
-            }
-            Ok(())
-        }
-    }
-
-    struct TwoOperations;
-    fn op(block: u64, output: u32) -> Operation {
-        Operation {
-            block_number: block,
-            nullifiers: vec![U256::from(block)],
-            commitment_hashes: vec![U256::from(block + 1)],
-            bound_params_hash: U256::from(7),
-            utxo_tree_in: 0,
-            utxo_tree_out: 0,
-            utxo_out_start_index: output,
-            has_unshield: false,
-        }
-    }
-    #[async_trait::async_trait]
-    impl TxidSyncer for TwoOperations {
-        async fn latest_block(&self) -> Result<u64, SyncerError> {
-            Ok(20)
-        }
-        async fn sync(&self, from: u64, to: u64) -> Result<Vec<Operation>, SyncerError> {
-            Ok([op(10, 0), op(20, 1)]
-                .into_iter()
-                .filter(|operation| (from..=to).contains(&operation.block_number))
-                .collect())
-        }
-    }
-
-    struct Node {
-        index: Mutex<u32>,
-        verdict: Mutex<Result<bool, &'static str>>,
-        reads: AtomicUsize,
-    }
-    impl Node {
-        fn new(index: u32) -> Self {
-            Self {
-                index: Mutex::new(index),
-                verdict: Mutex::new(Ok(true)),
-                reads: AtomicUsize::new(0),
-            }
-        }
-    }
-    #[async_trait::async_trait]
-    impl PoiNodeClient for Node {
-        fn list_keys(&self) -> Vec<ListKey> {
-            vec![]
-        }
-        async fn merkletree_leaves(
-            &self,
-            _: &ListKey,
-            _: u64,
-            _: u64,
-        ) -> Result<Vec<U256>, PoiClientError> {
-            panic!("no list reads")
-        }
-        async fn validate_poi_merkleroots(
-            &self,
-            _: &ListKey,
-            _: &[MerkleRoot],
-        ) -> Result<bool, PoiClientError> {
-            panic!("no list reads")
-        }
-        async fn submit_proof(
-            &self,
-            _: HashMap<ListKey, TransactProofData>,
-        ) -> Result<(), PoiClientError> {
-            panic!("no proof submission")
-        }
-        async fn validated_txid(&self) -> Result<ValidatedRailgunTxidStatus, PoiClientError> {
-            Ok(ValidatedRailgunTxidStatus {
-                index: *self.index.lock().unwrap(),
-            })
-        }
-        async fn validate_txid_merkleroot(
-            &self,
-            _: u32,
-            _: u32,
-            _: MerkleRoot,
-        ) -> Result<bool, PoiClientError> {
-            self.reads.fetch_add(1, Ordering::SeqCst);
-            self.verdict
-                .lock()
-                .unwrap()
-                .map_err(|message| PoiClientError::UnexpectedResponse(message.to_owned()))
-        }
-    }
-
-    #[tokio::test]
-    async fn a_failed_checkpoint_write_cannot_split_trees_from_position_maps() {
-        let backend = FailCheckpoint {
-            inner: Arc::new(MemoryState::new()),
-            fail: Arc::new(AtomicBool::new(false)),
-            after_commit: Arc::new(AtomicBool::new(false)),
-            committed: Arc::new(Mutex::new(None)),
-        };
-        let store = RailgunState::new(backend.clone());
-        let node = Node::new(0);
-        let mut first = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        first.sync_to(10, &node).await.unwrap();
-        let before = store.get(b"txid_indexer").await.unwrap();
-
-        backend.fail.store(true, Ordering::SeqCst);
-        *node.index.lock().unwrap() = 1;
-        assert!(matches!(
-            first.sync_to(20, &node).await,
-            Err(TxidIndexerError::DatabaseError(_))
-        ));
-        assert_eq!(store.get(b"txid_indexer").await.unwrap(), before);
-        // A tree written ahead of the position map makes the restored indexer
-        // count an unindexed operation as already validated and skip its mapping.
-
-        drop(first);
-        backend.fail.store(false, Ordering::SeqCst);
-        let mut restored = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        restored.sync_to(20, &node).await.unwrap();
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
-        for (operation, position) in [(op(10, 0), 0), (op(20, 1), 1)] {
-            let id = Txid::new(
-                &operation.nullifiers,
-                &operation.commitment_hashes,
-                operation.bound_params_hash,
-            );
-            assert_eq!(restored.txid_position(&id), Some((0, position)));
-            assert_eq!(restored.utxo_position(&id), Some((0, position)));
-        }
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-    }
-
-    #[tokio::test]
-    async fn a_lost_save_reply_restores_the_complete_committed_snapshot() {
-        let backend = FailCheckpoint {
-            inner: Arc::new(MemoryState::new()),
-            fail: Arc::new(AtomicBool::new(true)),
-            after_commit: Arc::new(AtomicBool::new(true)),
-            committed: Arc::new(Mutex::new(None)),
-        };
-        let store = RailgunState::new(backend.clone());
-        let node = Node::new(1);
-        let mut writer = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        assert!(writer.sync_to(20, &node).await.is_err());
-        drop(writer);
-        let restored = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
-        let last = op(20, 1);
-        let id = Txid::new(
-            &last.nullifiers,
-            &last.commitment_hashes,
-            last.bound_params_hash,
-        );
-        assert_eq!(restored.txid_position(&id), Some((0, 1)));
-        assert_eq!(restored.utxo_position(&id), Some((0, 1)));
-    }
-
-    #[tokio::test]
-    async fn cancellation_after_the_atomic_commit_preserves_every_mapping() {
-        let committed = Arc::new(tokio::sync::Notify::new());
-        let backend = FailCheckpoint {
-            inner: Arc::new(MemoryState::new()),
-            fail: Arc::new(AtomicBool::new(false)),
-            after_commit: Arc::new(AtomicBool::new(false)),
-            committed: Arc::new(Mutex::new(Some(committed.clone()))),
-        };
-        let store = RailgunState::new(backend.clone());
-        let node = Node::new(1);
-        let mut writer = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        {
-            let future = writer.sync_to(20, &node);
-            tokio::pin!(future);
-            tokio::select! {
-                result = &mut future => panic!("unexpected completion: {result:?}"),
-                result = tokio::time::timeout(std::time::Duration::from_secs(5), committed.notified()) => result.unwrap(),
-            }
-        }
-        drop(writer);
-        let restored = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
-        let last = op(20, 1);
-        let id = Txid::new(
-            &last.nullifiers,
-            &last.commitment_hashes,
-            last.bound_params_hash,
-        );
-        assert_eq!(restored.txid_position(&id), Some((0, 1)));
-        assert_eq!(restored.utxo_position(&id), Some((0, 1)));
-    }
-
-    #[tokio::test]
-    async fn retry_on_the_same_instance_cannot_skip_failed_root_validation() {
-        let store = RailgunState::default();
-        let node = Node::new(1);
-        let mut indexer = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        *node.verdict.lock().unwrap() = Err("injected root outage");
-        assert!(matches!(
-            indexer.sync_to(20, &node).await,
-            Err(TxidIndexerError::PoiClient(_))
-        ));
-        assert!(indexer.tree(0).is_none());
-        assert_eq!(indexer.inner.synced_block, 0);
-        *node.verdict.lock().unwrap() = Ok(false);
-        assert!(matches!(
-            indexer.sync_to(20, &node).await,
-            Err(TxidIndexerError::RootMismatch { tree_number: 0 })
-        ));
-        assert_eq!(node.reads.load(Ordering::SeqCst), 2);
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 0);
-        assert!(store.get_txid_tree(0).await.unwrap().is_none());
-        *node.verdict.lock().unwrap() = Ok(true);
-        indexer.sync_to(20, &node).await.unwrap();
-        assert_eq!(node.reads.load(Ordering::SeqCst), 3);
-        assert_eq!(indexer.tree(0).unwrap().leaves_len(), 2);
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-    }
-
-    #[tokio::test]
-    async fn an_older_target_cannot_regress_the_checkpoint() {
-        let store = RailgunState::default();
-        let node = Node::new(1);
-        let mut indexer = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        indexer.sync_to(20, &node).await.unwrap();
-        let before = store.get(b"txid_indexer").await.unwrap();
-        indexer.sync_to(10, &node).await.unwrap();
-        assert_eq!(indexer.inner.synced_block, 20);
-        assert_eq!(store.get(b"txid_indexer").await.unwrap(), before);
-        assert_eq!(node.reads.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn an_older_target_still_processes_previously_fetched_pending_operations() {
-        let store = RailgunState::default();
-        let node = Node::new(0);
-        let mut indexer = TxidIndexer::new(store.clone(), Arc::new(TwoOperations))
-            .await
-            .unwrap();
-        indexer.sync_to(20, &node).await.unwrap();
-        assert_eq!(indexer.inner.pending.len(), 1);
-        *node.index.lock().unwrap() = 1;
-        indexer.sync_to(10, &node).await.unwrap();
-        assert_eq!(indexer.inner.synced_block, 20);
-        assert!(indexer.inner.pending.is_empty());
-        assert_eq!(indexer.tree(0).unwrap().leaves_len(), 2);
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-        assert_eq!(node.reads.load(Ordering::SeqCst), 2);
-    }
-}
+#[path = "txid_state_tests.rs"]
+mod state_tests;
