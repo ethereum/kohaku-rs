@@ -5402,6 +5402,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kohaku-railgun-wasm"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "curve25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "js-sys",
+ "kohaku-railgun",
+ "rand 0.10.2",
+ "serde",
+ "thiserror 2.0.20",
+ "tsify",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "kohaku-rpc-provider"
 version = "0.1.0"
 dependencies = [

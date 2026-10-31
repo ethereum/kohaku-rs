@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "master" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "feat/kohaku-railgun" ]
   workflow_dispatch:
 
 permissions:
@@ -15,9 +15,20 @@ env:
 
 jobs:
   bindings:
-    name: Tornado WASM bindings
+    name: ${{ matrix.name }} WASM bindings
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - name: Tornado
+            package: kohaku-tornadocash-wasm
+            artifact: kohaku_tornadocash_wasm
+            output: tornadocash-wasm
+          - name: Railgun
+            package: kohaku-railgun-wasm
+            artifact: kohaku_railgun_wasm
+            output: railgun-wasm
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
@@ -32,32 +43,32 @@ jobs:
       - name: Build WASM bindings
         run: >-
           nix develop .#ci --command cargo build --locked --manifest-path crates/Cargo.toml
-          -p kohaku-tornadocash-wasm --target wasm32-unknown-unknown
+          -p ${{ matrix.package }} --target wasm32-unknown-unknown
           --target-dir crates/target
 
       - name: Lint WASM bindings
         run: >-
           nix develop .#ci --command cargo clippy --locked --manifest-path crates/Cargo.toml
-          -p kohaku-tornadocash-wasm --target wasm32-unknown-unknown
+          -p ${{ matrix.package }} --target wasm32-unknown-unknown
           --target-dir crates/target --no-deps -- -D warnings
 
       - name: Test native conversions
         run: >-
           nix develop .#ci --command cargo test --locked --manifest-path crates/Cargo.toml
-          -p kohaku-tornadocash-wasm --lib --target-dir crates/target
+          -p ${{ matrix.package }} --lib --target-dir crates/target
 
       - name: Test WASM bindings
         run: >-
           nix develop .#ci --command cargo test --locked --manifest-path crates/Cargo.toml
-          -p kohaku-tornadocash-wasm --lib
+          -p ${{ matrix.package }} --lib
           --target wasm32-unknown-unknown --target-dir crates/target
 
       - name: Generate Node bindings
         run: >-
-          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/kohaku_tornadocash_wasm.wasm
-          --target nodejs --out-dir crates/target/tornadocash-wasm-node
+          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/${{ matrix.artifact }}.wasm
+          --target nodejs --out-dir crates/target/${{ matrix.output }}-node
 
       - name: Generate browser bindings
         run: >-
-          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/kohaku_tornadocash_wasm.wasm
-          --target web --out-dir crates/target/tornadocash-wasm-web
+          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/${{ matrix.artifact }}.wasm
+          --target web --out-dir crates/target/${{ matrix.output }}-web

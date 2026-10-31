@@ -8,6 +8,7 @@ members = [
     "railgun-poi",
     "railgun-sync",
     "railgun-paymaster",
+    "railgun-wasm",
     "rpc-provider",
     "tor-rpc",
     "tornadocash",
@@ -62,6 +63,7 @@ kohaku-railgun = { path = "railgun" }
 kohaku-railgun-poi = { path = "railgun-poi" }
 kohaku-railgun-sync = { path = "railgun-sync" }
 kohaku-railgun-paymaster = { path = "railgun-paymaster" }
+kohaku-railgun-wasm = { path = "railgun-wasm" }
 kohaku-rpc-provider = { path = "rpc-provider" }
 kohaku-tor-rpc = { path = "tor-rpc" }
 kohaku-tornadocash = { path = "tornadocash" }
