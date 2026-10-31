@@ -45,7 +45,7 @@ pub(crate) struct SharedKey([u8; 32]);
 
 /// Key for nullifier derivation.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub(crate) struct NullifyingKey([u8; 32]);
+pub struct NullifyingKey([u8; 32]);
 
 /// Blinded public key for stealth addresses.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]

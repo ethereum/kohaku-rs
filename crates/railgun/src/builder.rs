@@ -12,14 +12,14 @@ use crate::{
     merkle_tree::SmartWalletUtxoVerifier,
     poi::provider::PoiProvider,
     provider::{RailgunProvider, RailgunProviderError},
-    state::RailgunState,
+    state::RailgunCheckpoint,
 };
 
 /// Builder for constructing a `RailgunProvider`.
 pub struct RailgunBuilder {
     chain: ChainConfig,
     provider: DynProvider,
-    db: Option<RailgunState>,
+    state: RailgunCheckpoint,
     utxo_syncer: Option<Arc<dyn UtxoSyncer>>,
     poi: bool,
 }
@@ -30,21 +30,17 @@ impl RailgunBuilder {
         Self {
             chain,
             provider: provider.erased(),
-            db: None,
+            state: RailgunCheckpoint::default(),
             utxo_syncer: None,
             poi: false,
         }
     }
 
-    /// Sets the shared in-memory state, optionally restored from a snapshot.
-    /// Keep a clone to export snapshots after sync and other state-changing operations.
-    ///
-    /// Snapshots contain synced UTXO data, POI proofs, and unencrypted notes.
-    /// The application owns persistence and protection of those snapshots.
-    /// Private key material is never included. Use one state per chain.
+    /// Supplies caller-owned state from a previous session. The application
+    /// decides how to serialize and persist it.
     #[must_use]
-    pub fn with_state(mut self, db: RailgunState) -> Self {
-        self.db = Some(db);
+    pub fn with_state(mut self, state: RailgunCheckpoint) -> Self {
+        self.state = state;
         self
     }
 
@@ -70,9 +66,8 @@ impl RailgunBuilder {
 
     /// Builds the `RailgunProvider` with the specified configuration.
     #[must_use]
+    #[expect(clippy::unused_async, reason = "Preserve the builder's async API")]
     pub async fn build(self) -> Result<RailgunProvider, RailgunProviderError> {
-        let db = self.db.unwrap_or_default();
-
         let utxo_syncer = self.utxo_syncer.unwrap_or_else(|| {
             Arc::new(
                 ChainedSyncer::new()
@@ -86,21 +81,25 @@ impl RailgunBuilder {
             self.provider.clone(),
         ));
 
-        let utxo_indexer = UtxoIndexer::new(db.clone(), utxo_syncer, utxo_verifier).await?;
+        let utxo_indexer = UtxoIndexer::new(self.state.utxo, utxo_syncer, utxo_verifier)?;
 
         let prover = Groth16Prover::new();
 
+        let (active_poi, preserved_poi) = if self.poi {
+            (self.state.poi, Default::default())
+        } else {
+            (Default::default(), self.state.poi)
+        };
         let poi_provider = if self.poi {
             let txid_syncer = Arc::new(SubsquidSyncer::new(&self.chain.subsquid_endpoint));
 
             let poi_provider = PoiProvider::new(
                 self.chain.id,
-                db,
+                active_poi,
                 txid_syncer,
                 self.chain.poi_endpoint.clone(),
                 self.chain.list_keys.clone(),
-            )
-            .await?;
+            )?;
             Some(poi_provider)
         } else {
             None
@@ -112,7 +111,7 @@ impl RailgunBuilder {
             utxo_indexer,
             prover,
             poi_provider,
+            preserved_poi,
         )
-        .await
     }
 }

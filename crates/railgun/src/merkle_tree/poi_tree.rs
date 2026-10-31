@@ -1,7 +1,6 @@
 use kohaku_crypto::poseidon_hash;
 use kohaku_merkle_tree::hasher::Hasher;
 use ruint::aliases::U256;
-use serde::{Deserialize, Serialize};
 
 use crate::merkle_tree::merkle_tree::NumberedMerkleTree;
 
@@ -29,12 +28,6 @@ impl Hasher<2, U256> for PoiHasher {
 }
 
 pub type PoiMerkleTree = NumberedMerkleTree<PoiHasher>;
-
-/// How far a list has been copied locally. The next fetch starts at `next_index`.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-pub struct PoiSyncState {
-    pub next_index: u64,
-}
 
 /// A missing leaf in a `ppoi_poi_merkletree_leaves` page. The node pads past the
 /// end of the list with this value, so it is never inserted.

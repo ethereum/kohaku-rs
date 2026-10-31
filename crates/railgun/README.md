@@ -36,32 +36,24 @@ A copied page becomes visible only after root validation and an atomic update
 of the in-memory state. Cancelling acquisition or validation preserves the last
 committed checkpoint.
 
-## Persistence
+## State and persistence
 
-Railgun keeps state in memory. The application owns persistence, following the
-same separation used by TornadoCash. Retain a clone of `RailgunState`, pass it to
-`RailgunBuilder::with_state`, and export a snapshot after successful sync or
-other state-changing operations:
+The SDK accepts typed state and returns typed state. It does not choose a database,
+write checkpoints, or require a particular serialization format. Start with
+`RailgunCheckpoint::default()` or load one through your application's storage
+layer, pass it to `RailgunBuilder::with_state`, and call `provider.state()` after
+state-changing operations. Persist the result atomically before treating it as
+a durable sync checkpoint. Register signers again after restoring; keys are not
+part of the checkpoint.
 
-```rust,no_run
-use kohaku_railgun::RailgunState;
-
-let state = RailgunState::default();
-// Pass state.clone() to RailgunBuilder::with_state before building the provider.
-// After the operation completes:
-let checkpoint = serde_json::to_vec(&state.snapshot()?)?;
-// Save checkpoint atomically using your application's storage layer.
-let restored = RailgunState::from_snapshot(serde_json::from_slice(&checkpoint)?)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-Snapshots include trees, sync cursors, account notes, and POI state. Each verified
-batch updates these together, and export captures a consistent checkpoint. Save
-the entire snapshot atomically so a crash cannot leave a partial checkpoint.
-Snapshots contain unencrypted notes; protect them as wallet data. Private keys
-are excluded. Keep separate state for each chain and wallet, and re-register
-signers after restoring. Changes since the last externally saved snapshot must
-be replayed after restarting.
+`RailgunCheckpoint` contains UTXO trees, account notes, TXID trees and cursors,
+POI list copies, and pending POI work. Its fields also let consumers keep only
+the parts they use. The indexers stage updates and publish them only after root
+validation. POI lists publish each validated batch; after cancellation, a caller
+can still export the last published prefix. Checkpoints contain unencrypted
+notes and pending proof inputs, so protect them as wallet data. Keep separate
+checkpoints for each chain and wallet. Existing opaque `RailgunSnapshot` data is
+not compatible with this typed state and must be rebuilt by resyncing.
 
 ## Controlling POI proof submission
 

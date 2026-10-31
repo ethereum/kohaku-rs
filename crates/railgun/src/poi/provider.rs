@@ -20,32 +20,29 @@ use crate::{
     },
     indexer::{
         syncer::{Operation, TxidSyncer},
-        txid_indexer::{TxidIndexer, TxidIndexerError},
+        txid_indexer::{TxidIndexer, TxidIndexerError, TxidIndexerState},
     },
     merkle_tree::{TOTAL_LEAVES, TxidMerkleTree, UtxoTreeIndex},
     note::utxo::{self, UtxoNote},
     poi::{
         client::{PoiClient, PoiClientError, PoiNodeClient},
-        lists::{PoiLists, PoiSyncError},
+        lists::{PoiLists, PoiListsState, PoiSyncError},
         note::PoiNote,
         recovery::RecoveryAccount,
         types::{BlindedCommitment, BlindedCommitmentType, ListKey, PoiStatus, TransactProofData},
     },
-    railgun_database::{DatabaseError, RailgunDB},
-    state::RailgunState,
     transact::proved_transaction::ProvedOperation,
 };
 
 pub struct PoiProvider {
     inner: PoiProviderState,
-    db: RailgunState,
     poi_client: PoiClient,
     txid_indexer: TxidIndexer,
     lists: PoiLists,
 }
 
-#[derive(Serialize, Deserialize, Default)]
-pub(crate) struct PoiProviderState {
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct PoiProviderState {
     pub pending: Vec<PendingPoiEntry>,
     /// Outputs of proofs we submitted that are not in the local POI tree yet.
     #[serde(default)]
@@ -53,6 +50,14 @@ pub(crate) struct PoiProviderState {
     /// Past operations already seen as `Valid`, not probed again.
     #[serde(default)]
     pub recovered_valid: HashSet<Txid>,
+}
+
+/// All local POI state required to resume sync and pending proof work.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct PoiCheckpoint {
+    pub provider: PoiProviderState,
+    pub txid: TxidIndexerState,
+    pub lists: PoiListsState,
 }
 
 #[derive(Debug, Error)]
@@ -63,8 +68,8 @@ pub enum PoiProviderError {
     PoiClient(#[from] PoiClientError),
     #[error("Merkle proof not found for blinded commitment {0} and list key {1}")]
     ProofNotFound(BlindedCommitment, ListKey),
-    #[error("Database error: {0}")]
-    Database(#[from] DatabaseError),
+    #[error("Merkle tree error: {0}")]
+    MerkleTree(#[from] crate::merkle_tree::MerkleTreeError),
     #[error("POI list sync failed: {0}")]
     Sync(#[from] PoiSyncError),
 }
@@ -138,25 +143,32 @@ enum PendingPoiError {
 }
 
 impl PoiProvider {
-    pub async fn new(
+    pub fn new(
         chain_id: ChainId,
-        db: RailgunState,
+        state: PoiCheckpoint,
         txid_syncer: Arc<dyn TxidSyncer>,
         poi_endpoint: impl Into<String>,
         list_keys: Vec<ListKey>,
     ) -> Result<Self, PoiProviderError> {
-        let inner = db.get_poi_provider().await?;
-        let txid_indexer = TxidIndexer::new(db.clone(), txid_syncer).await?;
+        let inner = state.provider;
+        let txid_indexer = TxidIndexer::new(state.txid, txid_syncer)?;
         let poi_client = PoiClient::new(chain_id, poi_endpoint, list_keys);
-        let lists = PoiLists::load(db.clone(), &poi_client.list_keys()).await?;
+        let lists = PoiLists::load(state.lists, &poi_client.list_keys())?;
 
         Ok(Self {
             inner,
-            db,
             poi_client,
             txid_indexer,
             lists,
         })
+    }
+
+    pub fn state(&self) -> PoiCheckpoint {
+        PoiCheckpoint {
+            provider: self.inner.clone(),
+            txid: self.txid_indexer.state(),
+            lists: self.lists.state(),
+        }
     }
 
     pub async fn sync_to(
@@ -186,12 +198,11 @@ impl PoiProvider {
             );
         }
 
-        let recovered = self.recover_missing(accounts).await;
+        let recovered = self.recover_missing(accounts);
         if recovered > 0 {
             info!("Queued {recovered} past operation(s) for POI proof generation");
         }
 
-        self.save().await?;
         Ok(())
     }
 
@@ -202,19 +213,14 @@ impl PoiProvider {
         prover: &Groth16Prover,
     ) -> Result<(), PoiProviderError> {
         self.submit_pending(prover).await;
-        self.save().await?;
         Ok(())
     }
 
-    pub async fn register_ops(
-        &mut self,
-        operations: &[ProvedOperation],
-    ) -> Result<(), PoiProviderError> {
+    pub fn register_ops(&mut self, operations: &[ProvedOperation]) -> Result<(), PoiProviderError> {
         let list_keys = self.poi_client.list_keys();
         for op in operations {
             self.register(op, list_keys.clone());
         }
-        self.save().await?;
         Ok(())
     }
 
@@ -222,7 +228,7 @@ impl PoiProvider {
     /// the chain (a relayer that did not answer). Their txid will never be validated, so they
     /// would be retried, and fail, at every sync. Should the transaction land later after all,
     /// `recover_missing` rebuilds the entry from chain data.
-    pub async fn discard_ops(
+    pub fn discard_ops(
         &mut self,
         operations: &[ProvedOperation],
     ) -> Result<usize, PoiProviderError> {
@@ -230,9 +236,7 @@ impl PoiProvider {
         let before = self.inner.pending.len();
         self.inner.pending.retain(|e| !txids.contains(&e.txid));
         let removed = before - self.inner.pending.len();
-        if removed > 0 {
-            self.save().await?;
-        }
+        // The caller decides when to persist the updated checkpoint.
         Ok(removed)
     }
 
@@ -392,7 +396,7 @@ impl PoiProvider {
     /// proof is rebuilt here from chain data (spent inputs, decrypted outputs, operation record).
     /// Returns the number of entries queued. Never fails: a note that cannot be recovered is
     /// logged and left as is.
-    async fn recover_missing(&mut self, accounts: &[RecoveryAccount]) -> usize {
+    fn recover_missing(&mut self, accounts: &[RecoveryAccount]) -> usize {
         let list_keys = self.poi_client.list_keys();
         let own_ops: Vec<(Txid, Operation)> = self
             .txid_indexer
@@ -580,11 +584,6 @@ impl PoiProvider {
             );
         }
         Ok(proof_data)
-    }
-
-    async fn save(&self) -> Result<(), PoiProviderError> {
-        self.db.set_poi_provider(&self.inner).await?;
-        Ok(())
     }
 }
 
@@ -1035,17 +1034,15 @@ mod submission_control_tests {
     #[tokio::test]
     async fn read_api_reports_per_list_status_and_pending_work() {
         let (url, methods, stop, task) = service().await;
-        let db = RailgunState::default();
         let (operation, entry) = pending_fixture();
         let lists: Vec<ListKey> = vec!["list-a".into(), "list-b".into()];
         let mut provider = PoiProvider::new(
             FIXTURE_CHAIN_ID,
-            db.clone(),
+            PoiCheckpoint::default(),
             Arc::new(FixtureIndexer(operation)),
             url.clone(),
             lists.clone(),
         )
-        .await
         .unwrap();
         provider.inner.pending.push(entry.clone());
         let ours = BlindedCommitment::from(U256::from(77));
@@ -1067,14 +1064,13 @@ mod submission_control_tests {
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
         let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            db.clone(),
+            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
             Arc::new(EmptyUtxo),
             Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
                 chain.railgun_smart_wallet,
                 rpc.clone(),
             )),
         )
-        .await
         .unwrap();
         let mut runtime = crate::provider::RailgunProvider::new(
             chain,
@@ -1082,8 +1078,8 @@ mod submission_control_tests {
             utxo,
             Groth16Prover::new(),
             Some(provider),
+            PoiCheckpoint::default(),
         )
-        .await
         .unwrap();
         timeout(
             Duration::from_secs(10),
@@ -1126,17 +1122,15 @@ mod submission_control_tests {
     #[tokio::test]
     async fn sync_retains_pending_work_until_explicit_processing() {
         let (url, methods, stop, task) = service().await;
-        let db = RailgunState::default();
         let (operation, entry) = pending_fixture();
         let txid = entry.txid;
         let mut provider = PoiProvider::new(
             FIXTURE_CHAIN_ID,
-            db.clone(),
+            PoiCheckpoint::default(),
             Arc::new(FixtureIndexer(operation)),
             url.clone(),
             vec!["public-fixture-list".into()],
         )
-        .await
         .unwrap();
         provider.inner.pending.push(entry);
 
@@ -1145,14 +1139,13 @@ mod submission_control_tests {
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
         let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            db.clone(),
+            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
             Arc::new(EmptyUtxo),
             Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
                 chain.railgun_smart_wallet,
                 rpc.clone(),
             )),
         )
-        .await
         .unwrap();
         let mut runtime = crate::provider::RailgunProvider::new(
             chain,
@@ -1160,8 +1153,8 @@ mod submission_control_tests {
             utxo,
             Groth16Prover::new(),
             Some(provider),
+            PoiCheckpoint::default(),
         )
-        .await
         .unwrap();
         timeout(
             Duration::from_secs(10),
@@ -1178,8 +1171,8 @@ mod submission_control_tests {
                 "ppoi_validate_txid_merkleroot"
             ]
         );
-        assert_eq!(db.get_poi_provider().await.unwrap().pending.len(), 1);
-        assert_eq!(db.get_poi_provider().await.unwrap().pending[0].txid, txid);
+        assert_eq!(runtime.state().poi.provider.pending.len(), 1);
+        assert_eq!(runtime.state().poi.provider.pending[0].txid, txid);
 
         // Explicit processing looks for an inclusion proof in the local list.
         // The empty list has none, so this stops before the prover and sends
@@ -1196,7 +1189,7 @@ mod submission_control_tests {
                 "ppoi_validate_txid_merkleroot",
             ]
         );
-        assert_eq!(db.get_poi_provider().await.unwrap().pending.len(), 1);
+        assert_eq!(runtime.state().poi.provider.pending.len(), 1);
         // Existing automatic convenience sync still processes the queue.
         timeout(Duration::from_secs(10), runtime.sync_to(1))
             .await
@@ -1212,7 +1205,7 @@ mod submission_control_tests {
                 "ppoi_validated_txid",
             ]
         );
-        assert_eq!(db.get_poi_provider().await.unwrap().pending.len(), 1);
+        assert_eq!(runtime.state().poi.provider.pending.len(), 1);
         stop.send(()).unwrap();
         task.await.unwrap();
     }

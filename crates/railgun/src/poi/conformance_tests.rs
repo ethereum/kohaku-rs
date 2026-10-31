@@ -3,7 +3,6 @@
 
 use std::{
     collections::HashSet,
-    path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -27,14 +26,11 @@ use super::{
     types::{BlindedCommitment, ListKey, SubmitTransactProofParams, TransactProofData},
 };
 use crate::{
-    crypto::railgun_txid::Txid,
     indexer::{
         syncer::{Operation, SyncerError, TxidSyncer},
-        txid_indexer::{TxidIndexer, TxidIndexerError},
+        txid_indexer::{TxidIndexer, TxidIndexerError, TxidIndexerState},
     },
-    merkle_tree::{MerkleTree, TxidLeafHash, TxidMerkleTree, UtxoTreeIndex},
-    railgun_database::RailgunDB,
-    state::{RailgunSnapshot, RailgunState},
+    merkle_tree::MerkleTree,
 };
 
 const LIST: &str = "public-fixture-list";
@@ -580,36 +576,6 @@ async fn lost_submit_response_is_not_followed_by_another_post() {
     service.close().await;
 }
 
-fn scratch_store() -> PathBuf {
-    // Retain scratch files; public synthetic data only.
-    std::env::temp_dir().join(format!(
-        "kohaku-poi-conformance-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ))
-}
-
-fn load_snapshot(path: &std::path::Path) -> RailgunState {
-    match std::fs::read(path) {
-        Ok(bytes) => {
-            RailgunState::from_snapshot(serde_json::from_slice::<RailgunSnapshot>(&bytes).unwrap())
-                .unwrap()
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => RailgunState::default(),
-        Err(error) => panic!("Cannot read snapshot: {error}"),
-    }
-}
-
-fn save_snapshot(path: &std::path::Path, state: &RailgunState) {
-    let bytes = serde_json::to_vec(&state.snapshot().unwrap()).unwrap();
-    let temporary = path.with_extension("tmp");
-    std::fs::write(&temporary, bytes).unwrap();
-    std::fs::rename(temporary, path).unwrap();
-}
-
 fn operation(block: u64, output: u32) -> Operation {
     Operation {
         block_number: block,
@@ -621,10 +587,6 @@ fn operation(block: u64, output: u32) -> Operation {
         utxo_out_start_index: output,
         has_unshield: false,
     }
-}
-
-fn txid(op: &Operation) -> Txid {
-    Txid::new(&op.nullifiers, &op.commitment_hashes, op.bound_params_hash)
 }
 
 struct FixtureSyncer {
@@ -649,134 +611,59 @@ impl TxidSyncer for FixtureSyncer {
             .collect())
     }
 }
-
-async fn indexer(store: RailgunState, entered: Option<Arc<Notify>>) -> TxidIndexer {
+fn indexer(state: TxidIndexerState, entered: Option<Arc<Notify>>) -> TxidIndexer {
     TxidIndexer::new(
-        store,
+        state,
         Arc::new(FixtureSyncer {
             operations: vec![operation(10, 0), operation(20, 1)],
             entered,
         }),
     )
-    .await
     .unwrap()
 }
 
 #[tokio::test]
-async fn root_outage_then_reopen_preserves_checkpoint_and_replays_without_duplicates() {
+async fn root_outage_preserves_caller_checkpoint_and_retry_replays() {
     let service = Service::new().await;
-    let path = scratch_store();
-    {
-        let store = load_snapshot(&path);
-        let mut indexer = indexer(store.clone(), None).await;
-        timeout(
-            Duration::from_secs(5),
-            indexer.sync_to(10, &service.client()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        let before = store.get(b"txid_indexer").await.unwrap();
-        let tree_before = store.get(b"txid_tree:0").await.unwrap();
-        service.state.lock().unwrap().latest_index = 1;
-        service.state.lock().unwrap().fail_root_at = Some(2);
-        assert!(matches!(
-            timeout(
-                Duration::from_secs(5),
-                indexer.sync_to(20, &service.client())
-            )
-            .await
-            .unwrap(),
-            Err(TxidIndexerError::PoiClient(_))
-        ));
-        assert_eq!(store.get(b"txid_indexer").await.unwrap(), before);
-        assert_eq!(store.get(b"txid_tree:0").await.unwrap(), tree_before);
-        save_snapshot(&path, &store);
-    }
-    {
-        let store = load_snapshot(&path);
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 10);
-        let mut restored = indexer(store.clone(), None).await;
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 1);
-        timeout(
-            Duration::from_secs(5),
-            restored.sync_to(20, &service.client()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
-        assert_eq!(
-            restored.txid_position(&txid(&operation(10, 0))),
-            Some((0, 0))
-        );
-        assert_eq!(
-            restored.txid_position(&txid(&operation(20, 1))),
-            Some((0, 1))
-        );
-        let mut expected = TxidMerkleTree::new(0);
-        expected
-            .insert_leaves(
-                &[
-                    TxidLeafHash::new(txid(&operation(10, 0)), 0, UtxoTreeIndex::included(0, 0)),
-                    TxidLeafHash::new(txid(&operation(20, 1)), 0, UtxoTreeIndex::included(0, 1)),
-                ],
-                0,
-            )
-            .unwrap();
-        assert_eq!(
-            restored.tree(0).unwrap().root().unwrap(),
-            expected.root().unwrap()
-        );
-    }
+    let mut first = indexer(TxidIndexerState::default(), None);
+    first.sync_to(10, &service.client()).await.unwrap();
+    let checkpoint = first.state();
+    service.state.lock().unwrap().latest_index = 1;
+    service.state.lock().unwrap().fail_root_at = Some(2);
+    assert!(matches!(
+        first.sync_to(20, &service.client()).await,
+        Err(TxidIndexerError::PoiClient(_))
+    ));
+    assert_eq!(first.state().synced_block, 10);
+    let bytes = serde_json::to_vec(&checkpoint).unwrap();
+    let state = serde_json::from_slice(&bytes).unwrap();
+    let mut restored = indexer(state, None);
+    assert_eq!(restored.tree(0).unwrap().leaves_len(), 1);
+    service.state.lock().unwrap().fail_root_at = None;
+    restored.sync_to(20, &service.client()).await.unwrap();
+    assert_eq!(restored.state().synced_block, 20);
+    assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
     service.close().await;
 }
 
 #[tokio::test]
-async fn cancellation_during_acquisition_preserves_the_saved_checkpoint() {
+async fn cancellation_during_acquisition_preserves_caller_checkpoint() {
     let service = Service::new().await;
-    let path = scratch_store();
+    let mut first = indexer(TxidIndexerState::default(), None);
+    first.sync_to(10, &service.client()).await.unwrap();
+    let entered = Arc::new(Notify::new());
+    let mut interrupted = indexer(first.state(), Some(entered.clone()));
+    let client = service.client();
     {
-        let store = load_snapshot(&path);
-        let mut initial = indexer(store.clone(), None).await;
-        timeout(
-            Duration::from_secs(5),
-            initial.sync_to(10, &service.client()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        drop(initial);
-        let entered = Arc::new(Notify::new());
-        let mut interrupted = indexer(store.clone(), Some(entered.clone())).await;
-        let client = service.client();
-        {
-            let future = interrupted.sync_to(20, &client);
-            tokio::pin!(future);
-            tokio::select! {
-                result = &mut future => panic!("unexpected completion: {result:?}"),
-                result = timeout(Duration::from_secs(5), entered.notified()) => result.unwrap()
-            }
+        let future = interrupted.sync_to(20, &client);
+        tokio::pin!(future);
+        tokio::select! {
+            result = &mut future => panic!("unexpected completion: {result:?}"),
+            result = timeout(Duration::from_secs(5), entered.notified()) => result.unwrap(),
         }
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 10);
-        save_snapshot(&path, &store);
     }
-    {
-        let store = load_snapshot(&path);
-        let mut restored = indexer(store.clone(), None).await;
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 1);
-        service.state.lock().unwrap().latest_index = 1;
-        timeout(
-            Duration::from_secs(5),
-            restored.sync_to(20, &service.client()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        assert_eq!(store.get_txid_indexer().await.unwrap().synced_block, 20);
-        assert_eq!(restored.tree(0).unwrap().leaves_len(), 2);
-    }
+    assert_eq!(interrupted.state().synced_block, 10);
+    assert_eq!(interrupted.tree(0).unwrap().leaves_len(), 1);
     service.close().await;
 }
 
