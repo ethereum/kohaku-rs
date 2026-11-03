@@ -210,9 +210,6 @@ impl PoiProvider {
         to_block: u64,
         accounts: &[RecoveryAccount],
     ) -> Result<(), PoiProviderError> {
-        self.lists.sync(&self.poi_client).await?;
-        self.drop_included_submissions();
-
         // Keep the full record of the operations spending our notes.
         self.txid_indexer.watch_nullifiers(
             accounts
@@ -222,7 +219,15 @@ impl PoiProvider {
         );
 
         let poi_client = self.poi_client.clone();
-        self.txid_indexer.sync_to(to_block, &poi_client).await?;
+        // These indexes validate and publish independently. Overlap their
+        // read-only network waits, then recover proofs only after both finish.
+        let (lists, txids) = futures::join!(
+            self.lists.sync(&self.poi_client),
+            self.txid_indexer.sync_to(to_block, &poi_client),
+        );
+        lists?;
+        txids?;
+        self.drop_included_submissions();
 
         let dropped = self.prune_unmined(accounts);
         if dropped > 0 {
@@ -1039,6 +1044,12 @@ mod submission_control_tests {
         (url, methods, stop, task)
     }
 
+    fn recorded_methods(methods: &Mutex<Vec<String>>) -> Vec<String> {
+        let mut methods = methods.lock().unwrap().clone();
+        methods.sort();
+        methods
+    }
+
     fn pending_fixture() -> (Operation, PendingPoiEntry) {
         let operation = Operation {
             block_number: 1,
@@ -1167,6 +1178,53 @@ mod submission_control_tests {
     }
 
     #[tokio::test]
+    async fn history_windows_defer_poi_reads_until_explicit_refresh() {
+        let (url, methods, stop, task) = service().await;
+        let (operation, _) = pending_fixture();
+        let provider = PoiProvider::new(
+            FIXTURE_CHAIN_ID,
+            PoiCheckpoint::default(),
+            Arc::new(FixtureIndexer(operation)),
+            url.clone(),
+            vec!["public-fixture-list".into()],
+        )
+        .unwrap();
+        let rpc = alloy::providers::Provider::erased(
+            alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
+        );
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(
+            crate::chain_config::ChainConfig::sepolia(),
+            rpc,
+        )
+        .with_utxo_syncer(Arc::new(EmptyUtxo))
+        .build()
+        .await
+        .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
+
+        for _ in 0..3 {
+            runtime.sync_history_to(1).await.unwrap();
+        }
+        assert_eq!(runtime.synced_block(), 1);
+        assert!(methods.lock().unwrap().is_empty());
+
+        timeout(Duration::from_secs(10), runtime.refresh_poi())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            recorded_methods(&methods),
+            vec![
+                "ppoi_poi_merkletree_leaves",
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
+            ]
+        );
+        stop.send(()).unwrap();
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn sync_retains_pending_work_until_explicit_processing() {
         let (url, methods, stop, task) = service().await;
         let (operation, entry) = pending_fixture();
@@ -1199,11 +1257,11 @@ mod submission_control_tests {
         .unwrap()
         .unwrap();
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
-                "ppoi_validate_txid_merkleroot"
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid"
             ]
         );
         assert_eq!(runtime.state().poi.provider.pending.len(), 1);
@@ -1224,11 +1282,11 @@ mod submission_control_tests {
         assert!(report.failed.is_empty());
         assert_eq!(report.pending_after, 1);
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
                 "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
             ]
         );
         assert_eq!(runtime.state().poi.provider.pending.len(), 1);
@@ -1238,12 +1296,12 @@ mod submission_control_tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
-                "ppoi_validate_txid_merkleroot",
                 "ppoi_poi_merkletree_leaves",
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
                 "ppoi_validated_txid",
             ]
         );

@@ -177,6 +177,21 @@ impl PoiSession {
             .map_err(js_error)
     }
 
+    /// History-only window; call refreshPoi after the final window.
+    #[wasm_bindgen(js_name = syncHistoryTo)]
+    pub async fn sync_history_to(&mut self, block: JsU64) -> Result<(), JsError> {
+        self.wallet
+            .sync_history_to(u64::try_from(block)?)
+            .await
+            .map_err(js_error)
+    }
+
+    /// Refresh PPOI/TXIDs and recover missing proofs without submitting them.
+    #[wasm_bindgen(js_name = refreshPoi)]
+    pub async fn refresh_poi(&mut self) -> Result<(), JsError> {
+        self.wallet.refresh_poi().await.map_err(js_error)
+    }
+
     /// Generate and send queued proofs. The JSON report describes attempts,
     /// not POI acceptance. Sync lists again before displaying Valid.
     #[wasm_bindgen(js_name = processPendingPoiJson)]

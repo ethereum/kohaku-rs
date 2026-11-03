@@ -209,9 +209,22 @@ impl PoiWallet {
         &mut self,
         block: u64,
     ) -> Result<(), PoiWalletError> {
+        self.sync_history_to(block).await?;
+        self.refresh_poi().await
+    }
+
+    /// Catch up UTXOs without refreshing the global PPOI lists on every window.
+    /// Refresh PPOI after the history pass, before reading spendable balances.
+    pub async fn sync_history_to(&mut self, block: u64) -> Result<(), PoiWalletError> {
         self.wallet.sync_to(block).await?;
+        Ok(())
+    }
+
+    /// Refresh PPOI lists and TXIDs once, up to the history already observed.
+    /// Missing-proof recovery is retained; submission remains explicit.
+    pub async fn refresh_poi(&mut self) -> Result<(), PoiWalletError> {
         self.poi
-            .sync_to(block, &self.wallet.recovery_accounts())
+            .sync_to(self.wallet.synced_block(), &self.wallet.recovery_accounts())
             .await?;
         Ok(())
     }
