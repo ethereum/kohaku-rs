@@ -9,8 +9,10 @@ use alloy::{
 };
 use kohaku_railgun::{
     account::signer::RailgunSigner, builder::RailgunBuilder, caip::AssetId,
-    chain_config::ChainConfig, indexer::syncer::SubsquidSyncer, wallet::RailgunWallet,
+    chain_config::ChainConfig,
 };
+use kohaku_railgun_poi::{provider::PoiCheckpoint, wallet::PoiWallet};
+use kohaku_railgun_sync::SubsquidSyncer;
 use rand::random;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -66,12 +68,12 @@ async fn test_transact_poi() {
 
     info!("Setting up railgun");
     let syncer = Arc::new(SubsquidSyncer::new(&chain.subsquid_endpoint));
-    let mut railgun = RailgunBuilder::new(chain.clone(), provider.clone())
-        .with_utxo_syncer(syncer)
-        .with_poi()
+    let wallet = RailgunBuilder::new(chain.clone(), provider.clone())
+        .with_utxo_syncer(syncer.clone())
         .build()
         .await
         .unwrap();
+    let mut railgun = PoiWallet::new(wallet, PoiCheckpoint::default(), syncer).unwrap();
 
     info!("Setting up accounts");
     let account_1 =
@@ -116,7 +118,7 @@ async fn test_transact_poi() {
 }
 
 async fn test_shield_poi(
-    railgun: &mut RailgunWallet,
+    railgun: &mut PoiWallet,
     provider: &impl Provider,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
@@ -143,7 +145,7 @@ async fn test_shield_poi(
 }
 
 async fn test_transfer_poi<P: Provider>(
-    railgun: &mut RailgunWallet,
+    railgun: &mut PoiWallet,
     provider: &P,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
@@ -182,7 +184,7 @@ async fn test_transfer_poi<P: Provider>(
 }
 
 async fn test_unshield_poi<P: Provider>(
-    railgun: &mut RailgunWallet,
+    railgun: &mut PoiWallet,
     provider: &P,
     account_1: Arc<dyn RailgunSigner>,
     account_2: Arc<dyn RailgunSigner>,
@@ -235,7 +237,7 @@ async fn test_unshield_poi<P: Provider>(
 }
 
 async fn await_balance_update(
-    railgun: &mut RailgunWallet,
+    railgun: &mut PoiWallet,
     account: Arc<dyn RailgunSigner>,
     asset: AssetId,
     expected: Option<u128>,

@@ -99,12 +99,12 @@ impl UtxoIndexer {
 
     /// Lists all registered accounts
     /// What the POI provider needs to rebuild proofs for past operations.
-    pub fn recovery_accounts(&self) -> Vec<crate::poi::recovery::RecoveryAccount> {
+    pub fn recovery_accounts(&self) -> Vec<crate::indexer::recovery::RecoveryAccount> {
         self.accounts
             .iter()
             .map(|a| {
                 let signer = a.signer();
-                crate::poi::recovery::RecoveryAccount {
+                crate::indexer::recovery::RecoveryAccount {
                     spending_pubkey: signer.spending_public_key(),
                     nullifying_key: signer.viewing_key().nullifying_key(),
                     unspent: a.unspent(),

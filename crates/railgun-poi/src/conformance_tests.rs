@@ -23,7 +23,7 @@ use tokio::{
 
 use super::{
     client::{PoiClient, PoiClientError, PoiNodeClient},
-    types::{BlindedCommitment, ListKey, SubmitTransactProofParams, TransactProofData},
+    poi::types::{BlindedCommitment, ListKey, SubmitTransactProofParams, TransactProofData},
 };
 use crate::{
     indexer::{
@@ -668,7 +668,7 @@ async fn cancellation_during_acquisition_preserves_caller_checkpoint() {
 }
 
 /// Independently check a freshly generated payload, then exercise the real client wire path.
-pub(super) async fn assert_fresh_submission(data: TransactProofData) {
+pub(crate) async fn assert_fresh_submission(data: TransactProofData) {
     assert!(verify(&data, &key("current-3x3")).unwrap());
     assert!(!verify(&data, &key("retired-3x3")).unwrap());
     let mut changed = data.clone();

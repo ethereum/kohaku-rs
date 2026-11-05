@@ -45,8 +45,6 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-kohaku-userop-kit = { workspace = true }
-web-time = { workspace = true }
 brotli = { workspace = true }
 anyhow = { workspace = true }
 
@@ -75,6 +73,10 @@ cfg_aliases = { workspace = true }
 alloy = { workspace = true, default-features = true, features = ["provider-anvil-node"] }
 insta = { workspace = true }
 kohaku-railgun = { path = ".", features = ["testing"] }
+kohaku-railgun-sync = { workspace = true, features = ["testing"] }
+kohaku-railgun-poi = { workspace = true }
+kohaku-railgun-paymaster = { workspace = true }
+kohaku-userop-kit = { workspace = true }
 serial_test = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing-test = { workspace = true }

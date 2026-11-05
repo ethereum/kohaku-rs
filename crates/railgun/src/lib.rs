@@ -1,19 +1,16 @@
 #![doc = include_str!("../README.md")]
 
-mod abis;
+pub mod abis;
 pub mod account;
-mod adapter_data;
 pub mod builder;
 pub mod caip;
 pub mod chain_config;
-mod circuit;
+pub mod circuit;
 mod common;
 pub mod crypto;
 pub mod indexer;
-mod merkle_tree;
-pub use merkle_tree::{
-    MerkleTreeState, MerkleTreeVerifier, PoiMerkleTree, TxidMerkleTree, UtxoMerkleTree,
-};
+pub mod merkle_tree;
+pub use merkle_tree::{MerkleTreeState, MerkleTreeVerifier, TOTAL_LEAVES, UtxoMerkleTree};
 pub mod note;
 pub mod poi;
 pub mod state;

@@ -7,9 +7,9 @@ use alloy::{
 };
 use kohaku_fork_kit::railgun::deploy_railgun;
 use kohaku_railgun::{
-    account::signer::RailgunSigner, builder::RailgunBuilder, caip::AssetId,
-    indexer::syncer::RpcSyncer, transact::Spend,
+    account::signer::RailgunSigner, builder::RailgunBuilder, caip::AssetId, transact::Spend,
 };
+use kohaku_railgun_sync::RpcSyncer;
 use rand::random;
 use tracing::info;
 use tracing_subscriber::EnvFilter;

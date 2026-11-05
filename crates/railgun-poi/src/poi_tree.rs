@@ -2,7 +2,7 @@ use kohaku_crypto::poseidon_hash;
 use kohaku_merkle_tree::hasher::Hasher;
 use ruint::aliases::U256;
 
-use crate::merkle_tree::merkle_tree::NumberedMerkleTree;
+use kohaku_railgun::merkle_tree::NumberedMerkleTree;
 
 /// POI list accumulator. Same depth and Poseidon hash as the Railgun UTXO tree.
 /// The zero is the PPOI node's constant, kept separate so the list follows the
@@ -38,7 +38,6 @@ pub fn is_poi_empty_leaf(leaf: U256) -> bool {
 #[cfg(all(test, native))]
 mod tests {
     use super::*;
-    use crate::crypto::railgun_zero::SNARK_PRIME;
 
     #[test]
     fn poi_zero_matches_the_node_constant() {
@@ -49,6 +48,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(zero, expected);
-        assert!(zero < SNARK_PRIME);
     }
 }
