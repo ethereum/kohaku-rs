@@ -59,7 +59,7 @@ pub enum KeyError {
     HexDecodingError(#[from] hex::FromHexError),
 }
 
-pub(crate) trait ByteKey: Sized {
+pub trait ByteKey: Sized {
     fn from_bytes(bytes: [u8; 32]) -> Self;
     fn as_bytes(&self) -> &[u8; 32];
 }
@@ -89,7 +89,7 @@ pub trait HexKey: ByteKey {
     }
 }
 
-pub(crate) trait U256Key: ByteKey {
+pub trait U256Key: ByteKey {
     fn from_u256(value: U256) -> Self {
         let bytes = value.to_be_bytes::<32>();
         Self::from_bytes(bytes)
@@ -278,7 +278,7 @@ impl ViewingKey {
         ViewingPublicKey(signing_key.verifying_key().to_bytes())
     }
 
-    pub(crate) fn nullifying_key(&self) -> NullifyingKey {
+    pub fn nullifying_key(&self) -> NullifyingKey {
         NullifyingKey::new(*self)
     }
 

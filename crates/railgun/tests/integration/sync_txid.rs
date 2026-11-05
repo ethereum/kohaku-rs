@@ -4,9 +4,9 @@ use alloy::{
     network::Ethereum,
     providers::{Provider, ProviderBuilder},
 };
-use kohaku_railgun::{
-    builder::RailgunBuilder, chain_config::ChainConfig, indexer::syncer::SubsquidSyncer,
-};
+use kohaku_railgun::{builder::RailgunBuilder, chain_config::ChainConfig};
+use kohaku_railgun_poi::{provider::PoiCheckpoint, wallet::PoiWallet};
+use kohaku_railgun_sync::SubsquidSyncer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -36,12 +36,12 @@ async fn test_sync_txid() {
 
     info!("Setting up provider");
     let syncer = Arc::new(SubsquidSyncer::new(&chain.subsquid_endpoint));
-    let mut railgun = RailgunBuilder::new(chain, provider)
-        .with_utxo_syncer(syncer)
-        .with_poi()
+    let wallet = RailgunBuilder::new(chain, provider)
+        .with_utxo_syncer(syncer.clone())
         .build()
         .await
         .unwrap();
+    let mut railgun = PoiWallet::new(wallet, PoiCheckpoint::default(), syncer).unwrap();
 
     info!("Syncing");
     railgun.sync().await.unwrap();

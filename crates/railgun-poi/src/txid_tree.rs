@@ -81,7 +81,7 @@ impl TxidMerkleTree {
     }
 
     /// Append leaves to the end of the tree and immediately rebuild.
-    pub(crate) fn insert_leaves(
+    pub fn insert_leaves(
         &mut self,
         leaves: &[TxidLeafHash],
         start_position: usize,

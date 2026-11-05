@@ -33,7 +33,7 @@ jobs:
         nix develop .#ci --command bash -c
         "cd crates && cargo test --workspace --tests --all-features --release -- --ignored
         --skip sync_utxo::test_sync_utxo --skip sync_txid::test_sync_txid
-        --skip transact_poi::test_transact_poi --skip poi::provider::fresh_proof_tests::"
+        --skip transact_poi::test_transact_poi --skip provider::fresh_proof_tests::"
 
   test-wasm:
     runs-on: ubuntu-latest

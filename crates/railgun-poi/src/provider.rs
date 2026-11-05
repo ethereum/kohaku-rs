@@ -41,6 +41,20 @@ pub struct PoiProvider {
     lists: PoiLists,
 }
 
+#[cfg(feature = "userop")]
+impl kohaku_railgun_paymaster::UserOpPoiPolicy for PoiProvider {
+    fn status(&self, note: &UtxoNote) -> PoiStatus {
+        self.status(note.blinded_commitment.into(), note.commitment_type)
+    }
+
+    fn register(
+        &mut self,
+        operations: &[ProvedOperation],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.register_ops(operations).map_err(|e| Box::new(e) as _)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct PoiProviderState {
     pub pending: Vec<PendingPoiEntry>,
@@ -124,6 +138,26 @@ pub struct PendingPoiSummary {
     pub list_keys: Vec<String>,
 }
 
+/// Outcome of one best-effort queue pass. Submission is not POI-list inclusion;
+/// callers must sync lists again before showing an output as Valid.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoiProcessReport {
+    pub pending_before: usize,
+    pub submitted: Vec<String>,
+    pub waiting_for_txid: Vec<String>,
+    pub waiting_for_input_poi: Vec<String>,
+    pub failed: Vec<PoiProcessFailure>,
+    pub pending_after: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoiProcessFailure {
+    pub txid: String,
+    pub error: String,
+}
+
 #[derive(Debug, Error)]
 enum PendingPoiError {
     #[error("POI client error: {0}")]
@@ -176,9 +210,6 @@ impl PoiProvider {
         to_block: u64,
         accounts: &[RecoveryAccount],
     ) -> Result<(), PoiProviderError> {
-        self.lists.sync(&self.poi_client).await?;
-        self.drop_included_submissions();
-
         // Keep the full record of the operations spending our notes.
         self.txid_indexer.watch_nullifiers(
             accounts
@@ -188,7 +219,15 @@ impl PoiProvider {
         );
 
         let poi_client = self.poi_client.clone();
-        self.txid_indexer.sync_to(to_block, &poi_client).await?;
+        // These indexes validate and publish independently. Overlap their
+        // read-only network waits, then recover proofs only after both finish.
+        let (lists, txids) = futures::join!(
+            self.lists.sync(&self.poi_client),
+            self.txid_indexer.sync_to(to_block, &poi_client),
+        );
+        lists?;
+        txids?;
+        self.drop_included_submissions();
 
         let dropped = self.prune_unmined(accounts);
         if dropped > 0 {
@@ -212,8 +251,14 @@ impl PoiProvider {
         &mut self,
         prover: &Groth16Prover,
     ) -> Result<(), PoiProviderError> {
-        self.submit_pending(prover).await;
+        let _ = self.process_pending_report(prover).await;
         Ok(())
+    }
+
+    /// Process the queue and return per-operation outcomes. Errors stay queued
+    /// for a later retry; a submitted proof still needs list inclusion.
+    pub async fn process_pending_report(&mut self, prover: &Groth16Prover) -> PoiProcessReport {
+        self.submit_pending(prover).await
     }
 
     pub fn register_ops(&mut self, operations: &[ProvedOperation]) -> Result<(), PoiProviderError> {
@@ -457,25 +502,39 @@ impl PoiProvider {
         self.inner.pending.push(entry_from_op(op, list_keys));
     }
 
-    async fn submit_pending(&mut self, prover: &Groth16Prover) {
+    async fn submit_pending(&mut self, prover: &Groth16Prover) -> PoiProcessReport {
+        let mut report = PoiProcessReport {
+            pending_before: self.inner.pending.len(),
+            ..PoiProcessReport::default()
+        };
         for i in (0..self.inner.pending.len()).rev() {
             let entry = self.inner.pending[i].clone();
+            let txid = format!("{:?}", entry.txid);
             match self.submit_poi(prover, &entry).await {
                 Ok(_) => {
                     info!("Submitted POI for {:?}", entry.txid);
+                    report.submitted.push(txid);
                     self.inner.pending.remove(i);
                 }
                 Err(PendingPoiError::MissingTxid(_)) => {
                     info!("Waiting for txid to be indexed: {:?}", entry.txid);
+                    report.waiting_for_txid.push(txid);
                 }
                 Err(PendingPoiError::ProofNotFound(commitment, list_key)) => {
                     info!("Waiting for input {commitment} to appear in POI list {list_key}");
+                    report.waiting_for_input_poi.push(txid);
                 }
                 Err(e) => {
                     warn!("Failed to submit POI for pending entry: {:?}", e);
+                    report.failed.push(PoiProcessFailure {
+                        txid,
+                        error: e.to_string(),
+                    });
                 }
             }
         }
+        report.pending_after = self.inner.pending.len();
+        report
     }
 
     async fn submit_poi(
@@ -561,8 +620,13 @@ impl PoiProvider {
                 txid_tree,
             )?;
 
+            let circuit_name = format!(
+                "railgun/poi/{:02}x{:02}",
+                inputs.nullifiers.len(),
+                inputs.commitments.len()
+            );
             let proof = prover
-                .prove_poi(&inputs)
+                .prove_named(&circuit_name, inputs.to_circuit_signals())
                 .await
                 .map_err(|e| PendingPoiError::Prover(Box::new(e)))?;
             let blinded_commitments_out =
@@ -980,6 +1044,12 @@ mod submission_control_tests {
         (url, methods, stop, task)
     }
 
+    fn recorded_methods(methods: &Mutex<Vec<String>>) -> Vec<String> {
+        let mut methods = methods.lock().unwrap().clone();
+        methods.sort();
+        methods
+    }
+
     fn pending_fixture() -> (Operation, PendingPoiEntry) {
         let operation = Operation {
             block_number: 1,
@@ -1063,24 +1133,12 @@ mod submission_control_tests {
             alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
-        let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
-            Arc::new(EmptyUtxo),
-            Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
-                chain.railgun_smart_wallet,
-                rpc.clone(),
-            )),
-        )
-        .unwrap();
-        let mut runtime = crate::wallet::RailgunWallet::new(
-            chain,
-            rpc,
-            utxo,
-            Groth16Prover::new(),
-            Some(provider),
-            PoiCheckpoint::default(),
-        )
-        .unwrap();
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(chain, rpc)
+            .with_utxo_syncer(Arc::new(EmptyUtxo))
+            .build()
+            .await
+            .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
         timeout(
             Duration::from_secs(10),
             runtime.sync_to_without_poi_submission(1),
@@ -1120,6 +1178,53 @@ mod submission_control_tests {
     }
 
     #[tokio::test]
+    async fn history_windows_defer_poi_reads_until_explicit_refresh() {
+        let (url, methods, stop, task) = service().await;
+        let (operation, _) = pending_fixture();
+        let provider = PoiProvider::new(
+            FIXTURE_CHAIN_ID,
+            PoiCheckpoint::default(),
+            Arc::new(FixtureIndexer(operation)),
+            url.clone(),
+            vec!["public-fixture-list".into()],
+        )
+        .unwrap();
+        let rpc = alloy::providers::Provider::erased(
+            alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
+        );
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(
+            crate::chain_config::ChainConfig::sepolia(),
+            rpc,
+        )
+        .with_utxo_syncer(Arc::new(EmptyUtxo))
+        .build()
+        .await
+        .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
+
+        for _ in 0..3 {
+            runtime.sync_history_to(1).await.unwrap();
+        }
+        assert_eq!(runtime.synced_block(), 1);
+        assert!(methods.lock().unwrap().is_empty());
+
+        timeout(Duration::from_secs(10), runtime.refresh_poi())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            recorded_methods(&methods),
+            vec![
+                "ppoi_poi_merkletree_leaves",
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
+            ]
+        );
+        stop.send(()).unwrap();
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn sync_retains_pending_work_until_explicit_processing() {
         let (url, methods, stop, task) = service().await;
         let (operation, entry) = pending_fixture();
@@ -1138,24 +1243,12 @@ mod submission_control_tests {
             alloy::providers::ProviderBuilder::new().connect_http(url.parse().unwrap()),
         );
         let chain = crate::chain_config::ChainConfig::sepolia();
-        let utxo = crate::indexer::utxo_indexer::UtxoIndexer::new(
-            crate::indexer::utxo_indexer::UtxoIndexerState::default(),
-            Arc::new(EmptyUtxo),
-            Arc::new(crate::merkle_tree::SmartWalletUtxoVerifier::new(
-                chain.railgun_smart_wallet,
-                rpc.clone(),
-            )),
-        )
-        .unwrap();
-        let mut runtime = crate::wallet::RailgunWallet::new(
-            chain,
-            rpc,
-            utxo,
-            Groth16Prover::new(),
-            Some(provider),
-            PoiCheckpoint::default(),
-        )
-        .unwrap();
+        let wallet = kohaku_railgun::builder::RailgunBuilder::new(chain, rpc)
+            .with_utxo_syncer(Arc::new(EmptyUtxo))
+            .build()
+            .await
+            .unwrap();
+        let mut runtime = crate::wallet::PoiWallet::from_provider(wallet, provider);
         timeout(
             Duration::from_secs(10),
             runtime.sync_to_without_poi_submission(1),
@@ -1164,11 +1257,11 @@ mod submission_control_tests {
         .unwrap()
         .unwrap();
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
-                "ppoi_validate_txid_merkleroot"
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid"
             ]
         );
         assert_eq!(runtime.state().poi.provider.pending.len(), 1);
@@ -1177,16 +1270,23 @@ mod submission_control_tests {
         // Explicit processing looks for an inclusion proof in the local list.
         // The empty list has none, so this stops before the prover and sends
         // nothing. The entry stays pending.
-        timeout(Duration::from_secs(10), runtime.process_pending_poi())
-            .await
-            .unwrap()
-            .unwrap();
+        let report = timeout(
+            Duration::from_secs(10),
+            runtime.process_pending_poi_report(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(report.pending_before, 1);
+        assert_eq!(report.waiting_for_input_poi.len(), 1);
+        assert!(report.submitted.is_empty());
+        assert!(report.failed.is_empty());
+        assert_eq!(report.pending_after, 1);
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
                 "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
             ]
         );
         assert_eq!(runtime.state().poi.provider.pending.len(), 1);
@@ -1196,12 +1296,12 @@ mod submission_control_tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            *methods.lock().unwrap(),
+            recorded_methods(&methods),
             vec![
                 "ppoi_poi_merkletree_leaves",
-                "ppoi_validated_txid",
-                "ppoi_validate_txid_merkleroot",
                 "ppoi_poi_merkletree_leaves",
+                "ppoi_validate_txid_merkleroot",
+                "ppoi_validated_txid",
                 "ppoi_validated_txid",
             ]
         );

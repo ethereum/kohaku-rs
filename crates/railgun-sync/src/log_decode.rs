@@ -1,8 +1,9 @@
 use alloy::{rpc::types::Log, sol_types::SolEvent};
 
-use crate::{
+use crate::normalize_tree_position::normalize_tree_position;
+use kohaku_railgun::{
     abis::railgun::RailgunSmartWallet,
-    indexer::syncer::{self, SyncEvent, normalize_tree_position::normalize_tree_position},
+    indexer::syncer::{self, SyncEvent},
 };
 
 #[derive(Debug, thiserror::Error)]

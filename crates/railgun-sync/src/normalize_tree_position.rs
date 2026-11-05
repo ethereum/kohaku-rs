@@ -1,4 +1,4 @@
-use crate::merkle_tree::TOTAL_LEAVES;
+use kohaku_railgun::TOTAL_LEAVES;
 
 /// Normalize a tree number and leaf index to ensure the leaf index isn't overflowing the tree
 pub fn normalize_tree_position(tree_number: u32, leaf_index: u32) -> (u32, u32) {

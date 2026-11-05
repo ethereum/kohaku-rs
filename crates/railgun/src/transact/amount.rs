@@ -128,7 +128,8 @@ impl AmountIntents {
         self
     }
 
-    pub(crate) fn resolve(
+    /// Select notes for these intents from the caller-supplied candidate set.
+    pub fn resolve(
         self,
         notes: &[UtxoNote],
         rng: &mut impl CryptoRng,
@@ -159,7 +160,7 @@ impl AmountIntents {
 /// it. A tree that does not already have a spend gets a new one. Adapting the
 /// batch applies to every spend, including ones the fee does not touch.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn attach_fee(
+pub fn attach_fee(
     spends: &[Spend],
     fee_payer: Arc<dyn RailgunSigner>,
     fee_to: RailgunAddress,
