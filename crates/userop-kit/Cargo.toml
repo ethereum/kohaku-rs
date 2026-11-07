@@ -14,6 +14,7 @@ bundler = []
 alloy = { workspace = true, features = [
     "signers",
     "dyn-abi",
+    "eip712",
     "rpc",
     "rpc-types",
 ] }

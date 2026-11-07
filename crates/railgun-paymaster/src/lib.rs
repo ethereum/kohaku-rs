@@ -535,7 +535,7 @@ impl<'a> RailgunUserOps<'a> {
             .build())
     }
 
-    /// Build spends into a broadcastable 7702 UserOperation.
+    /// Build spends into a UserOperation for a compatible delegated or deployed account.
     ///
     /// Constructs a UserOperation sent from the `delegator_address` that executes the provided
     /// transaction, with an additional fee note transfer to cover the bundler fees. The
