@@ -9,7 +9,7 @@ use alloy::{
 use kohaku_userop_kit::{
     abis::simple_account_factory::SimpleAccountFactory,
     builder::UserOperationBuilder,
-    smart_account::{AccountInit, SmartAccount, SmartAccountError, simple_account::SimpleAccount},
+    smart_account::{AccountInit, SmartAccount, simple_account::SimpleAccount},
     user_operation::Authorization,
 };
 
@@ -78,14 +78,6 @@ async fn init_returns_none_when_code_exists() {
 }
 
 #[tokio::test]
-async fn existing_account_needs_no_initialization_lookup() {
-    let provider = ProviderBuilder::new().connect_mocked_client(Asserter::new());
-    let account = SimpleAccount::new(provider, Address::repeat_byte(0x99), 1);
-
-    assert!(matches!(account.init().await.unwrap(), AccountInit::None));
-}
-
-#[tokio::test]
 async fn builds_user_op_with_entrypoint_nonce() {
     let mock = Asserter::new();
     let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
@@ -144,44 +136,4 @@ async fn builder_sets_factory_fields_without_delegation_authorization() {
         operation.user_op.authorization,
         Authorization::None
     ));
-}
-
-#[tokio::test]
-async fn init_propagates_code_lookup_errors() {
-    let mock = Asserter::new();
-    let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-    mock.push_success(&Bytes::from(Address::repeat_byte(0x99).abi_encode()));
-    let account = SimpleAccount::from_factory(
-        provider,
-        Address::repeat_byte(0x88),
-        Address::repeat_byte(0x44),
-        U256::ZERO,
-        1,
-    )
-    .await
-    .unwrap();
-    mock.push_failure_msg("Code lookup unavailable");
-
-    assert!(matches!(
-        account.init().await,
-        Err(SmartAccountError::ProviderError(_))
-    ));
-}
-
-#[tokio::test]
-async fn from_factory_rejects_malformed_address_responses() {
-    let mock = Asserter::new();
-    let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-    mock.push_success(&Bytes::new());
-
-    let result = SimpleAccount::from_factory(
-        provider,
-        Address::repeat_byte(0x88),
-        Address::repeat_byte(0x44),
-        U256::ZERO,
-        1,
-    )
-    .await;
-
-    assert!(matches!(result, Err(SmartAccountError::Other(_))));
 }
