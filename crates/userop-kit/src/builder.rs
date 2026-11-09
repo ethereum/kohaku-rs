@@ -21,14 +21,29 @@ pub struct UserOperationBuilder<S> {
 impl<S: SmartAccount> UserOperationBuilder<S> {
     /// Create a new UserOperationBuilder with a smart account
     pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
-        Ok(Self::new(
+        smart_account.validate_sender().await?;
+        let mut builder = Self::new(
             smart_account.address(),
             smart_account.entry_point(),
             smart_account.domain(),
         )
         .with_nonce(smart_account.nonce().await?)
-        .with_authorization(smart_account.authorization().await?)
-        .with_signature(smart_account.dummy_signature()))
+        .with_signature(smart_account.dummy_signature());
+        if let Some(auth) = smart_account.optional_authorization().await? {
+            builder = builder.with_authorization(auth);
+        }
+        if let Some((factory, data)) = smart_account.factory().await? {
+            if !matches!(
+                builder.user_op.authorization,
+                crate::user_operation::Authorization::None
+            ) {
+                return Err(SmartAccountError::Other(anyhow::anyhow!(
+                    "An account cannot combine factory deployment with EIP-7702 authorization"
+                )));
+            }
+            builder = builder.with_factory(factory, data);
+        }
+        Ok(builder)
     }
 
     /// Sets the call data for this UserOperation by encoding the provided call using the smart
