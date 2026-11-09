@@ -16,11 +16,14 @@ mod sol {
         "fixtures/privacy_paymaster.json"
     );
     // Railgun still uses the adapter-based paymaster; the shared fixture is Tornado-specific.
-    sol!(
-        #[sol(rpc)]
-        RailgunPrivacyPaymaster,
-        "fixtures/railgun/privacy_paymaster.json"
-    );
+    mod railgun {
+        alloy::sol!(
+            #[sol(rpc)]
+            RailgunPrivacyPaymaster,
+            "fixtures/railgun/privacy_paymaster.json"
+        );
+    }
+    pub use railgun::RailgunPrivacyPaymaster;
     // https://etherscan.io/address/0xD73A1dE75B1D4A3aF1D9f664fBcFA327bD2Cd59d#code
     sol!(
         #[sol(rpc)]

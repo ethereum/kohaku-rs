@@ -9,7 +9,7 @@ use alloy::{
 use kohaku_fork_kit::{
     alto::AltoBuilder,
     entry_point::deploy_entry_point,
-    paymaster::{deploy_railgun_paymaster, deploy_railgun_fee_adapter},
+    paymaster::{deploy_railgun_fee_adapter, deploy_railgun_paymaster},
     railgun::deploy_railgun,
     simple_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, deploy_simple_account},
 };
@@ -18,8 +18,8 @@ use kohaku_railgun::{
     builder::RailgunBuilder,
     caip::AssetId,
 };
-use kohaku_railgun_sync::RpcSyncer;
 use kohaku_railgun_paymaster::RailgunUserOps;
+use kohaku_railgun_sync::RpcSyncer;
 use kohaku_userop_kit::{
     bundler::Bundler,
     smart_account::simple_smart_account::{self, SimpleSmartAccount},

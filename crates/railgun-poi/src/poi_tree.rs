@@ -1,8 +1,7 @@
 use kohaku_crypto::poseidon_hash;
-use kohaku_merkle_tree::hasher::Hasher;
-use ruint::aliases::U256;
-
+use kohaku_merkle_tree::Hasher;
 use kohaku_railgun::merkle_tree::NumberedMerkleTree;
+use ruint::aliases::U256;
 
 /// POI list accumulator. Same depth and Poseidon hash as the Railgun UTXO tree.
 /// The zero is the PPOI node's constant, kept separate so the list follows the

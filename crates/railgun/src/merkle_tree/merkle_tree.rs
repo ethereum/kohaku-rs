@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use alloy::primitives::utils::keccak256_cached;
 use kohaku_crypto::poseidon_hash;
-use kohaku_merkle_tree::hasher::Hasher;
+use kohaku_merkle_tree::Hasher;
 use ruint::aliases::U256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -12,7 +12,7 @@ pub const TREE_DEPTH: usize = 16;
 pub const TOTAL_LEAVES: u32 = 1 << TREE_DEPTH;
 
 pub type MerkleTree = NumberedMerkleTree<RailgunHasher>;
-pub type MerkleProof = kohaku_merkle_tree::proof::MerkleProof<TREE_DEPTH, 2, U256>;
+pub type MerkleProof = kohaku_merkle_tree::MerkleProof<TREE_DEPTH, 2, U256>;
 pub type MerkleTreeError = kohaku_merkle_tree::MerkleTreeError;
 
 type InnerTree<H> = kohaku_merkle_tree::MerkleTree<TREE_DEPTH, 2, U256, H>;
@@ -69,7 +69,7 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
     }
 
     pub fn root(&self) -> Result<MerkleRoot, MerkleTreeError> {
-        Ok(self.inner.root()?.into())
+        Ok(self.inner.root().into())
     }
 
     pub fn leaves(&self) -> &[U256] {
@@ -89,7 +89,7 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
     }
 
     pub fn generate_proof(&self, element: U256) -> Result<MerkleProof, MerkleTreeError> {
-        self.inner.leaf_proof(element)
+        self.inner.leaf_proof(&element)
     }
 
     /// Inclusion proof for the leaf at `index`, without scanning for the value.
