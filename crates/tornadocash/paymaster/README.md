@@ -54,3 +54,14 @@ println!("{hash:?}");
 Ok(())
 # }
 ```
+
+
+## Delegated and deployed execution accounts
+
+The existing builder accepts either `Simple7702SmartAccount` (including
+`.with_implementation(...)`) or `DeployedSimpleAccount` from `kohaku-userop-kit`.
+Both use the same v0.8 execution-call format and fee/proof path. Use the account's
+address as the payout recipient when the UserOp makes calls. For a deployed account,
+the owner's `signTypedData` signature authorizes execution without EIP-7702 signing;
+see the userop-kit execution-account example. No paymaster or account Solidity is
+added or modified by this integration.
