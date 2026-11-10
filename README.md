@@ -23,6 +23,9 @@ Kohaku-rs is a collection of rust crates for working with Ethereum privacy proto
 - [`kohaku-merkle-tree`](./crates/merkle-tree/) - Generic merkle tree implementation.
 - [`kohaku-fork-kit`](./crates/fork-kit/) - Forking kit for testing and development of kohaku-rs crates.
 - [`kohaku-tor-rpc`](./crates/tor-rpc/) - Alloy JSON-RPC over Arti, with shared or session-isolated circuits.
+- [`kohaku-railgun`](./crates/railgun/) - [Railgun](https://railgun.org/) shielded pool client library.
+- [`kohaku-crypto`](./crates/crypto/) - Shared crypto primitives (Poseidon, BabyJubJub, merkle helpers).
+- [`poseidon-rust`](./crates/poseidon-rust/) - Circom-compatible Poseidon hash (vendored).
 
 ### Experiments
 

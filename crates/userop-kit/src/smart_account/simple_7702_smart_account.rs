@@ -24,6 +24,7 @@ pub struct Simple7702SmartAccount<P: Provider> {
     chain_id: u64,
     provider: P,
 
+    allow_used: bool,
     implementation: Address,
     entry_point: Address,
     domain: Eip712Domain,
@@ -44,6 +45,12 @@ pub struct Call {
 }
 
 impl<P: Provider> Simple7702SmartAccount<P> {
+    /// Explicitly permit a deployed/delegated, funded or previously used sender.
+    pub fn allow_used(mut self, allow_used: bool) -> Self {
+        self.allow_used = allow_used;
+        self
+    }
+
     pub fn new(provider: P, owner: Address, chain_id: u64) -> Self {
         let implementation = address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
         let entry_point = ENTRY_POINT_08;
@@ -57,10 +64,26 @@ impl<P: Provider> Simple7702SmartAccount<P> {
             chain_id,
             provider,
             implementation,
+            allow_used: false,
             entry_point,
             domain,
             dummy_signature,
         }
+    }
+
+    /// Select code with the same v0.8 EIP-712 ECDSA validation and atomic
+    /// executeBatch(Call[]) semantics. Callers must audit the chosen implementation.
+    pub fn with_implementation(
+        mut self,
+        implementation: Address,
+    ) -> Result<Self, SmartAccountError> {
+        if implementation.is_zero() {
+            return Err(SmartAccountError::Other(anyhow::anyhow!(
+                "Delegation implementation cannot be zero"
+            )));
+        }
+        self.implementation = implementation;
+        Ok(self)
     }
 }
 
@@ -79,6 +102,16 @@ impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
 
     fn address(&self) -> Address {
         self.owner
+    }
+
+    async fn validate_sender(&self) -> Result<(), SmartAccountError> {
+        super::validate_unused_sender(
+            &self.provider,
+            self.address(),
+            self.entry_point(),
+            self.allow_used,
+        )
+        .await
     }
 
     async fn nonce(&self) -> Result<U256, SmartAccountError> {

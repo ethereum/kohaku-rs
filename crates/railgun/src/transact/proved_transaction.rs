@@ -1,0 +1,59 @@
+use alloy::{
+    primitives::{Address, U256},
+    rpc::types::TransactionRequest,
+    sol_types::SolCall,
+};
+
+use crate::{
+    abis::{self, railgun::RailgunSmartWallet},
+    circuit::inputs::transact_inputs::TransactCircuitInputs,
+    note::operation::Operation,
+};
+
+/// A transaction that has been proven for railgun.
+pub struct ProvedTx {
+    /// The transaction request (to, calldata, value) that executes it on-chain in railgun.
+    pub tx_data: TransactionRequest,
+    /// The operations included in this transaction alongside their proof data.
+    pub proved_operations: Vec<ProvedOperation>,
+}
+
+/// A single proved operation.
+#[derive(Clone)]
+pub struct ProvedOperation {
+    pub inner: Operation,
+    pub circuit_inputs: TransactCircuitInputs,
+    pub transaction: abis::railgun::Transaction,
+}
+
+impl ProvedTx {
+    pub fn new(railgun_smart_wallet: Address, operations: Vec<ProvedOperation>) -> Self {
+        let transactions = operations.iter().map(|op| op.transaction.clone()).collect();
+        let calldata = RailgunSmartWallet::transactCall {
+            _transactions: transactions,
+        }
+        .abi_encode();
+        let tx_data = TransactionRequest::default()
+            .to(railgun_smart_wallet)
+            .input(calldata.into())
+            .value(U256::ZERO);
+        Self {
+            tx_data,
+            proved_operations: operations,
+        }
+    }
+}
+
+impl ProvedOperation {
+    pub fn new(
+        operation: Operation,
+        circuit_inputs: TransactCircuitInputs,
+        transaction: abis::railgun::Transaction,
+    ) -> Self {
+        Self {
+            inner: operation,
+            circuit_inputs,
+            transaction,
+        }
+    }
+}

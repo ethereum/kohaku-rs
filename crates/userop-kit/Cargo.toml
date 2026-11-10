@@ -17,6 +17,7 @@ bundler = []
 alloy = { workspace = true, features = [
     "signers",
     "dyn-abi",
+    "eip712",
     "rpc",
     "rpc-types",
 ] }
@@ -28,11 +29,15 @@ reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
+web-time = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom_02 = { version = "0.2", package = "getrandom", features = ["js"] }
+gloo-timers = { workspace = true, features = ["futures"] }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

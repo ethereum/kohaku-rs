@@ -1,0 +1,109 @@
+use alloy::{
+    providers::{DynProvider, Provider},
+    rpc::types::Filter,
+    transports::{RpcError, TransportErrorKind},
+};
+use tracing::{info, warn};
+
+use crate::log_to_sync_events;
+use kohaku_railgun::{
+    chain_config::ChainConfig,
+    indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer},
+};
+
+/// JSON-RPC UTXO syncer.
+///
+/// Queries an Ethereum node for events emitted by the RailgunSmartWallet and parses them into
+/// SyncEvents.
+pub struct RpcSyncer {
+    chain: ChainConfig,
+    provider: DynProvider,
+    batch_size: u64,
+    batch_delay: web_time::Duration,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum RpcSyncerError {
+    #[error("RPC error: {0}")]
+    RpcError(#[from] RpcError<TransportErrorKind>),
+}
+
+impl RpcSyncer {
+    pub fn new(chain: ChainConfig, provider: impl Provider + 'static) -> Self {
+        Self {
+            chain,
+            provider: provider.erased(),
+            batch_size: 10,
+            batch_delay: web_time::Duration::from_millis(1000),
+        }
+    }
+
+    /// Sets the batch size for `eth_getLogs` calls.
+    pub fn with_batch_size(mut self, batch_size: u64) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    /// Sets the delay between `eth_getLogs` calls.
+    pub fn with_batch_delay(mut self, batch_delay: web_time::Duration) -> Self {
+        self.batch_delay = batch_delay;
+        self
+    }
+}
+
+#[cfg_attr(native, async_trait::async_trait)]
+#[cfg_attr(wasm, async_trait::async_trait(?Send))]
+impl UtxoSyncer for RpcSyncer {
+    async fn latest_block(&self) -> Result<u64, SyncerError> {
+        Ok(self.latest_block().await?)
+    }
+
+    async fn sync(&self, from_block: u64, to_block: u64) -> Result<Vec<SyncEvent>, SyncerError> {
+        Ok(self.events(from_block, to_block).await?)
+    }
+}
+
+impl RpcSyncer {
+    async fn latest_block(&self) -> Result<u64, RpcSyncerError> {
+        Ok(self.provider.get_block_number().await?)
+    }
+
+    async fn events(
+        &self,
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Vec<SyncEvent>, RpcSyncerError> {
+        let from_block = from_block.max(self.chain.deployment_block);
+
+        let mut all_events = Vec::new();
+        let mut current_from = from_block;
+        while current_from <= to_block {
+            let batch_start = current_from;
+            let batch_end = to_block.min(current_from + self.batch_size - 1);
+
+            let filter = Filter::new()
+                .address(self.chain.railgun_smart_wallet)
+                .from_block(batch_start)
+                .to_block(batch_end);
+            let logs = self.provider.get_logs(&filter).await?;
+            crate::sleep(self.batch_delay).await;
+
+            for log in logs {
+                match log_to_sync_events(log) {
+                    Ok(events) => all_events.extend(events),
+                    Err(e) => warn!("Failed to parse log into SyncEvent: {}", e),
+                }
+            }
+            current_from = batch_end + 1;
+            info!("{}/{} ({} events)", batch_end, to_block, all_events.len());
+        }
+
+        Ok(all_events)
+    }
+}
+
+impl From<RpcSyncerError> for SyncerError {
+    fn from(e: RpcSyncerError) -> Self {
+        SyncerError::new(e)
+    }
+}

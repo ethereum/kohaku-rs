@@ -1,0 +1,338 @@
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tracing::info;
+
+use crate::{
+    account::{address::RailgunAddress, signer::RailgunSigner},
+    indexer::{
+        indexed_account::IndexedAccount,
+        syncer::{self, SyncEvent, SyncerError, UtxoSyncer},
+    },
+    merkle_tree::{MerkleTreeError, MerkleTreeVerifier, UtxoLeafHash, UtxoMerkleTree},
+    note::utxo::{NoteError, UtxoNote},
+};
+
+/// Utxo indexer that maintains the set of UTXO merkle trees and tracks accounts
+/// and account notes / balances.
+pub struct UtxoIndexer {
+    synced_block: u64,
+    pub utxo_trees: BTreeMap<u32, UtxoMerkleTree>,
+    accounts: Vec<IndexedAccount>,
+
+    inactive_accounts:
+        HashMap<RailgunAddress, crate::indexer::indexed_account::IndexedAccountState>,
+    utxo_syncer: Arc<dyn UtxoSyncer>,
+    utxo_verifier: Arc<dyn MerkleTreeVerifier>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct UtxoIndexerState {
+    pub synced_block: u64,
+    pub trees: BTreeMap<u32, crate::merkle_tree::MerkleTreeState>,
+    pub accounts: HashMap<RailgunAddress, crate::indexer::indexed_account::IndexedAccountState>,
+}
+
+#[derive(Debug, Error)]
+pub enum UtxoIndexerError {
+    #[error("Syncer error: {0}")]
+    SyncerError(#[from] SyncerError),
+    #[error("Verification error: {0}")]
+    VerificationError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Note error: {0}")]
+    NoteError(#[from] NoteError),
+    #[error("Merkle tree error: {0}")]
+    MerkleTree(#[from] MerkleTreeError),
+    #[error("Timed out waiting for commitments")]
+    Timeout,
+}
+
+impl UtxoIndexer {
+    pub fn new(
+        state: UtxoIndexerState,
+        utxo_syncer: Arc<dyn UtxoSyncer>,
+        utxo_verifier: Arc<dyn MerkleTreeVerifier>,
+    ) -> Result<Self, UtxoIndexerError> {
+        let mut utxo_trees = BTreeMap::new();
+        for (number, tree_state) in state.trees {
+            utxo_trees.insert(number, UtxoMerkleTree::from_state(tree_state)?);
+        }
+
+        info!(
+            "Loaded UTXO indexer state: synced_block={}, trees={:?}",
+            state.synced_block,
+            utxo_trees.keys().collect::<Vec<_>>()
+        );
+        Ok(UtxoIndexer {
+            synced_block: state.synced_block,
+            utxo_trees,
+            accounts: vec![],
+            inactive_accounts: state.accounts,
+            utxo_syncer,
+            utxo_verifier,
+        })
+    }
+
+    /// Returns the latest synced block
+    pub fn synced_block(&self) -> u64 {
+        let mut min_synced = self.synced_block;
+        for account in self.accounts.iter() {
+            min_synced = min_synced.min(account.synced_block());
+        }
+        min_synced
+    }
+
+    /// Registers a signer with the indexer. The indexer will track UTXOs for the associated
+    /// address.
+    pub fn register(&mut self, signer: Arc<dyn RailgunSigner>) -> Result<(), UtxoIndexerError> {
+        let addr = signer.address();
+        let state = self.inactive_accounts.remove(&addr).unwrap_or_default();
+
+        let account = IndexedAccount::from_state(signer, state);
+        self.accounts.push(account);
+        Ok(())
+    }
+
+    /// Lists all registered accounts
+    /// What the POI provider needs to rebuild proofs for past operations.
+    pub fn recovery_accounts(&self) -> Vec<crate::indexer::recovery::RecoveryAccount> {
+        self.accounts
+            .iter()
+            .map(|a| {
+                let signer = a.signer();
+                crate::indexer::recovery::RecoveryAccount {
+                    spending_pubkey: signer.spending_public_key(),
+                    nullifying_key: signer.viewing_key().nullifying_key(),
+                    unspent: a.unspent(),
+                    spent: a.spent(),
+                    sent: a.sent(),
+                }
+            })
+            .collect()
+    }
+
+    /// Full state (unspent, spent and sent notes) of a registered account.
+    pub fn account_state(
+        &self,
+        address: RailgunAddress,
+    ) -> Option<crate::indexer::indexed_account::IndexedAccountState> {
+        self.accounts
+            .iter()
+            .find(|a| a.address() == address)
+            .map(|a| a.state())
+    }
+
+    pub fn registered(&self) -> Vec<RailgunAddress> {
+        self.accounts.iter().map(|a| a.address()).collect()
+    }
+
+    /// Lists all unspent notes for a given address. Returns an empty list if the address is not
+    /// registered.
+    pub fn unspent(&self, address: RailgunAddress) -> Vec<UtxoNote> {
+        for account in self.accounts.iter() {
+            if account.address() == address {
+                return account.unspent();
+            }
+        }
+
+        vec![]
+    }
+
+    /// Syncs the indexer to a specific block. If the indexer is already synced past that block,
+    /// this is a no-op.
+    #[tracing::instrument(name = "utxo_sync", skip_all)]
+    pub async fn sync_to(&mut self, to_block: u64) -> Result<(), UtxoIndexerError> {
+        let from_block = self.synced_block() + 1;
+
+        let latest_block = self.utxo_syncer.latest_block().await?;
+        let to_block = to_block.min(latest_block);
+
+        if from_block > to_block {
+            return Ok(());
+        }
+
+        // Sync
+        let events = self.utxo_syncer.sync(from_block, to_block).await?;
+        info!("Fetched {} events from syncer", events.len());
+
+        let mut candidate = self.stage();
+        let mut tree_leaves: HashMap<u32, Vec<(u32, UtxoLeafHash)>> = HashMap::new();
+        for (i, event) in events.iter().enumerate() {
+            if i % 20000 == 0 {
+                info!("Processing event {}/{}", i, events.len());
+            }
+            candidate.handle_event(&event, &mut tree_leaves)?;
+        }
+
+        info!("Inserting leaves into UTXO trees");
+        for (tree_number, mut leaves) in tree_leaves {
+            leaves.sort_by_key(|(idx, _)| *idx);
+            let start = leaves[0].0;
+            let hashes: Vec<_> = leaves.into_iter().map(|(_, hash)| hash).collect();
+
+            candidate
+                .utxo_trees
+                .entry(tree_number)
+                .or_insert(UtxoMerkleTree::new(tree_number))
+                .insert_leaves(&hashes, start as usize)?;
+        }
+
+        // Verify
+        info!("Verifying UTXO trees");
+        candidate.verify().await?;
+
+        info!("Synced to block {}", to_block);
+        candidate.synced_block = to_block;
+        for account in candidate.accounts.iter_mut() {
+            account.set_synced_block(to_block);
+        }
+
+        *self = candidate;
+
+        Ok(())
+    }
+
+    /// Isolate decrypted notes and tree changes until validation and the atomic save complete.
+    fn stage(&self) -> Self {
+        Self {
+            synced_block: self.synced_block,
+            utxo_trees: self
+                .utxo_trees
+                .iter()
+                .map(|(number, tree)| (*number, tree.clone()))
+                .collect(),
+            accounts: self
+                .accounts
+                .iter()
+                .map(|account| IndexedAccount::from_state(account.signer(), account.state()))
+                .collect(),
+            inactive_accounts: self.inactive_accounts.clone(),
+            utxo_syncer: self.utxo_syncer.clone(),
+            utxo_verifier: self.utxo_verifier.clone(),
+        }
+    }
+
+    fn handle_event(
+        &mut self,
+        event: &SyncEvent,
+        tree_leaves: &mut HashMap<u32, Vec<(u32, UtxoLeafHash)>>,
+    ) -> Result<(), UtxoIndexerError> {
+        match event {
+            SyncEvent::Shield(shield, _) => self.handle_shield(shield, tree_leaves)?,
+            SyncEvent::Transact(transact, _) => self.handle_transact(transact, tree_leaves)?,
+            SyncEvent::Nullified(nullified, ts) => self.handle_nullified(nullified, *ts),
+            SyncEvent::Legacy(legacy, _) => self.handle_legacy(legacy, tree_leaves),
+        };
+
+        Ok(())
+    }
+
+    fn handle_shield(
+        &mut self,
+        event: &syncer::Shield,
+        tree_leaves: &mut HashMap<u32, Vec<(u32, UtxoLeafHash)>>,
+    ) -> Result<(), UtxoIndexerError> {
+        tree_leaves
+            .entry(event.tree_number)
+            .or_default()
+            .push((event.leaf_index, event.hash()));
+
+        for account in self.accounts.iter_mut() {
+            account.handle_shield_event(event)?;
+        }
+
+        Ok(())
+    }
+
+    fn handle_transact(
+        &mut self,
+        event: &syncer::Transact,
+        tree_leaves: &mut HashMap<u32, Vec<(u32, UtxoLeafHash)>>,
+    ) -> Result<(), UtxoIndexerError> {
+        tree_leaves
+            .entry(event.tree_number)
+            .or_default()
+            .push((event.leaf_index, event.hash.into()));
+
+        for account in self.accounts.iter_mut() {
+            account.handle_transact_event(event)?;
+        }
+
+        Ok(())
+    }
+
+    fn handle_nullified(&mut self, event: &syncer::Nullified, timestamp: u64) {
+        for account in self.accounts.iter_mut() {
+            account.handle_nullified_event(event, timestamp);
+        }
+    }
+
+    fn handle_legacy(
+        &mut self,
+        _event: &syncer::LegacyCommitment,
+        tree_leaves: &mut HashMap<u32, Vec<(u32, UtxoLeafHash)>>,
+    ) {
+        tree_leaves
+            .entry(_event.tree_number)
+            .or_default()
+            .push((_event.leaf_index, _event.hash.into()));
+
+        // TODO: Forward legacy to accounts
+    }
+
+    async fn verify(&self) -> Result<(), UtxoIndexerError> {
+        for tree in self.utxo_trees.values() {
+            if tree.leaves_len() == 0 {
+                continue;
+            }
+
+            let known = self
+                .utxo_verifier
+                .verify_root(tree.number(), tree.leaves_len() as u32 - 1, tree.root()?)
+                .await
+                .map_err(|e| UtxoIndexerError::VerificationError(e))?;
+            // A root the chain never had means the local tree is missing or has wrong leaves:
+            // every proof built on it would revert ("Invalid Merkle Root"). Refuse to go on.
+            if !known {
+                return Err(UtxoIndexerError::VerificationError(
+                    format!(
+                        "local UTXO tree {} ({} leaves) has a root the chain never had: the \
+                         local database is inconsistent, clear it and sync again",
+                        tree.number(),
+                        tree.leaves_len()
+                    )
+                    .into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// A coherent checkpoint of trees, account notes and cursors.
+    pub fn state(&self) -> UtxoIndexerState {
+        let trees = self
+            .utxo_trees
+            .iter()
+            .map(|(number, tree)| (*number, tree.state()))
+            .collect();
+        let mut accounts = self.inactive_accounts.clone();
+        accounts.extend(
+            self.accounts
+                .iter()
+                .map(|account| (account.address(), account.state())),
+        );
+        UtxoIndexerState {
+            synced_block: self.synced_block,
+            trees,
+            accounts,
+        }
+    }
+}
+
+#[cfg(all(test, native))]
+#[path = "utxo_state_tests.rs"]
+mod state_tests;
