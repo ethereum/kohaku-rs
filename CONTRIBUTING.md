@@ -14,11 +14,26 @@ Experiments are entirely new changes that are not yet ready to be merged into th
 
 Experiments are explicitly not stable, and public APIs are likely to change dramatically. Consider them pre-1.0.0 under [semantic versioning](https://semver.org/). Experiments are not also not guaranteed to be maintained and may be removed at any time.
 
+### Experiment Criteria
+
+Adding new experiments to Kohaku is carefully considered. We also want to ensure that every addition serves a purpose and is well thought out. Before starting an experiment, please consider the following criteria.
+
+- Is this experiment aligned with the CROPS principles?
+- Is this experiment unique and not already solved by existing functionality?
+- Does this experiment have a strong reason for being added to Kohaku?
+
+Experiments are likely to be rejected if:
+
+- They build on or include closed-source software.
+- They are unaudited or untested, and do not have a clear plan for testing and validation.
+- They do not prioritize the Ethereum ecosystem and its users.
+- They do not have sufficient potential to be widely used.
+
 If you would like to propose an experiment, please create an issue first to discuss your idea.
 
 ### Graduating Experiments
 
-Experiments are kept in separate branches so that main remains entirely stable and production-ready. Once an experiment is deemed stable, it can be merged into main. Before merging, the experiment will be reviewed for quality and correctness, and the public API will be stabilized. Once graduated experiments will be maintained and supported like any other code in main. 
+Experiments are kept in separate branches so that main remains entirely stable and production-ready. Once an experiment is deemed stable, it can be merged into main. Before merging, the experiment will be reviewed for quality and correctness, and the public API will be stabilized. Once graduated experiments will be maintained and supported like any other code in main.
 
 ## Testing
 
