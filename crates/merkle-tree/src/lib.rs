@@ -33,8 +33,6 @@ pub enum MerkleTreeError {
     MissingLeaf,
     #[error("Index {0} is out of bounds")]
     IndexOutOfBounds(usize),
-    #[error("Invalid cached Merkle tree {0}")]
-    InvalidCachedNodes(&'static str),
 }
 
 impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
@@ -61,32 +59,6 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
         Ok(tree)
     }
 
-    /// Restore computed nodes from an authenticated, caller-owned checkpoint.
-    ///
-    /// Validates capacity and level dimensions without rehashing every leaf.
-    /// The caller must authenticate these nodes along with the leaves: this is
-    /// not a verifier for a public or otherwise untrusted Merkle snapshot.
-    /// `internal_nodes` contains levels 1 through DEPTH, excluding the leaves.
-    pub fn from_trusted_nodes(
-        leaves: Vec<E>,
-        internal_nodes: Vec<Vec<E>>,
-    ) -> Result<Self, MerkleTreeError> {
-        let capacity = ARITY.checked_pow(DEPTH as u32).unwrap_or(usize::MAX);
-        if leaves.len() > capacity || internal_nodes.len() != DEPTH {
-            return Err(MerkleTreeError::InvalidCachedNodes("dimensions"));
-        }
-        let mut expected = leaves.len();
-        for level in &internal_nodes {
-            expected = expected.div_ceil(ARITY);
-            if level.len() != expected {
-                return Err(MerkleTreeError::InvalidCachedNodes("level"));
-            }
-        }
-        let mut tree = Self::new();
-        tree.nodes = std::iter::once(leaves).chain(internal_nodes).collect();
-        Ok(tree)
-    }
-
     /// Returns the tree's root hash.
     pub fn root(&self) -> E {
         self.node(DEPTH, 0)
@@ -95,11 +67,6 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
     /// Returns the tree's leaves.
     pub fn leaves(&self) -> &[E] {
         &self.nodes[0]
-    }
-
-    /// Returns the tree's nodes, starting with the leaves at level zero.
-    pub fn nodes(&self) -> &[Vec<E>] {
-        &self.nodes
     }
 
     /// Returns the inclusion proof for the leaf at the given index.
@@ -320,37 +287,6 @@ mod tests {
         let tree_b = TestTree::from_leaves(tree_a.leaves()).unwrap();
 
         assert_eq!(tree_a.root(), tree_b.root());
-    }
-
-    #[test]
-    fn trusted_checkpoint_preserves_proofs_and_subsequent_updates() {
-        for count in 0..=7 {
-            let leaves: Vec<_> = (1..=count).collect();
-            let mut original = TestTree::from_leaves(&leaves).unwrap();
-            let mut restored = TestTree::from_trusted_nodes(
-                original.leaves().to_vec(),
-                original.nodes()[1..].to_vec(),
-            )
-            .unwrap();
-            assert_eq!(original.root(), restored.root());
-            for index in 0..leaves.len() {
-                assert_eq!(
-                    original.proof(index).unwrap(),
-                    restored.proof(index).unwrap()
-                );
-                assert!(restored.proof(index).unwrap().verify::<TestHasher>());
-            }
-            original.insert(count as usize, 42).unwrap();
-            restored.insert(count as usize, 42).unwrap();
-            assert_eq!(original.root(), restored.root());
-        }
-    }
-
-    #[test]
-    fn trusted_checkpoint_rejects_invalid_dimensions() {
-        assert!(TestTree::from_trusted_nodes(vec![], vec![]).is_err());
-        assert!(TestTree::from_trusted_nodes(vec![1; 9], vec![vec![]; 3]).is_err());
-        assert!(TestTree::from_trusted_nodes(vec![1], vec![vec![1], vec![], vec![1]]).is_err());
     }
 
     #[test]

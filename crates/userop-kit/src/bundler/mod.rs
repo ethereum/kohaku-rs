@@ -51,8 +51,10 @@ pub trait Bundler {
     /// `estimate_gas` returns a price too, but only for a UserOperation that passes simulation,
     /// which for the privacy paymaster means one carrying a real proof. A caller that must fix the
     /// fee before proving (single signature on a hardware signer) needs the price first.
-    /// `None` when the bundler has no such endpoint.
-    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError>;
+    /// `None` when the bundler has no such endpoint, which is the default.
+    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError> {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
