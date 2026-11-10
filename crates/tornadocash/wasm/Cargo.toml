@@ -16,6 +16,7 @@ js-sys = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 kohaku-tornadocash-relayer = { workspace = true }
 kohaku-tornadocash-syncer = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -12,7 +12,7 @@ use crate::hex::Hex;
 /// Updating or freeing the source tree does not change this proof.
 #[wasm_bindgen]
 pub struct MerkleProof {
-    inner: CoreMerkleProof,
+    pub(crate) inner: CoreMerkleProof,
 }
 
 impl From<CoreMerkleProof> for MerkleProof {

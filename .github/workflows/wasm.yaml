@@ -48,7 +48,7 @@ jobs:
 
       - name: Test WASM bindings
         run: >-
-          nix develop .#ci --command cargo test --locked --manifest-path crates/Cargo.toml
+          nix develop .#ci --command cargo test --release --locked --manifest-path crates/Cargo.toml
           -p kohaku-tornadocash-wasm --lib
           --target wasm32-unknown-unknown --target-dir crates/target
 
