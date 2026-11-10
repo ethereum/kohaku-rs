@@ -95,13 +95,20 @@ impl SyncerError {
 }
 
 impl Shield {
+    /// The commitment's leaf hash: the indexer-provided one, else Poseidon of its preimage.
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: Poseidon over three field-reduced inputs cannot fail.
     pub fn hash(&self) -> UtxoLeafHash {
         if let Some(hash) = self.hash {
             return hash;
         }
 
+        // `poseidon_hash` reduces each input into the field, so only an unsupported
+        // input count can fail, and three inputs are always supported.
         poseidon_hash(&[self.npk, self.token.hash(), U256::from(self.value)])
-            .unwrap()
+            .expect("poseidon supports three inputs")
             .into()
     }
 }

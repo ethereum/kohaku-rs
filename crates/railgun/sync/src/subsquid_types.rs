@@ -61,7 +61,7 @@ pub enum CommitmentKind {
         #[serde(rename = "shieldKey")]
         shield_key: FixedBytes<32>,
         #[serde(rename = "encryptedBundle")]
-        encrypted_bundle: Vec<FixedBytes<32>>,
+        encrypted_bundle: [FixedBytes<32>; 3],
     },
     TransactCommitment {
         ciphertext: TransactCiphertextOuter,
@@ -215,8 +215,12 @@ impl From<Commitment> for syncer::SyncEvent {
                     token: preimage.token.into(),
                     value: preimage.value,
                     ciphertext: Ciphertext {
-                        iv: encrypted_bundle[0][..16].try_into().unwrap(),
-                        tag: encrypted_bundle[0][16..].try_into().unwrap(),
+                        iv: encrypted_bundle[0][..16]
+                            .try_into()
+                            .expect("16 bytes of a bytes32"),
+                        tag: encrypted_bundle[0][16..]
+                            .try_into()
+                            .expect("16 bytes of a bytes32"),
                         data: vec![encrypted_bundle[1][..16].to_vec()],
                     },
                     shield_key: shield_key.into(),
