@@ -5,7 +5,7 @@ Client for interacting with Tornado Cash paymasters.
 > [!IMPORTANT]
 > The privacy-paymaster contracts are experimental and not audited. Use at your own risk, and avoid using on mainnet with real funds.
 
-Supports sponsoring 4337 UserOps with Tornado Cash notes. Uses the [`privacy-paymaster`](https://github.com/ethereum/kohaku-contracts/tree/master/privacy-paymaster) contracts from `kohaku-contracts`.
+Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-paymaster`](https://github.com/ethereum/kohaku-contracts/tree/master/privacy-paymaster) contracts from `kohaku-contracts`.
 
 ## Example
 

@@ -5,7 +5,7 @@ use alloy::{
 
 use crate::{
     signable_user_operation::SignableUserOperation,
-    smart_account::{SmartAccount, SmartAccountError},
+    smart_account::{AccountInit, SmartAccount, SmartAccountError},
     user_operation::{UserOperation, UserOperationGasEstimate},
 };
 
@@ -19,16 +19,24 @@ pub struct UserOperationBuilder<S> {
 }
 
 impl<S: SmartAccount> UserOperationBuilder<S> {
-    /// Create a new UserOperationBuilder with a smart account
+    /// Creates a builder with the account's nonce, initialization, and estimation signature.
+    ///
+    /// # Errors
+    /// Returns an error if the account's nonce or initialization state cannot be read.
     pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
-        Ok(Self::new(
+        let builder = Self::new(
             smart_account.address(),
             smart_account.entry_point(),
             smart_account.domain(),
         )
         .with_nonce(smart_account.nonce().await?)
-        .with_authorization(smart_account.authorization().await?)
-        .with_signature(smart_account.dummy_signature()))
+        .with_signature(smart_account.dummy_signature());
+
+        Ok(match smart_account.init().await? {
+            AccountInit::None => builder,
+            AccountInit::Eip7702(auth) => builder.with_authorization(auth),
+            AccountInit::Factory { factory, data } => builder.with_factory(factory, data),
+        })
     }
 
     /// Sets the call data for this UserOperation by encoding the provided call using the smart

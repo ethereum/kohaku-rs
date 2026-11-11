@@ -1,6 +1,8 @@
+//! EIP-7702 accounts using the Simple7702 execution ABI.
+
 use alloy::{
     network::TransactionBuilder,
-    primitives::{Address, Bytes, U256, address, aliases::U192, bytes},
+    primitives::{Address, Bytes, U256, address, aliases::U192},
     providers::Provider,
     rpc::types::{Authorization, TransactionRequest},
 };
@@ -11,10 +13,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     abis::entry_point::EntryPoint,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
-    smart_account::{SmartAccount, SmartAccountError},
+    smart_account::{AccountInit, DUMMY_SIGNATURE, SmartAccount, SmartAccountError},
 };
 
-/// Creates a simple smart account.
+/// An EIP-7702 account using the Simple7702 execution ABI.
 ///
 /// Defaults to the v0.8 EntryPoint and the eth-infinitism Simple7702Account implementation at
 /// `0xe6Cae83BdE06E4c305530e199D7217f42808555B`.
@@ -27,7 +29,6 @@ pub struct Simple7702SmartAccount<P: Provider> {
     implementation: Address,
     entry_point: Address,
     domain: Eip712Domain,
-    dummy_signature: Bytes,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -44,13 +45,11 @@ pub struct Call {
 }
 
 impl<P: Provider> Simple7702SmartAccount<P> {
+    /// Creates a Simple7702 account with the v0.8 EntryPoint.
     pub fn new(provider: P, owner: Address, chain_id: u64) -> Self {
         let implementation = address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
         let entry_point = ENTRY_POINT_08;
         let domain = entry_point_08_domain(chain_id);
-        let dummy_signature = bytes!(
-            "0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c"
-        );
 
         Self {
             owner,
@@ -59,8 +58,16 @@ impl<P: Provider> Simple7702SmartAccount<P> {
             implementation,
             entry_point,
             domain,
-            dummy_signature,
         }
+    }
+
+    /// Delegates to `implementation`.
+    ///
+    /// The implementation must support Simple7702Account's v0.8 EIP-712
+    /// signature validation and atomic execution ABI.
+    pub fn with_implementation(mut self, implementation: Address) -> Self {
+        self.implementation = implementation;
+        self
     }
 }
 
@@ -98,18 +105,18 @@ impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
         Ok(nonce)
     }
 
-    async fn authorization(&self) -> Result<Authorization, SmartAccountError> {
+    async fn init(&self) -> Result<AccountInit, SmartAccountError> {
         let nonce = self.owner_nonce().await?;
 
-        Ok(Authorization {
+        Ok(AccountInit::Eip7702(Authorization {
             chain_id: U256::from(self.chain_id),
             address: self.implementation,
             nonce,
-        })
+        }))
     }
 
     fn dummy_signature(&self) -> Bytes {
-        self.dummy_signature.clone()
+        DUMMY_SIGNATURE.clone()
     }
 
     fn abi_encode_call(call_data: &Self::Call) -> Bytes {
@@ -156,4 +163,59 @@ mod abi {
         }
 
     );
+}
+
+#[cfg(all(test, native))]
+mod tests {
+    use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
+
+    use super::*;
+    use crate::{builder::UserOperationBuilder, user_operation::Authorization as OpAuthorization};
+
+    #[tokio::test]
+    async fn init_uses_selected_implementation_and_current_native_nonce() {
+        let mock = Asserter::new();
+        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
+        let implementation = Address::repeat_byte(0x77);
+        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1)
+            .with_implementation(implementation);
+        mock.push_success(&"0x9");
+
+        let AccountInit::Eip7702(auth) = account.init().await.unwrap() else {
+            panic!("Expected EIP-7702 delegation");
+        };
+
+        assert_eq!(auth.address, implementation);
+        assert_eq!(auth.nonce, 9);
+    }
+
+    #[tokio::test]
+    async fn builder_keeps_entrypoint_and_authorization_nonces_separate() {
+        let mock = Asserter::new();
+        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
+        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1);
+        mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
+        mock.push_success(&"0x9");
+
+        let operation = UserOperationBuilder::new_with_smart_account(&account)
+            .await
+            .unwrap()
+            .build();
+        let OpAuthorization::Eip7702(auth) = operation.user_op.authorization else {
+            panic!("Expected EIP-7702 delegation");
+        };
+
+        assert_eq!(operation.user_op.nonce, U256::from(7));
+        assert_eq!(auth.nonce, 9);
+        assert!(operation.user_op.factory.is_none());
+    }
+
+    #[test]
+    fn builder_future_is_send_on_native() {
+        fn assert_send(_: impl Send) {}
+
+        let provider = ProviderBuilder::new().connect_mocked_client(Asserter::new());
+        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1);
+        assert_send(UserOperationBuilder::new_with_smart_account(&account));
+    }
 }

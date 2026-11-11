@@ -17,6 +17,7 @@ bundler = []
 alloy = { workspace = true, features = [
     "signers",
     "dyn-abi",
+    "eip712",
     "rpc",
     "rpc-types",
 ] }
@@ -32,7 +33,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom_02 = { version = "0.2", package = "getrandom", features = ["js"] }
+getrandom_02 = { workspace = true, features = ["js"] }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

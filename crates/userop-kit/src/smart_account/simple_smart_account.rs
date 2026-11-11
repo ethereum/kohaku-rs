@@ -1,8 +1,10 @@
+//! EIP-7702 accounts using the Simple7702 execution ABI.
+
 use std::sync::Arc;
 
 use alloy::{
     network::TransactionBuilder,
-    primitives::{Address, Bytes, U256, address, aliases::U192, bytes},
+    primitives::{Address, Bytes, U256, address, aliases::U192},
     providers::Provider,
     rpc::types::{Authorization, TransactionRequest},
 };
@@ -13,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     abis::entry_point::EntryPoint,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
-    smart_account::{SmartAccount, SmartAccountError},
+    smart_account::{AccountInit, DUMMY_SIGNATURE, SmartAccount, SmartAccountError},
 };
 
-/// Creates a simple smart account.
+/// An EIP-7702 account using the Simple7702 execution ABI.
 ///
 /// Defaults to the v0.8 EntryPoint and the eth-infinitism Simple7702Account implementation at
 /// `0xe6Cae83BdE06E4c305530e199D7217f42808555B`.
@@ -29,7 +31,6 @@ pub struct SimpleSmartAccount {
     implementation: Address,
     entry_point: Address,
     domain: Eip712Domain,
-    dummy_signature: Bytes,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -46,13 +47,11 @@ pub struct Call {
 }
 
 impl SimpleSmartAccount {
+    /// Creates a Simple7702 account with the v0.8 EntryPoint.
     pub fn new(owner: Address, chain_id: u64, provider: Arc<dyn Provider>) -> Self {
         let implementation = address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
         let entry_point = ENTRY_POINT_08;
         let domain = entry_point_08_domain(chain_id);
-        let dummy_signature = bytes!(
-            "0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c"
-        );
 
         Self {
             owner,
@@ -61,8 +60,16 @@ impl SimpleSmartAccount {
             implementation,
             entry_point,
             domain,
-            dummy_signature,
         }
+    }
+
+    /// Delegates to `implementation`.
+    ///
+    /// The implementation must support Simple7702Account's v0.8 EIP-712
+    /// signature validation and atomic execution ABI.
+    pub fn with_implementation(mut self, implementation: Address) -> Self {
+        self.implementation = implementation;
+        self
     }
 }
 
@@ -97,18 +104,18 @@ impl SmartAccount for SimpleSmartAccount {
         Ok(nonce)
     }
 
-    async fn authorization(&self) -> Result<Authorization, SmartAccountError> {
+    async fn init(&self) -> Result<AccountInit, SmartAccountError> {
         let nonce = self.owner_nonce().await?;
 
-        Ok(Authorization {
+        Ok(AccountInit::Eip7702(Authorization {
             chain_id: U256::from(self.chain_id),
             address: self.implementation,
             nonce,
-        })
+        }))
     }
 
     fn dummy_signature(&self) -> Bytes {
-        self.dummy_signature.clone()
+        DUMMY_SIGNATURE.clone()
     }
 
     fn abi_encode_call(call_data: &Self::Call) -> Bytes {
