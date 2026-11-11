@@ -60,7 +60,7 @@ impl SignableUserOperation {
         )
     }
 
-    /// Attaches the selected owner's signature and consumes this signable operation.
+    /// Attaches the owner's signature to this operation.
     ///
     /// For EIP-7702 operations, the authorization must already be signed.
     ///
@@ -104,7 +104,7 @@ impl SignableUserOperation {
 mod tests {
     use alloy::{
         primitives::{Bytes, U256, address, b256},
-        signers::{Signature, local::PrivateKeySigner},
+        signers::{Signature, SignerSync, local::PrivateKeySigner},
     };
 
     use super::*;
@@ -147,6 +147,102 @@ mod tests {
             signer.address(),
             "Recovered address does not match signer address"
         );
+    }
+
+    #[test]
+    fn typed_data_hash_matches_user_operation_signing_hash() {
+        let operation = test_user_operation();
+
+        assert_eq!(
+            operation.typed_data().eip712_signing_hash().unwrap(),
+            operation.signing_hash()
+        );
+    }
+
+    #[test]
+    fn with_signature_preserves_the_separate_account_sender() {
+        let operation = test_user_operation();
+        let sender = operation.user_op.sender;
+        let owner = owner();
+        let hash = operation.signing_hash();
+        let signature = owner.sign_hash_sync(&hash).unwrap();
+
+        let signed = operation
+            .with_signature(owner.address(), signature)
+            .unwrap();
+
+        assert_eq!(signed.user_op.sender, sender);
+        assert_ne!(signed.user_op.sender, owner.address());
+        assert_eq!(signed.user_op.signature.as_ref(), signature.as_bytes());
+    }
+
+    #[test]
+    fn with_signature_rejects_a_different_owner() {
+        let operation = test_user_operation();
+        let signature = owner().sign_hash_sync(&operation.signing_hash()).unwrap();
+
+        let error = operation
+            .with_signature(Address::ZERO, signature)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("does not match the selected owner")
+        );
+    }
+
+    #[test]
+    fn with_signature_rejects_an_unsigned_authorization() {
+        let mut operation = test_user_operation();
+        operation.user_op.authorization =
+            Authorization::Eip7702(alloy::rpc::types::Authorization {
+                chain_id: U256::from(1),
+                address: Address::repeat_byte(0x77),
+                nonce: 9,
+            });
+        let owner = owner();
+        let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
+
+        let error = operation
+            .with_signature(owner.address(), signature)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("authorization is still unsigned")
+        );
+    }
+
+    #[test]
+    fn with_signature_preserves_a_signed_authorization() {
+        let mut operation = test_user_operation();
+        let owner = owner();
+        let authorization = alloy::rpc::types::Authorization {
+            chain_id: U256::from(1),
+            address: Address::repeat_byte(0x77),
+            nonce: 9,
+        };
+        let signature = owner
+            .sign_hash_sync(&authorization.signature_hash())
+            .unwrap();
+        operation.user_op.authorization =
+            Authorization::SignedEip7702(authorization.into_signed(signature));
+        let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
+
+        let signed = operation
+            .with_signature(owner.address(), signature)
+            .unwrap();
+
+        assert!(matches!(
+            signed.user_op.authorization,
+            Authorization::SignedEip7702(_)
+        ));
+    }
+
+    fn owner() -> PrivateKeySigner {
+        PrivateKeySigner::from_bytes(&B256::repeat_byte(7)).unwrap()
     }
 
     fn test_user_operation() -> SignableUserOperation {

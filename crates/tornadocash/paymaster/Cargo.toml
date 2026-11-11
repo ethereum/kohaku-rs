@@ -32,7 +32,6 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 cfg_aliases = { workspace = true }
 
 [dev-dependencies]
-kohaku-account-checks = { workspace = true }
 alloy = { workspace = true, features = [
     "signers",
     "signer-local",
