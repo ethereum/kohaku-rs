@@ -42,11 +42,16 @@ alloy = { workspace = true, features = [
     "provider-anvil-node",
 ] }
 anyhow = { workspace = true }
+criterion = { workspace = true }
 insta = { workspace = true }
 kohaku-fork-kit = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "process"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[[bench]]
+name = "merkle_tree"
+harness = false
 
 [lints]
 workspace = true

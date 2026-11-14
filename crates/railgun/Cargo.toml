@@ -87,5 +87,9 @@ kohaku-fork-kit = { workspace = true }
 name = "indexed_account"
 harness = false
 
+[[bench]]
+name = "merkle_tree"
+harness = false
+
 [lints]
 workspace = true
