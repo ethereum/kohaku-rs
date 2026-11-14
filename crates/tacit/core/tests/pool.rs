@@ -21,6 +21,18 @@ use kohaku_tacit::{
 
 const ETH: u128 = 1_000_000_000_000_000_000;
 
+/// The ceremony files are about 33 MB and not part of the repo: without them these tests skip.
+fn artifacts_missing() -> bool {
+    let missing = std::env::var_os("TACIT_ARTIFACTS_DIR").is_none();
+    if missing {
+        eprintln!(
+            "skipped: set TACIT_ARTIFACTS_DIR to a directory with transact.wasm and \
+             transact_final.zkey"
+        );
+    }
+    missing
+}
+
 fn prover() -> &'static Prover {
     static PROVER: OnceLock<Prover> = OnceLock::new();
     PROVER.get_or_init(|| {
@@ -96,6 +108,9 @@ fn wallet(seed: u8, pool: &Pool) -> Wallet {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs the ceremony artifacts and anvil; run with --release"]
 async fn shields_pays_and_withdraws() {
+    if artifacts_missing() {
+        return;
+    }
     let (provider, pool) = setup().await;
     let mut rng = rand::rng();
     let mut alice = wallet(0x11, &pool);
@@ -181,6 +196,9 @@ async fn shields_pays_and_withdraws() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs the ceremony artifacts and anvil; run with --release"]
 async fn consolidates_and_withdraws_without_change() {
+    if artifacts_missing() {
+        return;
+    }
     let (provider, pool) = setup().await;
     let mut rng = rand::rng();
     let mut carol = wallet(0x33, &pool);

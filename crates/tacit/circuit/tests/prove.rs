@@ -55,6 +55,18 @@ fn inputs(v: &Value) -> CircuitInputs {
     }
 }
 
+/// The ceremony files are about 33 MB and not part of the repo: without them these tests skip.
+fn artifacts_missing() -> bool {
+    let missing = std::env::var_os("TACIT_ARTIFACTS_DIR").is_none();
+    if missing {
+        eprintln!(
+            "skipped: set TACIT_ARTIFACTS_DIR to a directory with transact.wasm and \
+             transact_final.zkey"
+        );
+    }
+    missing
+}
+
 fn prover() -> Prover {
     let dir = PathBuf::from(
         std::env::var("TACIT_ARTIFACTS_DIR").expect("set TACIT_ARTIFACTS_DIR to the artifacts"),
@@ -70,6 +82,9 @@ fn prover() -> Prover {
 #[test]
 #[ignore = "needs the ceremony artifacts (TACIT_ARTIFACTS_DIR); run with --release"]
 fn proves_the_reference_witnesses() {
+    if artifacts_missing() {
+        return;
+    }
     let vectors = vectors();
     let prover = prover();
     let mut rng = rand::rng();
@@ -93,6 +108,9 @@ fn proves_the_reference_witnesses() {
 #[test]
 #[ignore = "needs the ceremony artifacts (TACIT_ARTIFACTS_DIR); run with --release"]
 fn refuses_inputs_the_circuit_does_not_accept() {
+    if artifacts_missing() {
+        return;
+    }
     let vectors = vectors();
     let prover = prover();
     let mut rng = rand::rng();
