@@ -36,7 +36,26 @@ let call = tx.prove(&prover, &mut rng)?.call();
 
 A proof binds the tree it was built against. A transaction that inserts notes is good only while the pool's head is unchanged. If another transaction lands first, sync and build it again.
 
+## Pairing with fixed denominations
+
+A fixed-denomination pool can only take multiples of its denominations, so an arbitrary amount never fits: the leftover stays public, waits, or goes into a rarely used denomination whose anonymity set is thin. This pool takes any amount, so it can hold the leftover instead.
+
+With the `tornado` feature, [`pairing::Split`] plans that division: the round part into Tornado Cash's deep pools, the rest here.
+
+```rust
+# #[cfg(feature = "tornado")]
+# fn example() {
+use kohaku_tacit::pairing::{Split, SplitOptions};
+
+// 1.37 ETH on Ethereum: one 1 ETH note, three 0.1 ETH notes, 0.07 ETH left over.
+let split = Split::for_tornado(1_370_000_000_000_000_000, 1, &SplitOptions::default());
+assert_eq!(split.deposits.len(), 4);
+assert_eq!(split.remainder, 70_000_000_000_000_000);
+# }
+```
+
 ## Features
 
 - `mnemonic`: [`Account::from_mnemonic`], the account Kohaku's keystore opens from a BIP-39 phrase.
 - `parallel`: parallel proving.
+- `tornado`: [`pairing::Split`], planning a split between Tornado Cash's denominations and this pool.

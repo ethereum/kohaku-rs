@@ -8,6 +8,8 @@ mod event;
 mod field;
 mod keys;
 mod memo;
+#[cfg(feature = "tornado")]
+pub mod pairing;
 mod pool;
 mod poseidon;
 mod state;

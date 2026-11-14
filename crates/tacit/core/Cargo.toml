@@ -13,6 +13,8 @@ crate-type = ["rlib"]
 default = []
 mnemonic = ["alloy/signer-mnemonic"]
 parallel = ["kohaku-tacit-circuit/parallel"]
+# Planning a split between Tornado Cash's fixed denominations and this pool.
+tornado = ["dep:kohaku-tornadocash"]
 
 [dependencies]
 alloy = { workspace = true, features = [
@@ -30,6 +32,7 @@ hmac = { workspace = true }
 k256 = { workspace = true, features = ["arithmetic", "std"] }
 kohaku-rpc-provider = { workspace = true }
 kohaku-tacit-circuit = { workspace = true }
+kohaku-tornadocash = { workspace = true, optional = true }
 rand_core = { workspace = true }
 ruint = { workspace = true, features = ["ark-ff-06", "serde"] }
 serde = { workspace = true, features = ["derive"] }
