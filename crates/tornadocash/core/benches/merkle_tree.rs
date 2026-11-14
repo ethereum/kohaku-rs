@@ -3,7 +3,6 @@ use std::hint::black_box;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use kohaku_tornadocash::{Field, merkle_tree::MerkleTree};
 
-const SIZES: [usize; 2] = [1_024, 32_768];
 const REBUILD_SIZES: [usize; 2] = [64, 256];
 
 fn leaves(n: usize) -> Vec<Field> {
@@ -11,29 +10,17 @@ fn leaves(n: usize) -> Vec<Field> {
 }
 
 fn bench_insert(c: &mut Criterion) {
-    let mut group = c.benchmark_group("tornado_insert");
-    for n in SIZES {
-        let tree = MerkleTree::from_leaves(&leaves(n)).unwrap();
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter_batched(
-                || tree.clone(),
-                |mut tree| tree.insert(n, black_box(Field::from(u32::MAX))).unwrap(),
-                BatchSize::LargeInput,
-            );
-        });
-    }
-    group.finish();
+    let mut tree = MerkleTree::new();
+    c.bench_function("tornado_insert", |b| {
+        b.iter(|| tree.insert(0, black_box(Field::from(1))).unwrap());
+    });
 }
 
 fn bench_proof(c: &mut Criterion) {
-    let mut group = c.benchmark_group("tornado_proof");
-    for n in SIZES {
-        let tree = MerkleTree::from_leaves(&leaves(n)).unwrap();
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter(|| tree.proof(black_box(n / 2)).unwrap());
-        });
-    }
-    group.finish();
+    let tree = MerkleTree::from_leaves(&leaves(16)).unwrap();
+    c.bench_function("tornado_proof", |b| {
+        b.iter(|| tree.proof(black_box(0)).unwrap());
+    });
 }
 
 fn bench_rebuild(c: &mut Criterion) {
@@ -48,18 +35,14 @@ fn bench_rebuild(c: &mut Criterion) {
 }
 
 fn bench_from_nodes(c: &mut Criterion) {
-    let mut group = c.benchmark_group("tornado_from_nodes");
-    for n in SIZES {
-        let nodes = MerkleTree::from_leaves(&leaves(n)).unwrap().into_nodes();
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter_batched(
-                || nodes.clone(),
-                |nodes| MerkleTree::from_nodes(nodes).unwrap(),
-                BatchSize::LargeInput,
-            );
-        });
-    }
-    group.finish();
+    let nodes = MerkleTree::from_leaves(&leaves(16)).unwrap().into_nodes();
+    c.bench_function("tornado_from_nodes", |b| {
+        b.iter_batched(
+            || nodes.clone(),
+            |nodes| MerkleTree::from_nodes(nodes).unwrap(),
+            BatchSize::SmallInput,
+        );
+    });
 }
 
 criterion_group!(

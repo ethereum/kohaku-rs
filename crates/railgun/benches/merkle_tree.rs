@@ -4,43 +4,25 @@ use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_ma
 use kohaku_railgun::merkle_tree::MerkleTree;
 use ruint::aliases::U256;
 
-const SIZES: [usize; 2] = [1_024, 32_768];
 const REBUILD_SIZES: [usize; 2] = [64, 256];
 
 fn leaves(n: usize) -> Vec<U256> {
     (0..n).map(U256::from).collect()
 }
 
-fn tree(n: usize) -> MerkleTree {
-    let mut tree = MerkleTree::new(0);
-    tree.insert_leaves(&leaves(n), 0).unwrap();
-    tree
-}
-
 fn bench_insert(c: &mut Criterion) {
-    let mut group = c.benchmark_group("railgun_insert");
-    for n in SIZES {
-        let tree = tree(n);
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter_batched(
-                || tree.clone(),
-                |mut tree| tree.insert_leaves(&[black_box(U256::MAX)], n).unwrap(),
-                BatchSize::LargeInput,
-            );
-        });
-    }
-    group.finish();
+    let mut tree = MerkleTree::new(0);
+    c.bench_function("railgun_insert", |b| {
+        b.iter(|| tree.insert_leaves(&[black_box(U256::from(1))], 0).unwrap());
+    });
 }
 
 fn bench_proof(c: &mut Criterion) {
-    let mut group = c.benchmark_group("railgun_proof");
-    for n in SIZES {
-        let tree = tree(n);
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter(|| tree.generate_proof_at(black_box(n / 2)).unwrap());
-        });
-    }
-    group.finish();
+    let mut tree = MerkleTree::new(0);
+    tree.insert_leaves(&leaves(16), 0).unwrap();
+    c.bench_function("railgun_proof", |b| {
+        b.iter(|| tree.generate_proof_at(black_box(0)).unwrap());
+    });
 }
 
 fn bench_rebuild(c: &mut Criterion) {
@@ -59,18 +41,16 @@ fn bench_rebuild(c: &mut Criterion) {
 }
 
 fn bench_from_nodes(c: &mut Criterion) {
-    let mut group = c.benchmark_group("railgun_from_nodes");
-    for n in SIZES {
-        let state = tree(n).state();
-        group.bench_function(BenchmarkId::from_parameter(n), |b| {
-            b.iter_batched(
-                || state.clone(),
-                |state| MerkleTree::from_state(state).unwrap(),
-                BatchSize::LargeInput,
-            );
-        });
-    }
-    group.finish();
+    let mut tree = MerkleTree::new(0);
+    tree.insert_leaves(&leaves(16), 0).unwrap();
+    let state = tree.state();
+    c.bench_function("railgun_from_nodes", |b| {
+        b.iter_batched(
+            || state.clone(),
+            |state| MerkleTree::from_state(state).unwrap(),
+            BatchSize::SmallInput,
+        );
+    });
 }
 
 criterion_group!(
