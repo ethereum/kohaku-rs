@@ -6,6 +6,7 @@ members = [
     "tacit/circuit",
     "tacit/core",
     "tacit/relayer",
+    "tacit/wasm",
     "tor-rpc",
     "tornadocash/circuit",
     "tornadocash/core",

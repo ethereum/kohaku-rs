@@ -255,7 +255,7 @@ impl RelayerClient {
                 .min(30);
             let jitter = 0.5 + rand::random::<f64>();
             debug!(after, attempt, "relayer busy");
-            tokio::time::sleep(Duration::from_secs(after).mul_f64(jitter)).await;
+            kohaku_tacit::sleep(Duration::from_secs(after).mul_f64(jitter)).await;
         }
         unreachable!()
     }

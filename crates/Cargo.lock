@@ -4652,6 +4652,7 @@ dependencies = [
  "ark-ff 0.6.0",
  "hex",
  "hmac 0.12.1",
+ "js-sys",
  "k256",
  "kohaku-rpc-provider",
  "kohaku-tacit-circuit",
@@ -4664,6 +4665,8 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -4697,6 +4700,24 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "kohaku-tacit-wasm"
+version = "0.0.1"
+dependencies = [
+ "alloy",
+ "getrandom 0.2.17",
+ "getrandom 0.4.3",
+ "hex",
+ "js-sys",
+ "kohaku-tacit",
+ "kohaku-tacit-relayer",
+ "rand 0.10.2",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
 ]
 
 [[package]]

@@ -92,7 +92,7 @@ impl Wallet {
                 return Err(failure);
             }
             warn!(%failure, attempt, "history incomplete, reading again");
-            tokio::time::sleep(Duration::from_millis(1500)).await;
+            crate::time::sleep(Duration::from_millis(1500)).await;
         }
         unreachable!()
     }
