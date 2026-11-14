@@ -33,8 +33,14 @@ pub enum MerkleTreeError {
     MissingLeaf,
     #[error("Index {0} is out of bounds")]
     IndexOutOfBounds(usize),
-    #[error("Invalid cached Merkle tree {0}")]
-    InvalidCachedNodes(&'static str),
+    #[error("Expected {expected} levels, got {actual}")]
+    LevelCount { expected: usize, actual: usize },
+    #[error("Expected {expected} nodes at level {level}, got {actual}")]
+    LevelLength {
+        level: usize,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
@@ -61,29 +67,33 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
         Ok(tree)
     }
 
-    /// Restore computed nodes from an authenticated, caller-owned checkpoint.
+    /// Restores a tree from nodes returned by [`Self::nodes`] or [`Self::into_nodes`].
     ///
-    /// Validates capacity and level dimensions without rehashing every leaf.
-    /// The caller must authenticate these nodes along with the leaves: this is
-    /// not a verifier for a public or otherwise untrusted Merkle snapshot.
-    /// `internal_nodes` contains levels 1 through DEPTH, excluding the leaves.
-    pub fn from_trusted_nodes(
-        leaves: Vec<E>,
-        internal_nodes: Vec<Vec<E>>,
-    ) -> Result<Self, MerkleTreeError> {
-        let capacity = ARITY.checked_pow(DEPTH as u32).unwrap_or(usize::MAX);
-        if leaves.len() > capacity || internal_nodes.len() != DEPTH {
-            return Err(MerkleTreeError::InvalidCachedNodes("dimensions"));
+    /// Checks level dimensions but does not rehash, so the nodes must come from a trusted source.
+    pub fn from_nodes(nodes: Vec<Vec<E>>) -> Result<Self, MerkleTreeError> {
+        if nodes.len() != DEPTH + 1 {
+            return Err(MerkleTreeError::LevelCount {
+                expected: DEPTH + 1,
+                actual: nodes.len(),
+            });
         }
-        let mut expected = leaves.len();
-        for level in &internal_nodes {
+        let capacity = ARITY.checked_pow(DEPTH as u32).unwrap_or(usize::MAX);
+        if nodes[0].len() > capacity {
+            return Err(MerkleTreeError::TreeFull);
+        }
+        let mut expected = nodes[0].len();
+        for (level, nodes) in nodes.iter().enumerate().skip(1) {
             expected = expected.div_ceil(ARITY);
-            if level.len() != expected {
-                return Err(MerkleTreeError::InvalidCachedNodes("level"));
+            if nodes.len() != expected {
+                return Err(MerkleTreeError::LevelLength {
+                    level,
+                    expected,
+                    actual: nodes.len(),
+                });
             }
         }
         let mut tree = Self::new();
-        tree.nodes = std::iter::once(leaves).chain(internal_nodes).collect();
+        tree.nodes = nodes;
         Ok(tree)
     }
 
@@ -100,6 +110,11 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>>
     /// Returns the tree's nodes, starting with the leaves at level zero.
     pub fn nodes(&self) -> &[Vec<E>] {
         &self.nodes
+    }
+
+    /// Consumes the tree, returning its nodes, starting with the leaves at level zero.
+    pub fn into_nodes(self) -> Vec<Vec<E>> {
+        self.nodes
     }
 
     /// Returns the inclusion proof for the leaf at the given index.
@@ -237,6 +252,35 @@ impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> Cl
     }
 }
 
+impl<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> std::fmt::Debug
+    for MerkleTree<DEPTH, ARITY, E, H>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MerkleTree")
+            .field("depth", &DEPTH)
+            .field("arity", &ARITY)
+            .field("leaves", &self.leaves().len())
+            .field(
+                "capacity",
+                &ARITY.checked_pow(DEPTH as u32).unwrap_or(usize::MAX),
+            )
+            .finish()
+    }
+}
+
+impl<const DEPTH: usize, const ARITY: usize, E: Element + PartialEq, H: Hasher<ARITY, E>> PartialEq
+    for MerkleTree<DEPTH, ARITY, E, H>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.nodes == other.nodes
+    }
+}
+
+impl<const DEPTH: usize, const ARITY: usize, E: Element + Eq, H: Hasher<ARITY, E>> Eq
+    for MerkleTree<DEPTH, ARITY, E, H>
+{
+}
+
 /// Hashes each `ARITY`-wide chunk of `children` into the matching slot of `parents`.
 #[cfg_attr(not(feature = "parallel"), expect(unused_variables))]
 fn hash_level<const ARITY: usize, E: Element, H: Hasher<ARITY, E>>(
@@ -323,34 +367,42 @@ mod tests {
     }
 
     #[test]
-    fn trusted_checkpoint_preserves_proofs_and_subsequent_updates() {
-        for count in 0..=7 {
-            let leaves: Vec<_> = (1..=count).collect();
-            let mut original = TestTree::from_leaves(&leaves).unwrap();
-            let mut restored = TestTree::from_trusted_nodes(
-                original.leaves().to_vec(),
-                original.nodes()[1..].to_vec(),
-            )
-            .unwrap();
-            assert_eq!(original.root(), restored.root());
-            for index in 0..leaves.len() {
-                assert_eq!(
-                    original.proof(index).unwrap(),
-                    restored.proof(index).unwrap()
-                );
-                assert!(restored.proof(index).unwrap().verify::<TestHasher>());
-            }
-            original.insert(count as usize, 42).unwrap();
-            restored.insert(count as usize, 42).unwrap();
-            assert_eq!(original.root(), restored.root());
-        }
+    fn from_nodes_round_trips() {
+        let tree = TestTree::from_leaves(&[1, 2, 3]).unwrap();
+        assert_eq!(
+            TestTree::from_nodes(tree.clone().into_nodes()).unwrap(),
+            tree
+        );
     }
 
     #[test]
-    fn trusted_checkpoint_rejects_invalid_dimensions() {
-        assert!(TestTree::from_trusted_nodes(vec![], vec![]).is_err());
-        assert!(TestTree::from_trusted_nodes(vec![1; 9], vec![vec![]; 3]).is_err());
-        assert!(TestTree::from_trusted_nodes(vec![1], vec![vec![1], vec![], vec![1]]).is_err());
+    fn from_nodes_rejects_invalid_dimensions() {
+        assert!(matches!(
+            TestTree::from_nodes(vec![]),
+            Err(MerkleTreeError::LevelCount {
+                expected: 4,
+                actual: 0
+            })
+        ));
+        assert!(matches!(
+            TestTree::from_nodes(vec![vec![]; 3]),
+            Err(MerkleTreeError::LevelCount {
+                expected: 4,
+                actual: 3
+            })
+        ));
+        assert!(matches!(
+            TestTree::from_nodes(vec![vec![1; 9], vec![], vec![], vec![]]),
+            Err(MerkleTreeError::TreeFull)
+        ));
+        assert!(matches!(
+            TestTree::from_nodes(vec![vec![1], vec![1], vec![], vec![1]]),
+            Err(MerkleTreeError::LevelLength {
+                level: 2,
+                expected: 1,
+                actual: 0
+            })
+        ));
     }
 
     #[test]

@@ -58,5 +58,26 @@ fn bench_rebuild(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_insert, bench_proof, bench_rebuild);
+fn bench_from_nodes(c: &mut Criterion) {
+    let mut group = c.benchmark_group("railgun_from_nodes");
+    for n in SIZES {
+        let state = tree(n).state();
+        group.bench_function(BenchmarkId::from_parameter(n), |b| {
+            b.iter_batched(
+                || state.clone(),
+                |state| MerkleTree::from_state(state).unwrap(),
+                BatchSize::LargeInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_insert,
+    bench_proof,
+    bench_rebuild,
+    bench_from_nodes
+);
 criterion_main!(benches);

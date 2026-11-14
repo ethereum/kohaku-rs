@@ -51,7 +51,9 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
 
     pub fn from_state(state: MerkleTreeState) -> Result<Self, MerkleTreeError> {
         let inner = match state.cached_nodes {
-            Some(nodes) => InnerTree::from_trusted_nodes(state.leaves, nodes)?,
+            Some(nodes) => {
+                InnerTree::from_nodes(std::iter::once(state.leaves).chain(nodes).collect())?
+            }
             None => InnerTree::from_leaves(&state.leaves)?,
         };
         Ok(Self {
