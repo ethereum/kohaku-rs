@@ -52,6 +52,18 @@ pub async fn pool_head<P: Provider>(
     Ok((U256::from_be_bytes(head.root.0), size))
 }
 
+/// The contract that verifies the pool's proofs. A gas estimate overrides it to accept a dummy
+/// proof.
+///
+/// # Errors
+/// Returns an error if the call fails.
+pub async fn pool_verifier<P: Provider>(
+    provider: &P,
+    pool: alloy::primitives::Address,
+) -> Result<alloy::primitives::Address, SyncError> {
+    Ok(TacitPool::new(pool, provider).VERIFIER().call().await?)
+}
+
 /// How many leaves the tree had when `root` was the pool's head; an error for a root it never
 /// held.
 ///

@@ -104,6 +104,17 @@ impl Transaction {
             .any(|leaf| *leaf != crate::field::Fr::from(0u8))
     }
 
+    /// This transaction with a dummy proof, for gas estimation only.
+    ///
+    /// The proof is not valid: the pool refuses it unless the estimate overrides the verifier.
+    #[must_use]
+    pub fn prove_dummy(self) -> ProvenTransaction {
+        ProvenTransaction {
+            tx: self,
+            proof: Proof::dummy(),
+        }
+    }
+
     /// Proves this transaction.
     ///
     /// # Errors

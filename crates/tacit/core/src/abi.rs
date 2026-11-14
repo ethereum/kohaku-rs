@@ -27,6 +27,9 @@ sol! {
         /// The current root and leaf count.
         function head() external view returns (bytes32 root, uint256 size);
 
+        /// The contract that verifies the pool's proofs.
+        function VERIFIER() external view returns (address);
+
         event Transact(
             bytes32 indexed nf0,
             bytes32 indexed nf1,

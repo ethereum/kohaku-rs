@@ -32,7 +32,7 @@ pub use memo::MEMO_LEN;
 pub use pool::{Pool, RelayerConfig};
 pub use state::{OwnedNote, SavedNote, SavedState, StateError, WalletState};
 pub use statement::{ExtData, StatementError, pool_asset};
-pub use sync::{SyncError, pool_head, root_size};
+pub use sync::{SyncError, pool_head, pool_verifier, root_size};
 pub use time::sleep;
 pub use transaction::{Call, Kind, ProvenTransaction, RelayTx, Transaction};
 pub use tree::{IncTree, IncTreeState, TREE_DEPTH, TreeError};

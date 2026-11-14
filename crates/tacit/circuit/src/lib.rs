@@ -94,6 +94,19 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// A proof made of curve generators: well formed, and accepted by no verifier.
+    ///
+    /// For gas estimation only, against a verifier the estimate overrides. Verifying it costs
+    /// what verifying a real proof costs, so the estimate holds once the real proof replaces it.
+    #[must_use]
+    pub fn dummy() -> Self {
+        Self {
+            a: G1Affine::generator(),
+            b: G2Affine::generator(),
+            c: G1Affine::generator(),
+        }
+    }
+
     /// `pA` as the pool's `transact` takes it.
     #[must_use]
     pub fn pa(&self) -> [U256; 2] {
