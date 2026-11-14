@@ -1,0 +1,25 @@
+[package]
+name = "kohaku-tacit-relayer"
+version = "0.0.1"
+edition = "2024"
+description = "Client for Tacit pool relayers: fee quotes, the queued head, the event feed and relaying"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+alloy = { workspace = true, features = ["providers"] }
+kohaku-tacit = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+ruint = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "io-util"] }
+
+[lints]
+workspace = true
