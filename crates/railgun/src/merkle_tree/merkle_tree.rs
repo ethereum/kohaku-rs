@@ -24,11 +24,15 @@ pub struct NumberedMerkleTree<H: Hasher<2, U256>> {
     inner: InnerTree<H>,
 }
 
-/// Caller-owned tree checkpoint. Restoring rebuilds the tree from its leaves.
+/// Caller-owned tree checkpoint. Authenticate it before restoring cached nodes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MerkleTreeState {
     pub number: u32,
     pub leaves: Vec<U256>,
+    /// Computed levels 1..=TREE_DEPTH. Older leaves-only checkpoints rebuild
+    /// once and acquire this cache on their next successful save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_nodes: Option<Vec<Vec<U256>>>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -46,9 +50,13 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
     }
 
     pub fn from_state(state: MerkleTreeState) -> Result<Self, MerkleTreeError> {
+        let inner = match state.cached_nodes {
+            Some(nodes) => InnerTree::from_trusted_nodes(state.leaves, nodes)?,
+            None => InnerTree::from_leaves(&state.leaves)?,
+        };
         Ok(Self {
             number: state.number,
-            inner: InnerTree::from_leaves(&state.leaves)?,
+            inner,
         })
     }
 
@@ -76,6 +84,7 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
         MerkleTreeState {
             number: self.number,
             leaves: self.inner.leaves().to_vec(),
+            cached_nodes: Some(self.inner.nodes()[1..].to_vec()),
         }
     }
 
@@ -189,25 +198,22 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_restores_and_ignores_legacy_cached_nodes() {
+    fn checkpoint_restores_cached_nodes_and_accepts_old_leaves_only_json() {
         let mut tree = MerkleTree::new(0);
         tree.insert_leaves(&[U256::from(1), U256::from(2), U256::from(3)], 0)
             .unwrap();
         let mut json = serde_json::to_value(tree.state()).unwrap();
-        let restored =
-            MerkleTree::from_state(serde_json::from_value(json.clone()).unwrap()).unwrap();
-        assert_eq!(tree.root().unwrap(), restored.root().unwrap());
+        let cached = MerkleTree::from_state(serde_json::from_value(json.clone()).unwrap()).unwrap();
+        assert_eq!(tree.root().unwrap(), cached.root().unwrap());
         assert_eq!(
             tree.generate_proof_at(1).unwrap(),
-            restored.generate_proof_at(1).unwrap()
+            cached.generate_proof_at(1).unwrap()
         );
 
-        // Checkpoints written by earlier builds carry a node cache; it is ignored.
-        json.as_object_mut()
-            .unwrap()
-            .insert("cached_nodes".into(), serde_json::json!([[1, 2]]));
-        let legacy = MerkleTree::from_state(serde_json::from_value(json).unwrap()).unwrap();
-        assert_eq!(tree.root().unwrap(), legacy.root().unwrap());
+        json.as_object_mut().unwrap().remove("cached_nodes");
+        let old = MerkleTree::from_state(serde_json::from_value(json).unwrap()).unwrap();
+        assert_eq!(tree.root().unwrap(), old.root().unwrap());
+        assert!(old.state().cached_nodes.is_some());
     }
 
     #[test]
