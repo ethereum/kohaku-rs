@@ -5461,6 +5461,7 @@ dependencies = [
  "ark-bn254",
  "ark-ff 0.6.0",
  "blake-hash",
+ "criterion 0.8.2",
  "hex",
  "insta",
  "kohaku-fork-kit",
