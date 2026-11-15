@@ -46,3 +46,21 @@ jobs:
     - run: nix develop .#ci
     - run: nix develop .#ci --command bash -c "cd crates && cargo check --target wasm32-unknown-unknown --workspace --exclude kohaku-fork-kit --exclude kohaku-tor-rpc --lib"
     - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --target wasm32-unknown-unknown --workspace --exclude kohaku-fork-kit --exclude kohaku-tor-rpc --lib"
+
+  check-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31
+    - uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "crates"
+
+    - run: nix develop .#ci
+    - run: nix develop .#ci --command bash -c "cd crates && cargo build --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo check --all-targets --all-features"
+    - run: nix develop .#ci --command bash -c "cd crates && cargo clippy --all-targets --all-features"
