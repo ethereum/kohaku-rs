@@ -4692,6 +4692,7 @@ name = "kohaku-tacit-paymaster"
 version = "0.0.1"
 dependencies = [
  "alloy",
+ "async-trait",
  "kohaku-tacit",
  "kohaku-userop-kit",
  "rand 0.10.2",
