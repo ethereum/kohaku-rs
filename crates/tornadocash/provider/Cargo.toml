@@ -1,0 +1,17 @@
+[package]
+name = "kohaku-tornadocash-provider"
+version = "0.0.1"
+edition = "2024"
+description = "Tornado Cash provider extension"
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+alloy = { workspace = true, features = ["providers", "contract"] }
+kohaku-tornadocash = { workspace = true }
+
+[lints]
+workspace = true
