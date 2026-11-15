@@ -173,7 +173,7 @@ mod operation {
         }
     }
 
-    /// The EIP-712 domain of EntryPoint v0.8, which the kit keeps private.
+    /// The EIP-712 domain of `EntryPoint` v0.8, which the kit keeps private.
     fn domain(chain_id: u64) -> Eip712Domain {
         alloy::sol_types::eip712_domain! {
             name: "ERC4337",
@@ -266,6 +266,36 @@ mod operation {
         }
     }
 
+    /// Sends the operation through the `EntryPoint` itself, in place of a bundler.
+    async fn submit(provider: &DynProvider, op: PackedUserOperation, beneficiary: Address) {
+        let receipt = provider
+            .send_transaction(
+                alloy::rpc::types::TransactionRequest::default()
+                    .to(ENTRY_POINT_08)
+                    .input(
+                        IEntryPoint::handleOpsCall {
+                            ops: vec![op],
+                            beneficiary,
+                        }
+                        .abi_encode()
+                        .into(),
+                    )
+                    .gas_limit(6_000_000),
+            )
+            .await
+            .expect("send handleOps")
+            .get_receipt()
+            .await
+            .expect("receipt");
+        assert!(receipt.status(), "handleOps reverted: {receipt:?}");
+        println!(
+            "landed in block {} using {} gas, tx {}",
+            receipt.block_number.unwrap_or_default(),
+            receipt.gas_used,
+            receipt.transaction_hash
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "needs a funded Sepolia key, the ceremony artifacts and a shielded note"]
     async fn a_note_pays_for_its_own_withdrawal_on_sepolia() {
@@ -340,32 +370,7 @@ mod operation {
             U256::from_be_slice(&op.paymasterAndData[op.paymasterAndData.len() - 32..])
         );
 
-        let receipt = provider
-            .send_transaction(
-                alloy::rpc::types::TransactionRequest::default()
-                    .to(ENTRY_POINT_08)
-                    .input(
-                        IEntryPoint::handleOpsCall {
-                            ops: vec![op],
-                            beneficiary: signer.address(),
-                        }
-                        .abi_encode()
-                        .into(),
-                    )
-                    .gas_limit(6_000_000),
-            )
-            .await
-            .expect("send handleOps")
-            .get_receipt()
-            .await
-            .expect("receipt");
-        assert!(receipt.status(), "handleOps reverted: {receipt:?}");
-        println!(
-            "landed in block {} using {} gas, tx {}",
-            receipt.block_number.unwrap_or_default(),
-            receipt.gas_used,
-            receipt.transaction_hash
-        );
+        submit(&provider, op, signer.address()).await;
 
         settle(&provider).await;
         let after = (
