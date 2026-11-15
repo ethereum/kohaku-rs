@@ -21,7 +21,7 @@ use kohaku_tacit::{Account, Pool, Wallet, circuit::Prover};
 /// The pool, at the same address as on Ethereum.
 const POOL: Address = address!("0x000000c2A20657CE25f2Ba99737933D031AFBEE9");
 const POOL_BLOCK: u64 = 12_127_764;
-/// `TacitPaymaster`, deployed through CreateX so the address is the same on every chain.
+/// `TacitPaymaster`, deployed through `CreateX` so the address is the same on every chain.
 pub const PAYMASTER: Address = address!("0xAC99d6ef0DFc4c1B9e6D5A1862aCc0a1646E9BD0");
 
 /// The note this test keeps on Sepolia, so a rerun spends what the last run shielded.
@@ -119,10 +119,7 @@ async fn shields_a_note_on_sepolia() {
     settle(&provider).await;
     wallet.sync(&provider).await.expect("resync");
     assert!(wallet.balance() >= SHIELD_WEI, "the note was not found");
-    assert_eq!(
-        provider.get_balance(POOL).await.expect("pool balance") >= U256::from(SHIELD_WEI),
-        true
-    );
+    assert!(provider.get_balance(POOL).await.expect("pool balance") >= U256::from(SHIELD_WEI));
     println!(
         "the wallet found {} wei in {} notes",
         wallet.balance(),
@@ -336,8 +333,8 @@ mod operation {
             .await
             .expect("the paymaster path");
 
-        let signed = builder.build().sign(&signer).await.expect("sign");
-        let op = pack(&signed.user_op);
+        let ready = builder.build().sign(&signer).await.expect("sign");
+        let op = pack(&ready.user_op);
         println!(
             "fee bound into the proof: {} wei",
             U256::from_be_slice(&op.paymasterAndData[op.paymasterAndData.len() - 32..])
