@@ -21,6 +21,7 @@ alloy = { workspace = true, features = [
 ] }
 kohaku-tornadocash = { workspace = true }
 kohaku-userop-kit = { workspace = true }
+kohaku-tornadocash-provider = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

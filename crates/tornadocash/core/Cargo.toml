@@ -15,10 +15,7 @@ parallel = ["kohaku-tornadocash-circuit/parallel"]
 
 [dependencies]
 alloy = { workspace = true, features = [
-    "rpc",
     "rpc-types",
-    "network",
-    "providers",
     "sol-types",
 ] }
 ark-bn254 = { workspace = true }
@@ -39,6 +36,7 @@ websnark-rs = { workspace = true }
 alloy = { workspace = true, features = [
     "signers",
     "signer-local",
+    "providers",
     "provider-anvil-node",
 ] }
 anyhow = { workspace = true }

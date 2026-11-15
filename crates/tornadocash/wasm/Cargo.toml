@@ -10,12 +10,13 @@ repository.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-alloy = { workspace = true, features = ["providers", "reqwest"] }
+alloy = { workspace = true }
 hex = { workspace = true }
 js-sys = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 kohaku-tornadocash-relayer = { workspace = true }
 kohaku-tornadocash-syncer = { workspace = true }
+kohaku-tornadocash-provider = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

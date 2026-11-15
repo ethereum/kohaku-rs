@@ -1,7 +1,6 @@
 use alloy::sol;
 
 sol!(
-    #[sol(rpc)]
     contract Tornado {
         event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
         event Withdrawal(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
@@ -11,17 +10,5 @@ sol!(
 
         // @dev Withdraw a deposit from the contract.
         function withdraw(bytes calldata _proof, bytes32 _root, bytes32 _nullifierHash, address payable _recipient, address payable _relayer, uint256 _fee, uint256 _refund) external payable;
-
-        // @dev whether a note is already spent
-        function isSpent(bytes32 _nullifierHash) public view returns(bool);
-
-        // @dev whether an array of notes is already spent
-        function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns(bool[] memory spent);
-
-        // @dev Whether the root is present in the root history
-        function isKnownRoot(bytes32 _root) public view returns(bool);
-
-        // @dev The contract that verifies withdrawal proofs
-        function verifier() external view returns (address);
     }
 );

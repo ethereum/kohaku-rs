@@ -1,6 +1,7 @@
 use alloy::{providers::RootProvider, transports::http::reqwest::Url};
 use js_sys::{Array, Promise};
-use kohaku_tornadocash::{Field, TornadoProviderExt};
+use kohaku_tornadocash::Field;
+use kohaku_tornadocash_provider::TornadoProviderExt;
 use tsify::Ts;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
@@ -9,7 +10,7 @@ use crate::{Pool, hex::Hex};
 
 /// Read-only Tornado pool queries through an HTTP(S) RPC endpoint.
 ///
-/// See [`kohaku_tornadocash::TornadoProviderExt`] for canonical query semantics.
+/// See [`kohaku_tornadocash_provider::TornadoProviderExt`] for canonical query semantics.
 /// Calls snapshot their arguments and retain a provider handle before returning
 /// a Promise, so wrappers may be freed while a request is pending.
 #[wasm_bindgen]

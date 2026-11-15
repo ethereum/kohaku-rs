@@ -6,7 +6,8 @@ use alloy::{
     primitives::{TxHash, U256},
     providers::Provider,
 };
-use kohaku_tornadocash::{Field, Payer, Pool, ProvenWithdrawal, TornadoProviderExt};
+use kohaku_tornadocash::{Field, Payer, Pool, ProvenWithdrawal};
+use kohaku_tornadocash_provider::TornadoProviderExt;
 use serde::{Deserialize, Serialize};
 
 mod status;

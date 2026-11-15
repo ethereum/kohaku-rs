@@ -20,6 +20,7 @@ alloy = { workspace = true, features = [
     "reqwest",
 ] }
 kohaku-tornadocash = { workspace = true }
+kohaku-tornadocash-provider = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["rustls"] }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }

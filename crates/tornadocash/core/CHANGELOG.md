@@ -2,6 +2,12 @@
 
 All notable changes to `kohaku-tornadocash` are documented here. This crate follows [Semantic Versioning](https://semver.org); while in `0.y.z`, breaking changes and features bump the minor version and fixes bump the patch version.
 
+## 0.3.0 - UNRELEASED
+
+### Removed
+
+- **Breaking:** Removed `TornadoProviderExt` trait extension. Moved to `kohaku-tornadocash-provider` crate (#...)[]
+
 ## 0.2.0 - 2026-10-27
 
 ### Removed
