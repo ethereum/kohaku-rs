@@ -20,7 +20,7 @@ use kohaku_tacit::{Account, Pool, Wallet, circuit::Prover};
 
 /// The pool, at the same address as on Ethereum.
 const POOL: Address = address!("0x000000c2A20657CE25f2Ba99737933D031AFBEE9");
-const POOL_BLOCK: u64 = 12_127_764;
+const POOL_BLOCK: u64 = 11_999_020;
 /// `TacitPaymaster`, deployed through `CreateX` so the address is the same on every chain.
 pub const PAYMASTER: Address = address!("0xAC99d6ef0DFc4c1B9e6D5A1862aCc0a1646E9BD0");
 
