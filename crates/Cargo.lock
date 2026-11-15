@@ -4688,6 +4688,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "kohaku-tacit-paymaster"
+version = "0.0.1"
+dependencies = [
+ "alloy",
+ "kohaku-tacit",
+ "kohaku-userop-kit",
+ "rand 0.10.2",
+ "rand_core 0.10.1",
+ "ruint",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "kohaku-tacit-relayer"
 version = "0.0.1"
 dependencies = [
