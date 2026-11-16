@@ -34,11 +34,11 @@ impl Pool {
     /// u128 bigint, or any supplied address cannot be decoded into 20 bytes.
     #[wasm_bindgen(constructor)]
     pub fn new(
-        chain_id: JsU64,
+        #[wasm_bindgen(js_name = chainId)] chain_id: JsU64,
         address: &Ts<Hex>,
         asset: &Asset,
-        amount_wei: JsU128,
-        deployed_block: JsU64,
+        #[wasm_bindgen(js_name = amountWei)] amount_wei: JsU128,
+        #[wasm_bindgen(js_name = deployedBlock)] deployed_block: JsU64,
         paymaster: Option<Ts<Hex>>,
     ) -> Result<Self, JsError> {
         let chain_id = u64::try_from(chain_id)?;
@@ -128,18 +128,21 @@ impl Pool {
     }
 
     /// Return the pool ID using the core's representation.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn id(&self) -> String {
         self.inner.id()
     }
 
     /// Return the pool asset symbol.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn symbol(&self) -> String {
         self.inner.symbol().to_owned()
     }
 
     /// Return the fixed deposit amount as decimal text using the core's formatting.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn amount(&self) -> String {
         self.inner.amount()

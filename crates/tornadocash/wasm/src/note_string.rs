@@ -24,7 +24,12 @@ impl NoteString {
     ///
     /// Throws if the chain ID is outside the u64 range.
     #[wasm_bindgen(constructor)]
-    pub fn new(note: Note, symbol: &str, amount: &str, chain_id: JsU64) -> Result<Self, JsError> {
+    pub fn new(
+        note: Note,
+        symbol: &str,
+        amount: &str,
+        #[wasm_bindgen(js_name = chainId)] chain_id: JsU64,
+    ) -> Result<Self, JsError> {
         let chain_id = u64::try_from(chain_id)?;
 
         Ok(Self {
