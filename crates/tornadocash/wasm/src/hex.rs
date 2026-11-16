@@ -86,13 +86,13 @@ impl TryFrom<Hex> for Secret {
 
 impl From<Nullifier> for Hex {
     fn from(value: Nullifier) -> Self {
-        Self(format!("0x{}", hex::encode(value.as_bytes())))
+        Self::from(value.as_bytes().as_slice())
     }
 }
 
 impl From<Secret> for Hex {
     fn from(value: Secret) -> Self {
-        Self(format!("0x{}", hex::encode(value.as_bytes())))
+        Self::from(value.as_bytes().as_slice())
     }
 }
 
