@@ -51,3 +51,9 @@ impl Payer {
         self.inner.refund.into()
     }
 }
+
+impl From<CorePayer> for Payer {
+    fn from(inner: CorePayer) -> Self {
+        Self { inner }
+    }
+}

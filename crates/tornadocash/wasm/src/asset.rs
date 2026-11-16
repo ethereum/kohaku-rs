@@ -117,6 +117,12 @@ impl Asset {
     }
 }
 
+impl From<CoreAsset> for Asset {
+    fn from(inner: CoreAsset) -> Self {
+        Self { inner }
+    }
+}
+
 #[cfg(all(test, target_arch = "wasm32"))]
 mod tests {
     use std::borrow::Cow;

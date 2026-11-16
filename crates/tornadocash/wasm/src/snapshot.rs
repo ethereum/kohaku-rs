@@ -12,21 +12,13 @@ pub struct Snapshot {
     pub(crate) inner: CoreSnapshot,
 }
 
-impl From<CoreSnapshot> for Snapshot {
-    fn from(inner: CoreSnapshot) -> Self {
-        Self { inner }
-    }
-}
-
 #[wasm_bindgen]
 impl Snapshot {
     /// Return an independently owned pool wrapper.
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn pool(&self) -> Pool {
-        Pool {
-            inner: self.inner.pool().clone(),
-        }
+        self.inner.pool().clone().into()
     }
 
     /// Return the inclusive start of the actual covered range as an exact bigint.
@@ -55,5 +47,11 @@ impl Snapshot {
             .cloned()
             .map(|event| Ok(DecodedEvent::from(event).into_ts()?))
             .collect()
+    }
+}
+
+impl From<CoreSnapshot> for Snapshot {
+    fn from(inner: CoreSnapshot) -> Self {
+        Self { inner }
     }
 }

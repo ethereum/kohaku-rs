@@ -69,3 +69,9 @@ impl Note {
         Ok(hex.into_ts()?)
     }
 }
+
+impl From<CoreNote> for Note {
+    fn from(inner: CoreNote) -> Self {
+        Self { inner }
+    }
+}

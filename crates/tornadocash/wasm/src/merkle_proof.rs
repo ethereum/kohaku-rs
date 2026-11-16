@@ -15,12 +15,6 @@ pub struct MerkleProof {
     pub(crate) inner: CoreMerkleProof,
 }
 
-impl From<CoreMerkleProof> for MerkleProof {
-    fn from(inner: CoreMerkleProof) -> Self {
-        Self { inner }
-    }
-}
-
 #[wasm_bindgen]
 impl MerkleProof {
     /// Return the captured leaf as lowercase, 32-byte hex.
@@ -39,5 +33,11 @@ impl MerkleProof {
     #[must_use]
     pub fn verify(&self) -> bool {
         self.inner.verify::<TornadoHasher>()
+    }
+}
+
+impl From<CoreMerkleProof> for MerkleProof {
+    fn from(inner: CoreMerkleProof) -> Self {
+        Self { inner }
     }
 }

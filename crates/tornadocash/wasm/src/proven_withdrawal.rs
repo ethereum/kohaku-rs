@@ -12,12 +12,6 @@ pub struct ProvenWithdrawal {
     pub(crate) inner: CoreProvenWithdrawal,
 }
 
-impl From<CoreProvenWithdrawal> for ProvenWithdrawal {
-    fn from(inner: CoreProvenWithdrawal) -> Self {
-        Self { inner }
-    }
-}
-
 #[wasm_bindgen]
 impl ProvenWithdrawal {
     /// Return the core's unsigned withdrawal call as plain JavaScript data.
@@ -29,6 +23,12 @@ impl ProvenWithdrawal {
     #[wasm_bindgen(js_name = solidityProof)]
     pub fn solidity_proof(&self) -> Result<Ts<Hex>, JsError> {
         Ok(Hex::from(self.inner.solidity_proof().as_ref()).into_ts()?)
+    }
+}
+
+impl From<CoreProvenWithdrawal> for ProvenWithdrawal {
+    fn from(inner: CoreProvenWithdrawal) -> Self {
+        Self { inner }
     }
 }
 
@@ -46,21 +46,15 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn proves_in_wasm_with_system_entropy() {
-        let pool = Pool {
-            inner: CorePool::ETHEREUM_DAI_100,
-        };
-        let note = Note {
-            inner: CoreNote::new([1; 31], [2; 31]),
-        };
+        let pool = Pool::from(CorePool::ETHEREUM_DAI_100);
+        let note = Note::from(CoreNote::new([1; 31], [2; 31]));
         let tree = CoreMerkleTree::from_leaves(&[note.inner.commitment()]).unwrap();
         let proof: MerkleProof = tree.proof(0).unwrap().into();
-        let payer = Payer {
-            inner: CorePayer {
-                address: Address::with_last_byte(2),
-                fee: U256::from(3),
-                refund: U256::from(42),
-            },
-        };
+        let payer = Payer::from(CorePayer {
+            address: Address::with_last_byte(2),
+            fee: U256::from(3),
+            refund: U256::from(42),
+        });
         let withdrawal = Withdrawal::new(
             &pool,
             &note,

@@ -129,9 +129,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn accepts_chain_id_boundaries() {
         for chain_id in [0, u64::MAX] {
-            let note = Note {
-                inner: CoreNote::new([0u8; 31], [0u8; 31]),
-            };
+            let note = Note::from(CoreNote::new([0u8; 31], [0u8; 31]));
             let note_string = NoteString::new(note, "eth", "0.1", chain_id.into()).unwrap();
 
             assert_eq!(note_string.chain_id(), chain_id);

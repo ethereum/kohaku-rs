@@ -61,11 +61,7 @@ impl Pool {
     /// Return independently owned wrappers for every entry in the core pool catalog.
     #[must_use]
     pub fn known() -> Vec<Self> {
-        CorePool::POOLS
-            .iter()
-            .cloned()
-            .map(|inner| Self { inner })
-            .collect()
+        CorePool::POOLS.iter().cloned().map(Self::from).collect()
     }
 
     /// Find a known pool from the note's hints without consuming the note.
@@ -74,7 +70,7 @@ impl Pool {
     #[wasm_bindgen(js_name = fromNote)]
     #[must_use]
     pub fn from_note(note: &NoteString) -> Option<Self> {
-        CorePool::from_note(&note.inner).map(|inner| Self { inner })
+        CorePool::from_note(&note.inner).map(Self::from)
     }
 
     /// Whether this is an official Tornado Cash deployment.
@@ -101,9 +97,7 @@ impl Pool {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn asset(&self) -> Asset {
-        Asset {
-            inner: self.inner.asset.clone(),
-        }
+        self.inner.asset.clone().into()
     }
 
     /// Return the fixed deposit amount in the asset's base units.
@@ -155,6 +149,12 @@ impl Pool {
     #[must_use]
     pub fn format(&self) -> String {
         self.inner.to_string()
+    }
+}
+
+impl From<CorePool> for Pool {
+    fn from(inner: CorePool) -> Self {
+        Self { inner }
     }
 }
 
@@ -217,9 +217,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn pool_address_is_checksummed_hex() {
-        let pool = Pool {
-            inner: CorePool::ETHEREUM_ETHER_01,
-        };
+        let pool = Pool::from(CorePool::ETHEREUM_ETHER_01);
         let expected = pool.inner.address.to_string();
 
         let address: JsValue = pool.address().unwrap().into();
