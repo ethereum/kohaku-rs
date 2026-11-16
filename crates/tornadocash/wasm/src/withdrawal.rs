@@ -32,25 +32,26 @@ impl Withdrawal {
         })
     }
 
-    /// Consume this withdrawal and return its replacement with the borrowed payer.
+    /// Set this withdrawal's payer.
     #[wasm_bindgen(js_name = withPayer)]
-    #[must_use]
-    pub fn with_payer(self, payer: &Payer) -> Self {
-        Self {
-            inner: self.inner.with_payer(payer.inner),
-        }
+    pub fn with_payer(&mut self, payer: &Payer) {
+        self.inner.payer = payer.inner;
     }
 
-    /// Consume this withdrawal and synchronously prove it against the borrowed Merkle proof.
-    ///
-    /// Proving blocks the calling thread; callers choose whether to use a worker.
+    /// Synchronously prove this withdrawal against the Merkle proof.
     ///
     /// # Errors
     /// Throws on system entropy failure, a nonzero native-asset refund, a mismatched
     /// proof leaf or a core proving error.
-    /// This withdrawal is consumed even when proving throws; the Merkle proof remains usable.
-    pub fn prove(self, merkle_proof: &MerkleProof) -> Result<ProvenWithdrawal, JsError> {
+    pub fn prove(
+        &self,
+        #[wasm_bindgen(js_name = merkleProof)] merkle_proof: &MerkleProof,
+    ) -> Result<ProvenWithdrawal, JsError> {
         let mut rng = StdRng::try_from_rng(&mut SysRng).map_err(JsError::from)?;
-        Ok(self.inner.prove(&merkle_proof.inner, &mut rng)?.into())
+        Ok(self
+            .inner
+            .clone()
+            .prove(&merkle_proof.inner, &mut rng)?
+            .into())
     }
 }

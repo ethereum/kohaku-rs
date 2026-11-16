@@ -55,13 +55,13 @@ mod tests {
             fee: U256::from(3),
             refund: U256::from(42),
         });
-        let withdrawal = Withdrawal::new(
+        let mut withdrawal = Withdrawal::new(
             &pool,
             &note,
             &Hex::from(Address::with_last_byte(1)).into_ts().unwrap(),
         )
-        .unwrap()
-        .with_payer(&payer);
+        .unwrap();
+        withdrawal.with_payer(&payer);
         withdrawal.prove(&proof).unwrap();
     }
 }
