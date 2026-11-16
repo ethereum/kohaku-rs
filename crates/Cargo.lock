@@ -4542,9 +4542,8 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
- "kohaku-tornadocash",
- "kohaku-tornadocash-relayer",
  "kohaku-userop-kit",
+ "reqwest 0.13.4",
  "tokio",
  "tracing",
 ]
@@ -4698,7 +4697,6 @@ dependencies = [
  "flate2",
  "hex",
  "insta",
- "kohaku-fork-kit",
  "kohaku-rpc-provider",
  "kohaku-tornadocash",
  "reqwest 0.13.4",

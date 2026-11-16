@@ -8,11 +8,11 @@ use kohaku_fork_kit::{
     alto::AltoBuilder,
     entry_point::deploy_entry_point,
     paymaster::{allow_instance, deploy_paymaster},
-    pool::deploy_pool,
+    pool::{DEFAULT_DENOMINATION_WEI, deploy_pool},
     simple_account::deploy_simple_account,
 };
 use kohaku_tornadocash::{
-    Deposit, Withdrawal,
+    Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
 use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
@@ -51,7 +51,14 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let entrypoint = deploy_entry_point(&provider).await?;
     deploy_simple_account(&provider).await?;
 
-    let mut pool = deploy_pool(provider.clone(), None).await?;
+    let mut pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        Asset::ETH,
+        DEFAULT_DENOMINATION_WEI,
+        0,
+        None,
+    );
     let paymaster_address = deploy_paymaster(
         provider.clone(),
         entrypoint,
@@ -149,7 +156,14 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
     let entrypoint = deploy_entry_point(&provider).await?;
     deploy_simple_account(&provider).await?;
 
-    let mut pool = deploy_pool(provider.clone(), None).await?;
+    let mut pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        Asset::ETH,
+        DEFAULT_DENOMINATION_WEI,
+        0,
+        None,
+    );
     let paymaster_address = deploy_paymaster(
         provider.clone(),
         entrypoint,

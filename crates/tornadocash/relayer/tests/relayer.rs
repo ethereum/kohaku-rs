@@ -5,13 +5,14 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use kohaku_fork_kit::{
-    pool::{deploy_pool, deploy_proxy},
-    relayer::RelayerBuilder,
+    pool::{DEFAULT_DENOMINATION_WEI, deploy_pool, deploy_proxy},
+    relayer::{RelayerBuilder, RelayerPool},
 };
 use kohaku_tornadocash::{
-    Deposit, Withdrawal,
+    Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
+use kohaku_tornadocash_relayer::Relayer;
 use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 
 #[tokio::test]
@@ -29,15 +30,28 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
         .connect_http(anvil.endpoint_url())
         .erased();
 
-    let pool = deploy_pool(provider.clone(), None).await?;
+    let pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        Asset::ETH,
+        DEFAULT_DENOMINATION_WEI,
+        0,
+        None,
+    );
     let proxy_address = deploy_proxy(provider.clone()).await?;
 
     let relayer_signer = PrivateKeySigner::random();
     let reward_account = PrivateKeySigner::random().address();
-    let relayer = RelayerBuilder::new(
+    let relayer_instance = RelayerBuilder::new(
         anvil.endpoint(),
         anvil.ws_endpoint(),
-        pool.clone(),
+        RelayerPool {
+            chain_id: pool.chain_id,
+            address: pool.address,
+            symbol: pool.symbol().to_string(),
+            amount: pool.amount(),
+            decimals: pool.asset.decimals(),
+        },
         proxy_address,
         relayer_signer.to_bytes().to_string(),
         reward_account,
@@ -46,6 +60,7 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
     .await?
     .spawn()
     .await?;
+    let relayer = Relayer::new(relayer_instance.url());
 
     // Deposit a note
     let deposit = Deposit::new(&pool, rand::random());

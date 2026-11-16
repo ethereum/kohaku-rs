@@ -3,9 +3,9 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
-use kohaku_fork_kit::pool::deploy_pool;
+use kohaku_fork_kit::pool::{DEFAULT_DENOMINATION_WEI, deploy_pool};
 use kohaku_tornadocash::{
-    Deposit, Withdrawal,
+    Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
 
@@ -18,7 +18,14 @@ async fn test_deposit() -> Result<(), anyhow::Error> {
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = deploy_pool(provider.clone(), None).await?;
+    let pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        Asset::ETH,
+        DEFAULT_DENOMINATION_WEI,
+        0,
+        None,
+    );
 
     // Deposit a note
     let deposit = Deposit::new(&pool, rand::random());
@@ -47,7 +54,14 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
         .ok();
 
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
-    let pool = deploy_pool(provider.clone(), None).await?;
+    let pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        Asset::ETH,
+        DEFAULT_DENOMINATION_WEI,
+        0,
+        None,
+    );
 
     // Deposit a note
     let mut commitments = Vec::new();
