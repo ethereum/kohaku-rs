@@ -202,6 +202,22 @@ impl RelayerBuilder {
     }
 }
 
+impl RelayerInstance {
+    /// Returns the base URL of the relayer server.
+    #[must_use]
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl Drop for RelayerInstance {
+    fn drop(&mut self) {
+        let _ = self.redis.start_kill();
+        let _ = self.server.start_kill();
+        let _ = self.worker.start_kill();
+    }
+}
+
 /// Polls `redis_port` until a TCP connection succeeds.
 async fn wait_for_redis(redis_port: u16) -> Result<(), anyhow::Error> {
     let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
@@ -237,21 +253,5 @@ async fn wait_ready(url: &str) {
             return;
         }
         tokio::time::sleep(READY_POLL_INTERVAL).await;
-    }
-}
-
-impl RelayerInstance {
-    /// Returns the base URL of the relayer server.
-    #[must_use]
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-}
-
-impl Drop for RelayerInstance {
-    fn drop(&mut self) {
-        let _ = self.redis.start_kill();
-        let _ = self.server.start_kill();
-        let _ = self.worker.start_kill();
     }
 }
