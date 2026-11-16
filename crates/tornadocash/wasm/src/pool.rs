@@ -1,4 +1,3 @@
-use alloy::primitives::Address;
 use kohaku_tornadocash::Pool as CorePool;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -19,6 +18,10 @@ pub struct Pool {
 }
 
 #[wasm_bindgen]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen cannot accept Option<&Ts<Hex>> in Pool::new"
+)]
 impl Pool {
     /// Construct an independently owned pool, borrowing and cloning the asset metadata.
     ///
@@ -39,12 +42,10 @@ impl Pool {
         paymaster: Option<Ts<Hex>>,
     ) -> Result<Self, JsError> {
         let chain_id = u64::try_from(chain_id)?;
-        let address = Address::try_from(address.to_rust()?)?;
+        let address = Hex::decode(address)?;
         let amount_wei = u128::try_from(amount_wei)?;
         let deployed_block = u64::try_from(deployed_block)?;
-        let paymaster = paymaster
-            .map(|value| -> Result<_, JsError> { Ok(Address::try_from(value.to_rust()?)?) })
-            .transpose()?;
+        let paymaster = paymaster.as_ref().map(Hex::decode).transpose()?;
 
         Ok(Self {
             inner: CorePool::new(

@@ -1,4 +1,3 @@
-use alloy::primitives::Address;
 use kohaku_tornadocash::Withdrawal as CoreWithdrawal;
 use rand::{
     SeedableRng,
@@ -29,11 +28,7 @@ impl Withdrawal {
     #[wasm_bindgen(constructor)]
     pub fn new(pool: &Pool, note: &Note, recipient: &Ts<Hex>) -> Result<Self, JsError> {
         Ok(Self {
-            inner: CoreWithdrawal::new(
-                &pool.inner,
-                note.inner.clone(),
-                Address::try_from(recipient.to_rust()?)?,
-            ),
+            inner: CoreWithdrawal::new(&pool.inner, note.inner.clone(), Hex::decode(recipient)?),
         })
     }
 

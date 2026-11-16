@@ -88,7 +88,7 @@ impl MerkleTree {
     /// Throws if the commitment is invalid or is not found in the tree.
     #[wasm_bindgen(js_name = leafProof)]
     pub fn leaf_proof(&self, commitment: &Ts<Hex>) -> Result<MerkleProof, JsError> {
-        let leaf = Field::try_from(commitment.to_rust()?)?;
+        let leaf: Field = Hex::decode(commitment)?;
         Ok(self.inner.leaf_proof(&leaf)?.into())
     }
 }
