@@ -5,7 +5,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use kohaku_fork_kit::{
-    pool::{DEFAULT_DENOMINATION_WEI, deploy_pool, deploy_proxy},
+    pool::{deploy_pool, deploy_proxy},
     relayer::{RelayerBuilder, RelayerPool},
 };
 use kohaku_tornadocash::{
@@ -32,9 +32,9 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        deploy_pool(provider.clone(), 1000).await?,
         Asset::ETH,
-        DEFAULT_DENOMINATION_WEI,
+        1000,
         0,
         None,
     );

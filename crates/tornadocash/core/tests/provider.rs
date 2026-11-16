@@ -3,7 +3,7 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
-use kohaku_fork_kit::pool::{DEFAULT_DENOMINATION_WEI, deploy_pool};
+use kohaku_fork_kit::pool::deploy_pool;
 use kohaku_tornadocash::{
     Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
@@ -20,9 +20,9 @@ async fn test_deposit() -> Result<(), anyhow::Error> {
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
     let pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        deploy_pool(provider.clone(), 1000).await?,
         Asset::ETH,
-        DEFAULT_DENOMINATION_WEI,
+        1000,
         0,
         None,
     );
@@ -56,9 +56,9 @@ async fn test_withdraw() -> Result<(), anyhow::Error> {
     let provider = ProviderBuilder::new().connect_anvil_with_wallet().erased();
     let pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        deploy_pool(provider.clone(), 1000).await?,
         Asset::ETH,
-        DEFAULT_DENOMINATION_WEI,
+        1000,
         0,
         None,
     );

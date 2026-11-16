@@ -8,7 +8,7 @@ use kohaku_fork_kit::{
     alto::AltoBuilder,
     entry_point::deploy_entry_point,
     paymaster::{allow_instance, deploy_paymaster},
-    pool::{DEFAULT_DENOMINATION_WEI, deploy_pool},
+    pool::deploy_pool,
     simple_account::deploy_simple_account,
 };
 use kohaku_tornadocash::{
@@ -53,9 +53,9 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let mut pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        deploy_pool(provider.clone(), 1000).await?,
         Asset::ETH,
-        DEFAULT_DENOMINATION_WEI,
+        1000,
         0,
         None,
     );
@@ -158,9 +158,9 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
 
     let mut pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), DEFAULT_DENOMINATION_WEI).await?,
+        deploy_pool(provider.clone(), 1000).await?,
         Asset::ETH,
-        DEFAULT_DENOMINATION_WEI,
+        1000,
         0,
         None,
     );

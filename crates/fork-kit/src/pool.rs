@@ -33,8 +33,6 @@ mod sol {
     );
 }
 
-/// Default pool denomination: 0.1 ETH.
-pub const DEFAULT_DENOMINATION_WEI: u128 = 10_u128.pow(17);
 const MERKLE_TREE_HEIGHT: u32 = 20;
 
 /// Deploys a fresh ETH tornadocash pool contract with a denomination of `denomination_wei`.
