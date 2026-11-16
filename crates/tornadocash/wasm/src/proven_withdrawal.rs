@@ -9,7 +9,7 @@ use crate::{call::Call, hex::Hex};
 /// See [`kohaku_tornadocash::ProvenWithdrawal`] for more details.
 #[wasm_bindgen]
 pub struct ProvenWithdrawal {
-    inner: CoreProvenWithdrawal,
+    pub(crate) inner: CoreProvenWithdrawal,
 }
 
 impl From<CoreProvenWithdrawal> for ProvenWithdrawal {

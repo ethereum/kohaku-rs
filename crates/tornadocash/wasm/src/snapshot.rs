@@ -9,7 +9,7 @@ use crate::{bigint::JsU64, events::DecodedEvent, pool::Pool};
 /// See [`kohaku_tornadocash::event::Snapshot`] for more details.
 #[wasm_bindgen]
 pub struct Snapshot {
-    inner: CoreSnapshot,
+    pub(crate) inner: CoreSnapshot,
 }
 
 impl From<CoreSnapshot> for Snapshot {

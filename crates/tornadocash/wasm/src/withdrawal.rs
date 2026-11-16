@@ -17,7 +17,7 @@ use crate::{
 /// See [`kohaku_tornadocash::Withdrawal`] for more details.
 #[wasm_bindgen]
 pub struct Withdrawal {
-    inner: CoreWithdrawal,
+    pub(crate) inner: CoreWithdrawal,
 }
 
 #[wasm_bindgen]

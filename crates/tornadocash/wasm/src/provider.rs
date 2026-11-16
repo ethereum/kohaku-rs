@@ -15,7 +15,7 @@ use crate::{Pool, hex::Hex};
 #[wasm_bindgen]
 pub struct TornadoProvider {
     // Alloy RPC client; Tornado queries are provided by TornadoProviderExt.
-    inner: RootProvider,
+    pub(crate) inner: RootProvider,
 }
 
 #[wasm_bindgen]

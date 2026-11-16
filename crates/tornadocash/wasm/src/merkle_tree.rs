@@ -16,7 +16,7 @@ pub struct Commitments(Vec<Hex>);
 #[wasm_bindgen]
 #[derive(Default)]
 pub struct MerkleTree {
-    inner: CoreMerkleTree,
+    pub(crate) inner: CoreMerkleTree,
 }
 
 #[wasm_bindgen]

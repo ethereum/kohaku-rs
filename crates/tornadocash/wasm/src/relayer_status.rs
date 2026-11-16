@@ -18,7 +18,7 @@ use crate::{
 /// See [`kohaku_tornadocash_relayer::RelayerStatus`] for more details.
 #[wasm_bindgen]
 pub struct RelayerStatus {
-    inner: CoreRelayerStatus,
+    pub(crate) inner: CoreRelayerStatus,
 }
 
 /// A snapshot of the pool instances supported for one asset.

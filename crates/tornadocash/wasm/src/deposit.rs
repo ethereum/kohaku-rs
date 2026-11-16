@@ -9,7 +9,7 @@ use crate::{call::Call, note::Note, pool::Pool};
 /// See [`kohaku_tornadocash::Deposit`] for more details.
 #[wasm_bindgen]
 pub struct Deposit {
-    inner: CoreDeposit,
+    pub(crate) inner: CoreDeposit,
 }
 
 #[wasm_bindgen]
