@@ -2,7 +2,7 @@ use kohaku_tornadocash::event::Snapshot as CoreSnapshot;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::{bigint::JsU64, events::DecodedEvent, pool::Pool};
+use crate::{events::DecodedEvent, pool::Pool};
 
 /// A pool's events and the actual half-open block range covered by a syncer.
 ///
@@ -24,15 +24,15 @@ impl Snapshot {
     /// Return the inclusive start of the actual covered range as an exact bigint.
     #[wasm_bindgen(getter, js_name = fromBlock)]
     #[must_use]
-    pub fn from_block(&self) -> JsU64 {
-        self.inner.range().start.into()
+    pub fn from_block(&self) -> u64 {
+        self.inner.range().start
     }
 
     /// Return the exclusive end of the actual covered range as an exact bigint.
     #[wasm_bindgen(getter, js_name = toBlock)]
     #[must_use]
-    pub fn to_block(&self) -> JsU64 {
-        self.inner.range().end.into()
+    pub fn to_block(&self) -> u64 {
+        self.inner.range().end
     }
 
     /// Return detached plain event objects in the core's order.

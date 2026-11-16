@@ -7,7 +7,7 @@ use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    bigint::{JsU32, JsU64, JsU128, JsU256},
+    bigint::{JsU128, JsU256},
     hex::Hex,
     payer::Payer,
     pool::Pool,
@@ -93,8 +93,8 @@ impl RelayerStatus {
     /// Return the network ID as an exact bigint.
     #[wasm_bindgen(getter, js_name = netId)]
     #[must_use]
-    pub fn net_id(&self) -> JsU64 {
-        self.inner.net_id.into()
+    pub fn net_id(&self) -> u64 {
+        self.inner.net_id
     }
 
     /// Return a detached Map of exact token prices, keyed by asset symbol.
@@ -142,8 +142,8 @@ impl RelayerStatus {
     /// Return the reported queue size.
     #[wasm_bindgen(getter, js_name = currentQueue)]
     #[must_use]
-    pub fn current_queue(&self) -> JsU32 {
-        self.inner.current_queue.into()
+    pub fn current_queue(&self) -> u32 {
+        self.inner.current_queue
     }
 
     /// Check pool support using the core, borrowing the pool without consuming it.
