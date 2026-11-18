@@ -53,9 +53,9 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let mut pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), 1000).await?,
+        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
         Asset::ETH,
-        1000,
+        10_u128.pow(17),
         0,
         None,
     );
@@ -158,9 +158,9 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
 
     let mut pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), 1000).await?,
+        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
         Asset::ETH,
-        1000,
+        10_u128.pow(17),
         0,
         None,
     );
