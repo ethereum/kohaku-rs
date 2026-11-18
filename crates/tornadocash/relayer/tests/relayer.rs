@@ -32,9 +32,9 @@ async fn test_relayer_withdraw() -> Result<(), anyhow::Error> {
 
     let pool = Pool::new(
         provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), 1000).await?,
+        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
         Asset::ETH,
-        1000,
+        10_u128.pow(17),
         0,
         None,
     );
