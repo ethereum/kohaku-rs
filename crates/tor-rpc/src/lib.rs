@@ -1,17 +1,4 @@
-//! Alloy JSON-RPC through Arti (Tor network)
-//!
-//! [`TorRpc::connect`] bootstraps one client. Cloning [`TorRpc`] shares its circuits and its HTTP
-//! connection pool. [`TorRpc::isolated`] returns a new group: its streams do not share circuits
-//! with the parent or with any other isolated client. It is not one circuit per RPC. Call
-//! `isolated` again for the next unlinkable group. Reusing one isolated value shares that group
-//! (`let iso = tor.isolated(); iso.send(...); iso.send(...)`).
-//!
-//! - [`TorRpc::rpc_client`], [`TorRpc::provider`], [`TorRpc::send`], [`TorRpc::get`],
-//!   [`TorRpc::post`] — whichever client you call them on. On the bootstrapped client, keep traffic
-//!   that is safe to link: `eth_blockNumber`, generic/global `eth_getLogs` , e.g a PIR HTTP POST
-//!   basically any request that does not contain privacy-sensitive data e.g. specific user accounts
-//! - [`TorRpc::isolated`] — one fresh `isolated_client`. Hold it for a session (the calls about one
-//!   address). Call `isolated` again when the next session must not share circuits with it.
+#![doc = include_str!("../README.md")]
 
 use std::{
     future::Future,
