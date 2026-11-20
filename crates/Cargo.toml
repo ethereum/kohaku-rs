@@ -4,11 +4,11 @@ members = [
     "fork-kit",
     "merkle-tree",
     "poseidon-rust",
-    "railgun",
-    "railgun-poi",
-    "railgun-sync",
-    "railgun-paymaster",
-    "railgun-wasm",
+    "railgun/core",
+    "railgun/poi",
+    "railgun/sync",
+    "railgun/paymaster",
+    "railgun/wasm",
     "rpc-provider",
     "tor-rpc",
     "tornadocash/circuit",
@@ -75,11 +75,11 @@ kohaku-tornadocash-paymaster = { version = "0.0.1", path = "tornadocash/paymaste
 kohaku-tornadocash-relayer = { version = "0.0.1", path = "tornadocash/relayer" }
 kohaku-tornadocash-syncer = { version = "0.0.1", path = "tornadocash/syncer" }
 kohaku-userop-kit = { version = "0.0.1", path = "userop-kit" }
-kohaku-railgun = { path = "railgun" }
-kohaku-railgun-poi = { path = "railgun-poi" }
-kohaku-railgun-sync = { path = "railgun-sync" }
-kohaku-railgun-paymaster = { path = "railgun-paymaster" }
-kohaku-railgun-wasm = { path = "railgun-wasm" }
+kohaku-railgun = { path = "railgun/core" }
+kohaku-railgun-poi = { path = "railgun/poi" }
+kohaku-railgun-sync = { path = "railgun/sync" }
+kohaku-railgun-paymaster = { path = "railgun/paymaster" }
+kohaku-railgun-wasm = { path = "railgun/wasm" }
 num-bigint = "0.5.1"
 num-traits = "0.2.19"
 poseidon-rust = { path = "poseidon-rust" }

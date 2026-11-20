@@ -75,4 +75,4 @@ jobs:
 
       - name: Smoke test Railgun Node bindings
         if: matrix.name == 'Railgun'
-        run: node crates/railgun-wasm/tests/node-smoke.cjs
+        run: node crates/railgun/wasm/tests/node-smoke.cjs
