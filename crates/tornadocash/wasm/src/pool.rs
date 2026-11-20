@@ -1,4 +1,3 @@
-use alloy::primitives::Address;
 use kohaku_tornadocash::Pool as CorePool;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -19,6 +18,10 @@ pub struct Pool {
 }
 
 #[wasm_bindgen]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen cannot accept Option<&Ts<Hex>> in Pool::new"
+)]
 impl Pool {
     /// Construct an independently owned pool, borrowing and cloning the asset metadata.
     ///
@@ -31,20 +34,18 @@ impl Pool {
     /// u128 bigint, or any supplied address cannot be decoded into 20 bytes.
     #[wasm_bindgen(constructor)]
     pub fn new(
-        chain_id: JsU64,
+        #[wasm_bindgen(js_name = chainId)] chain_id: JsU64,
         address: &Ts<Hex>,
         asset: &Asset,
-        amount_wei: JsU128,
-        deployed_block: JsU64,
+        #[wasm_bindgen(js_name = amountWei)] amount_wei: JsU128,
+        #[wasm_bindgen(js_name = deployedBlock)] deployed_block: JsU64,
         paymaster: Option<Ts<Hex>>,
     ) -> Result<Self, JsError> {
         let chain_id = u64::try_from(chain_id)?;
-        let address = Address::try_from(address.to_rust()?)?;
+        let address = Hex::decode(address)?;
         let amount_wei = u128::try_from(amount_wei)?;
         let deployed_block = u64::try_from(deployed_block)?;
-        let paymaster = paymaster
-            .map(|value| -> Result<_, JsError> { Ok(Address::try_from(value.to_rust()?)?) })
-            .transpose()?;
+        let paymaster = paymaster.as_ref().map(Hex::decode).transpose()?;
 
         Ok(Self {
             inner: CorePool::new(
@@ -61,11 +62,7 @@ impl Pool {
     /// Return independently owned wrappers for every entry in the core pool catalog.
     #[must_use]
     pub fn known() -> Vec<Self> {
-        CorePool::POOLS
-            .iter()
-            .cloned()
-            .map(|inner| Self { inner })
-            .collect()
+        CorePool::POOLS.iter().cloned().map(Self::from).collect()
     }
 
     /// Find a known pool from the note's hints without consuming the note.
@@ -74,7 +71,7 @@ impl Pool {
     #[wasm_bindgen(js_name = fromNote)]
     #[must_use]
     pub fn from_note(note: &NoteString) -> Option<Self> {
-        CorePool::from_note(&note.inner).map(|inner| Self { inner })
+        CorePool::from_note(&note.inner).map(Self::from)
     }
 
     /// Whether this is an official Tornado Cash deployment.
@@ -101,9 +98,7 @@ impl Pool {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn asset(&self) -> Asset {
-        Asset {
-            inner: self.inner.asset.clone(),
-        }
+        self.inner.asset.clone().into()
     }
 
     /// Return the fixed deposit amount in the asset's base units.
@@ -133,18 +128,21 @@ impl Pool {
     }
 
     /// Return the pool ID using the core's representation.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn id(&self) -> String {
         self.inner.id()
     }
 
     /// Return the pool asset symbol.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn symbol(&self) -> String {
         self.inner.symbol().to_owned()
     }
 
     /// Return the fixed deposit amount as decimal text using the core's formatting.
+    #[wasm_bindgen(getter)]
     #[must_use]
     pub fn amount(&self) -> String {
         self.inner.amount()
@@ -155,6 +153,12 @@ impl Pool {
     #[must_use]
     pub fn format(&self) -> String {
         self.inner.to_string()
+    }
+}
+
+impl From<CorePool> for Pool {
+    fn from(inner: CorePool) -> Self {
+        Self { inner }
     }
 }
 
@@ -217,9 +221,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn pool_address_is_checksummed_hex() {
-        let pool = Pool {
-            inner: CorePool::ETHEREUM_ETHER_01,
-        };
+        let pool = Pool::from(CorePool::ETHEREUM_ETHER_01);
         let expected = pool.inner.address.to_string();
 
         let address: JsValue = pool.address().unwrap().into();

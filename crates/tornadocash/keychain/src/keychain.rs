@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use alloy::{
-    dyn_abi::Eip712Domain,
+    dyn_abi::{Eip712Domain, TypedData},
     primitives::keccak256,
     signers::{Signature, Signer},
     sol_types::eip712_domain,
@@ -19,6 +19,7 @@ mod sol {
     use alloy::sol;
 
     sol! {
+        #[derive(serde::Serialize)]
         struct TornadoCashNote {
             uint64 nonce;
         }
@@ -26,7 +27,7 @@ mod sol {
 }
 
 /// Keychain built on an alloy signer.
-pub struct Keychain<S: Signer + Send + Sync> {
+pub struct Keychain<#[cfg(native)] S: Signer + Send + Sync, #[cfg(wasm)] S: Signer> {
     signer: S,
 }
 
@@ -53,7 +54,7 @@ fn domain(chain_id: u64) -> Eip712Domain {
     }
 }
 
-impl<S: Signer + Send + Sync> Keychain<S> {
+impl<#[cfg(native)] S: Signer + Send + Sync, #[cfg(wasm)] S: Signer> Keychain<S> {
     pub fn new(signer: S) -> Self {
         Self { signer }
     }
@@ -96,10 +97,9 @@ impl<S: Signer + Send + Sync> Keychain<S> {
         let mut signatures = HashMap::<u64, Signature>::new();
         let chain_ids: HashSet<u64> = pools.iter().map(|p| p.chain_id).collect();
         for chain_id in chain_ids {
-            let signature = self
-                .signer
-                .sign_typed_data(&sol::TornadoCashNote { nonce }, &domain(chain_id))
-                .await?;
+            let payload =
+                TypedData::from_struct(&sol::TornadoCashNote { nonce }, Some(domain(chain_id)));
+            let signature = self.signer.sign_dynamic_typed_data(&payload).await?;
             signatures.insert(chain_id, signature);
         }
 

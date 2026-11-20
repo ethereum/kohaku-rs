@@ -1,4 +1,3 @@
-use alloy::primitives::Address;
 use kohaku_tornadocash::Payer as CorePayer;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -24,7 +23,7 @@ impl Payer {
     pub fn new(address: &Ts<Hex>, fee: JsU256, refund: JsU256) -> Result<Self, JsError> {
         Ok(Self {
             inner: CorePayer {
-                address: Address::try_from(address.to_rust()?)?,
+                address: Hex::decode(address)?,
                 fee: fee.try_into()?,
                 refund: refund.try_into()?,
             },
@@ -49,5 +48,11 @@ impl Payer {
     #[must_use]
     pub fn refund(&self) -> JsU256 {
         self.inner.refund.into()
+    }
+}
+
+impl From<CorePayer> for Payer {
+    fn from(inner: CorePayer) -> Self {
+        Self { inner }
     }
 }

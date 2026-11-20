@@ -2,9 +2,8 @@
 
 use alloy::{
     primitives::{Address, U256},
-    providers::{DynProvider, Provider},
+    providers::DynProvider,
 };
-use kohaku_tornadocash::{Asset, Pool};
 
 mod sol {
     #![allow(clippy::all)]
@@ -34,21 +33,18 @@ mod sol {
     );
 }
 
-const DEFAULT_DENOMINATION_WEI: u128 = 10_u128.pow(17);
 const MERKLE_TREE_HEIGHT: u32 = 20;
 
-/// Deploys a fresh tornadocash pool contract.
+/// Deploys a fresh ETH tornadocash pool contract with a denomination of `denomination_wei`.
 ///
-/// Returns the deployed [`Pool`] with a denomination `denomination_wei` if provided.
+/// Returns the address of the deployed pool.
 ///
 /// # Errors
 /// Returns an error if any contract fails to deploy.
 pub async fn deploy_pool(
     provider: DynProvider,
-    denomination_wei: Option<u128>,
-) -> Result<Pool, anyhow::Error> {
-    let denomination_wei = denomination_wei.unwrap_or(DEFAULT_DENOMINATION_WEI);
-
+    denomination_wei: u128,
+) -> Result<Address, anyhow::Error> {
     let hasher = sol::Hasher::deploy(&provider).await?;
     let verifier = sol::Verifier::deploy(&provider).await?;
     let tornado = sol::ETHTornado::deploy(
@@ -60,14 +56,7 @@ pub async fn deploy_pool(
     )
     .await?;
 
-    Ok(Pool::new(
-        provider.get_chain_id().await?,
-        *tornado.address(),
-        Asset::ETH,
-        denomination_wei,
-        0,
-        None,
-    ))
+    Ok(*tornado.address())
 }
 
 /// Deploy a fresh `TornadoProxyLight` to `provider` and return its address.

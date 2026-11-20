@@ -1,6 +1,6 @@
 //! Tornadocash relayer process management.
 
-use std::{ops::Deref, process::Stdio, time::Duration};
+use std::{process::Stdio, time::Duration};
 
 use alloy::{
     primitives::{Address, U256},
@@ -8,8 +8,6 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use anyhow::bail;
-use kohaku_tornadocash::Pool;
-use kohaku_tornadocash_relayer::Relayer;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command},
@@ -22,29 +20,39 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const PREFUND_ETH: u128 = 1_000 * 10_u128.pow(18);
 
-/// Builder for a locally hosted [`Relayer`] stack.
+/// Builder for a locally hosted tornadocash relayer stack.
 pub struct RelayerBuilder {
     http_rpc_url: String,
     ws_rpc_url: String,
-    pool: Pool,
+    pool: RelayerPool,
     proxy_address: Address,
     private_key: String,
     reward_account: Address,
 }
 
-/// A running relayer stack and a connected [`Relayer`].
+/// The pool the relayer serves.
+pub struct RelayerPool {
+    pub chain_id: u64,
+    pub address: Address,
+    pub symbol: String,
+    /// Decimal denomination, e.g. "0.1".
+    pub amount: String,
+    pub decimals: u8,
+}
+
+/// A running relayer stack.
 pub struct RelayerInstance {
     redis: Child,
     server: Child,
     worker: Child,
-    relayer: Relayer,
+    url: String,
 }
 
 impl RelayerBuilder {
     pub fn new(
         http_rpc_url: impl Into<String>,
         ws_rpc_url: impl Into<String>,
-        pool: Pool,
+        pool: RelayerPool,
         proxy_address: Address,
         private_key: impl Into<String>,
         reward_account: Address,
@@ -147,9 +155,9 @@ impl RelayerBuilder {
             "relayer-worker",
         ));
 
-        let relayer = Relayer::new(&format!("http://127.0.0.1:{port}"));
+        let url = format!("http://127.0.0.1:{port}");
 
-        if timeout(READY_TIMEOUT, wait_ready(&relayer)).await.is_err() {
+        if timeout(READY_TIMEOUT, wait_ready(&url)).await.is_err() {
             let _ = redis.start_kill();
             let _ = server.start_kill();
             let _ = worker.start_kill();
@@ -160,7 +168,7 @@ impl RelayerBuilder {
             redis,
             server,
             worker,
-            relayer,
+            url,
         })
     }
 
@@ -186,14 +194,27 @@ impl RelayerBuilder {
             ("BASE_FEE_RESERVE_PERCENTAGE".into(), "25".into()),
             ("APP_PORT".into(), port.to_string()),
             ("LOCAL_POOL_ADDRESS".into(), self.pool.address.to_string()),
-            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol().to_string()),
-            ("LOCAL_POOL_AMOUNT".into(), self.pool.amount()),
-            (
-                "LOCAL_POOL_DECIMALS".into(),
-                self.pool.asset.decimals().to_string(),
-            ),
+            ("LOCAL_POOL_SYMBOL".into(), self.pool.symbol.clone()),
+            ("LOCAL_POOL_AMOUNT".into(), self.pool.amount.clone()),
+            ("LOCAL_POOL_DECIMALS".into(), self.pool.decimals.to_string()),
             ("LOCAL_PROXY_ADDRESS".into(), self.proxy_address.to_string()),
         ]
+    }
+}
+
+impl RelayerInstance {
+    /// Returns the base URL of the relayer server.
+    #[must_use]
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl Drop for RelayerInstance {
+    fn drop(&mut self) {
+        let _ = self.redis.start_kill();
+        let _ = self.server.start_kill();
+        let _ = self.worker.start_kill();
     }
 }
 
@@ -222,28 +243,15 @@ async fn forward_lines(stream: impl AsyncRead + Unpin, label: &'static str) {
     }
 }
 
-/// Polls the relayer's `/v1/status` endpoint until it responds.
-async fn wait_ready(relayer: &Relayer) {
+/// Polls the relayer's `/v1/status` endpoint until it responds successfully.
+async fn wait_ready(url: &str) {
+    let client = reqwest::Client::new();
+    let status_url = format!("{url}/v1/status");
     loop {
-        if relayer.status().await.is_ok() {
+        let response = client.get(&status_url).send().await;
+        if response.is_ok_and(|r| r.status().is_success()) {
             return;
         }
         tokio::time::sleep(READY_POLL_INTERVAL).await;
-    }
-}
-
-impl Deref for RelayerInstance {
-    type Target = Relayer;
-
-    fn deref(&self) -> &Self::Target {
-        &self.relayer
-    }
-}
-
-impl Drop for RelayerInstance {
-    fn drop(&mut self) {
-        let _ = self.redis.start_kill();
-        let _ = self.server.start_kill();
-        let _ = self.worker.start_kill();
     }
 }

@@ -5,7 +5,7 @@ Client for interacting with Tornado Cash paymasters.
 > [!IMPORTANT]
 > The privacy-paymaster contracts are experimental and not audited. Use at your own risk, and avoid using on mainnet with real funds.
 
-Supports sponsoring 4337 UserOps with Tornado Cash notes. Uses the [`privacy-paymaster`](https://github.com/ethereum/kohaku-contracts/tree/master/privacy-paymaster) contracts from `kohaku-contracts`.
+Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-paymaster`](https://github.com/ethereum/kohaku-contracts/tree/master/privacy-paymaster) contracts from `kohaku-contracts`.
 
 ## Example
 
@@ -17,6 +17,7 @@ Supports sponsoring 4337 UserOps with Tornado Cash notes. Uses the [`privacy-pay
 #     Pool,
 #     Withdrawal,
 # };
+# use kohaku_tornadocash_circuit::CircuitArtifacts;
 # use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
 # use kohaku_userop_kit::{
 #     builder::UserOperationBuilder,
@@ -27,6 +28,7 @@ Supports sponsoring 4337 UserOps with Tornado Cash notes. Uses the [`privacy-pay
 # async fn example(
 #     provider: DynProvider,
 #     tree: &MerkleTree,
+#     artifacts: &CircuitArtifacts,
 #     pool: Pool,
 #     note: Note,
 #     rng: &mut impl rand::CryptoRng,
@@ -44,7 +46,14 @@ let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
 let withdrawal_merkle_proof = tree.note_proof(&note)?;
 let withdrawal = Withdrawal::new(&pool, note, owner.address());
 let builder = builder
-    .with_tornado_paymaster(withdrawal, &withdrawal_merkle_proof, &provider, &bundler, rng)
+    .with_tornado_paymaster(
+        withdrawal,
+        &withdrawal_merkle_proof,
+        artifacts,
+        &provider,
+        &bundler,
+        rng,
+    )
     .await?;
 
 let userop = builder.build().sign(&owner).await?;

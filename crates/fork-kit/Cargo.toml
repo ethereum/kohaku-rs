@@ -28,6 +28,9 @@ kohaku-tornadocash-relayer = { workspace = true }
 kohaku-userop-kit = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+brotli = { workspace = true }
+kohaku-tornadocash-circuit = { workspace = true }
+reqwest = { workspace = true }
 tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
 tracing = { workspace = true }
 

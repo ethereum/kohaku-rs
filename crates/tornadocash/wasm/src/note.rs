@@ -21,10 +21,8 @@ impl Note {
     /// Throws if either input cannot be decoded into a 31-byte secret.
     #[wasm_bindgen(constructor)]
     pub fn new(nullifier: &Ts<Hex>, secret: &Ts<Hex>) -> Result<Note, JsError> {
-        let nullifier_hex = nullifier.to_rust()?;
-        let secret_hex = secret.to_rust()?;
-        let nullifier = Nullifier::try_from(nullifier_hex)?;
-        let secret = Secret::try_from(secret_hex)?;
+        let nullifier: Nullifier = Hex::decode(nullifier)?;
+        let secret: Secret = Hex::decode(secret)?;
 
         Ok(Self {
             inner: CoreNote::new(nullifier, secret),
@@ -67,5 +65,11 @@ impl Note {
         let hex = Hex::from(self.inner.nullifier_hash());
 
         Ok(hex.into_ts()?)
+    }
+}
+
+impl From<CoreNote> for Note {
+    fn from(inner: CoreNote) -> Self {
+        Self { inner }
     }
 }

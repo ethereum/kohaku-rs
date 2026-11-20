@@ -10,7 +10,7 @@ use crate::{bigint::JsU64, pool::Pool, snapshot::Snapshot};
 /// See [`kohaku_tornadocash_syncer::remote::RemoteSyncer`] for cache naming and format.
 #[wasm_bindgen]
 pub struct RemoteSyncer {
-    inner: DynSyncer,
+    pub(crate) inner: DynSyncer,
 }
 
 #[wasm_bindgen]

@@ -7,9 +7,10 @@ use alloy::{
     sol_types::SolValue,
 };
 use kohaku_tornadocash::{
-    Asset, Payer, Pool, ProvenWithdrawal, TornadoProviderExt, Withdrawal, WithdrawalError,
-    merkle_tree::MerkleProof,
+    Asset, Payer, Pool, ProvenWithdrawal, Withdrawal, WithdrawalError, merkle_tree::MerkleProof,
 };
+use kohaku_tornadocash_circuit::CircuitArtifacts;
+use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
     bundler::{Bundler, BundlerExt},
@@ -44,6 +45,7 @@ pub trait UserOperationPaymasterExt: Sized {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
+        circuit_artifacts: &CircuitArtifacts,
         provider: &impl Provider,
         bundler: &B,
         rng: &mut R,
@@ -76,6 +78,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         self,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
+        circuit_artifacts: &CircuitArtifacts,
         provider: &impl Provider,
         bundler: &B,
         rng: &mut R,
@@ -106,7 +109,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
                 fee,
                 refund: U256::ZERO,
             })
-            .prove(merkle_proof, rng)?;
+            .prove(merkle_proof, circuit_artifacts, rng)?;
 
         Ok(builder.with_paymaster_and_data(paymaster_address, encode_paymaster_data(&proven)))
     }

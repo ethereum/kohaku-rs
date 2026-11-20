@@ -1,5 +1,4 @@
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes, U256},
     rpc::types::TransactionRequest,
 };
@@ -16,8 +15,8 @@ pub struct Call {
 impl From<Call> for TransactionRequest {
     fn from(call: Call) -> Self {
         Self::default()
-            .with_to(call.target)
-            .with_value(call.value)
+            .to(call.target)
+            .value(call.value)
             .input(call.input.into())
     }
 }

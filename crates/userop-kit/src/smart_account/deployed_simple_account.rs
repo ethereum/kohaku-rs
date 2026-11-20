@@ -4,7 +4,7 @@ use alloy::{
     network::TransactionBuilder,
     primitives::{Address, Bytes, U256, aliases::U192},
     providers::Provider,
-    rpc::types::{Authorization, TransactionRequest},
+    rpc::types::TransactionRequest,
     sol,
 };
 use alloy_sol_types::{Eip712Domain, SolCall};
@@ -14,7 +14,7 @@ use crate::{
     abis::entry_point::EntryPoint,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        SmartAccount, SmartAccountError,
+        AccountInit, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
         simple_7702_smart_account::{Call, Simple7702SmartAccount},
     },
 };
@@ -115,23 +115,21 @@ impl<P: Provider> SmartAccount for DeployedSimpleAccount<P> {
             .context("Invalid EntryPoint nonce response")
             .map_err(Into::into)
     }
-    async fn authorization(&self) -> Result<Authorization, SmartAccountError> {
-        Err(SmartAccountError::Other(anyhow::anyhow!(
-            "A deployed account has no EIP-7702 authorization"
-        )))
-    }
-    async fn optional_authorization(&self) -> Result<Option<Authorization>, SmartAccountError> {
-        Ok(None)
-    }
-    async fn factory(&self) -> Result<Option<(Address, Bytes)>, SmartAccountError> {
-        if self.deployment.is_some() && self.provider.get_code_at(self.address).await?.is_empty() {
-            Ok(self.deployment.clone())
+    async fn init(&self) -> Result<AccountInit, SmartAccountError> {
+        let Some((factory, data)) = &self.deployment else {
+            return Ok(AccountInit::None);
+        };
+        if self.provider.get_code_at(self.address).await?.is_empty() {
+            Ok(AccountInit::Factory {
+                factory: *factory,
+                data: data.clone(),
+            })
         } else {
-            Ok(None)
+            Ok(AccountInit::None)
         }
     }
     fn dummy_signature(&self) -> Bytes {
-        Simple7702SmartAccount::new(&self.provider, self.address, self.chain_id).dummy_signature()
+        DUMMY_SIGNATURE.clone()
     }
     fn abi_encode_call(call: &Self::Call) -> Bytes {
         Simple7702SmartAccount::<P>::abi_encode_call(call)
@@ -215,7 +213,7 @@ mod tests {
             OpAuthorization::None
         ));
         mock.push_success(&Bytes::from_static(&[0x60, 0x00]));
-        assert!(account.factory().await.unwrap().is_none());
+        assert!(matches!(account.init().await.unwrap(), AccountInit::None));
     }
 
     #[tokio::test]
@@ -247,7 +245,9 @@ mod tests {
         let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1)
             .with_implementation(target)
             .unwrap();
-        let auth = account.optional_authorization().await.unwrap().unwrap();
+        let AccountInit::Eip7702(auth) = account.init().await.unwrap() else {
+            panic!("Expected EIP-7702 delegation");
+        };
         assert_eq!(auth.address, target);
         assert_eq!(auth.nonce, 9);
     }

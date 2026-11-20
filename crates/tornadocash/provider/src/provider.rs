@@ -1,40 +1,12 @@
 use alloy::{primitives::Address, providers::Provider};
+use kohaku_tornadocash::{Field, Pool};
 
-use crate::{abis::tornado::Tornado, field::Field, pool::Pool};
+use crate::abis::tornado::Tornado;
 
 /// Extension trait for [`Provider`] with Tornadocash-specific accessors.
-pub trait TornadoProviderExt: Provider {
+#[expect(async_fn_in_trait)]
+pub trait TornadoProviderExt: Provider + Sized {
     /// Indicates whether `nullifier_hash` has been spent.
-    fn is_spent(
-        &self,
-        pool: &Pool,
-        nullifier_hash: Field,
-    ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
-
-    /// Indicates whether each of `nullifier_hashes` has been spent.
-    ///
-    /// The returned vector will have the same length and ordering as `nullifier_hashes`.
-    fn is_spent_array(
-        &self,
-        pool: &Pool,
-        nullifier_hashes: &[Field],
-    ) -> impl Future<Output = Result<Vec<bool>, alloy::contract::Error>>;
-
-    /// Indicates whether `root` is known to the Tornado pool.
-    fn is_known_root(
-        &self,
-        pool: &Pool,
-        root: Field,
-    ) -> impl Future<Output = Result<bool, alloy::contract::Error>>;
-
-    /// Returns the address of the contract that verifies the pool's withdrawal proofs.
-    fn verifier(
-        &self,
-        pool: &Pool,
-    ) -> impl Future<Output = Result<Address, alloy::contract::Error>>;
-}
-
-impl<P: Provider> TornadoProviderExt for P {
     async fn is_spent(
         &self,
         pool: &Pool,
@@ -46,6 +18,9 @@ impl<P: Provider> TornadoProviderExt for P {
             .await
     }
 
+    /// Indicates whether each of `nullifier_hashes` has been spent.
+    ///
+    /// The returned vector will have the same length and ordering as `nullifier_hashes`.
     async fn is_spent_array(
         &self,
         pool: &Pool,
@@ -58,6 +33,7 @@ impl<P: Provider> TornadoProviderExt for P {
             .await
     }
 
+    /// Indicates whether `root` is known to the Tornado pool.
     async fn is_known_root(
         &self,
         pool: &Pool,
@@ -69,7 +45,10 @@ impl<P: Provider> TornadoProviderExt for P {
             .await
     }
 
+    /// Returns the address of the contract that verifies the pool's withdrawal proofs.
     async fn verifier(&self, pool: &Pool) -> Result<Address, alloy::contract::Error> {
         Tornado::new(pool.address, self).verifier().call().await
     }
 }
+
+impl<P: Provider> TornadoProviderExt for P {}

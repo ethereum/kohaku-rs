@@ -46,6 +46,7 @@ provider.send_transaction(deposit.call().into()).await?.watch().await?;
 #     event::Snapshot,
 #     Withdrawal,
 # };
+# use kohaku_tornadocash_circuit::CircuitArtifacts;
 # 
 # async fn example(
 #     provider: DynProvider,
@@ -53,6 +54,7 @@ provider.send_transaction(deposit.call().into()).await?.watch().await?;
 #     pool: Pool,
 #     note: Note,
 #     recipient: Address,
+#     artifacts: &CircuitArtifacts,
 #     rng: &mut impl rand::CryptoRng,
 # ) -> Result<(), Box<dyn std::error::Error>> {
 let mut tree = MerkleTree::new();
@@ -60,7 +62,7 @@ tree.splice_events(&snapshot)?;
 
 let merkle_proof = tree.note_proof(&note)?;
 let withdrawal = Withdrawal::new(&pool, note, recipient)
-    .prove(&merkle_proof, rng)?;
+    .prove(&merkle_proof, artifacts, rng)?;
 
 provider.send_transaction(withdrawal.call().into()).await?.watch().await?;
 
@@ -72,7 +74,7 @@ provider.send_transaction(withdrawal.call().into()).await?.watch().await?;
 
 Kohaku-tornadocash is composed of the following crates:
 - [`core`] - Core library for Tornado Cash
-- [`circuit`] - Circuit artifacts
+- [`circuit`] - Groth16 prover for the withdrawal circuit
 - [`syncer`] - Event syncing helpers
 - [`relayer`] - Relayer support
 - [`paymaster`] - Paymaster support

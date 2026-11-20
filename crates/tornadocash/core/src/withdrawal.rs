@@ -9,7 +9,7 @@ use ark_bn254::{
     g2::{G2_GENERATOR_X, G2_GENERATOR_Y},
 };
 use ark_ff::MontFp;
-use kohaku_tornadocash_circuit::{CircuitInputs, prove};
+use kohaku_tornadocash_circuit::{CircuitArtifacts, CircuitInputs, prove};
 use rand::CryptoRng;
 use ruint::aliases::U256;
 use websnark_rs::proof::Proof;
@@ -83,6 +83,7 @@ impl Withdrawal {
     pub fn prove(
         self,
         merkle_proof: &MerkleProof,
+        circuit_artifacts: &CircuitArtifacts,
         rng: &mut impl CryptoRng,
     ) -> Result<ProvenWithdrawal, WithdrawalError> {
         let is_native = matches!(self.pool.asset, Asset::Native { .. });
@@ -116,7 +117,7 @@ impl Withdrawal {
             path_indices,
         );
 
-        let proof = prove(&circuit_inputs, rng)?;
+        let proof = prove(&circuit_inputs, circuit_artifacts, rng)?;
         Ok(ProvenWithdrawal {
             root: merkle_proof.root,
             proof,

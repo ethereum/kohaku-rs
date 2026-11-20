@@ -20,7 +20,9 @@ alloy = { workspace = true, features = [
     "reqwest",
 ] }
 kohaku-tornadocash = { workspace = true }
+kohaku-tornadocash-circuit = { workspace = true }
 kohaku-userop-kit = { workspace = true }
+kohaku-tornadocash-provider = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

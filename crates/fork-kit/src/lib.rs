@@ -2,6 +2,7 @@
 
 pub mod alto;
 pub mod anvil;
+pub mod artifacts;
 pub mod entry_point;
 pub mod paymaster;
 pub mod pool;

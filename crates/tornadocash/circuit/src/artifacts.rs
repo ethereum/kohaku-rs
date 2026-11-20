@@ -1,36 +1,41 @@
-use std::sync::LazyLock;
-
+use serde::{Deserialize, Serialize};
 use websnark_rs::{circuit::Circuit, proving_key::ProvingKey};
 
-const CIRCUIT_BR: &[u8] = include_bytes!("../data/circuit.bin.br");
-const PROVING_KEY_BR: &[u8] = include_bytes!("../data/proving_key.bin.br");
-
-static CIRCUIT: LazyLock<Circuit> = LazyLock::new(|| {
-    let data = decompress(CIRCUIT_BR);
-    postcard::from_bytes(&data).expect("embedded circuit is valid")
-});
-
-static PROVING_KEY: LazyLock<ProvingKey> = LazyLock::new(|| {
-    let data = decompress(PROVING_KEY_BR);
-    postcard::from_bytes(&data).expect("embedded proving key is valid")
-});
-
-/// Returns the embedded tornadocash-classic circuit.
-#[must_use]
-pub fn circuit() -> &'static Circuit {
-    &CIRCUIT
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum CircuitArtifactsError {
+    #[error("Circuit artifacts decode error: {0}")]
+    Decode(#[from] postcard::Error),
+    #[error("Circuit artifacts have {0} unexpected trailing bytes")]
+    TrailingBytes(usize),
 }
 
-/// Returns the embedded tornadocash-classic proving key.
-#[must_use]
-pub fn proving_key() -> &'static ProvingKey {
-    &PROVING_KEY
+/// The tornadocash-classic withdrawal circuit and its proving key.
+#[derive(Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CircuitArtifacts {
+    pub circuit: Circuit,
+    pub proving_key: ProvingKey,
 }
 
-fn decompress(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    brotli::BrotliDecompress(&mut &data[..], &mut out).expect("embedded data is valid brotli");
-    out
+impl CircuitArtifacts {
+    /// Decodes the artifacts from their postcard-encoded bytes.
+    ///
+    /// # Errors
+    /// Returns an error if the bytes are not postcard-encoded artifacts, or have bytes left over.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CircuitArtifactsError> {
+        let (artifacts, rest) = postcard::take_from_bytes(bytes)?;
+        if !rest.is_empty() {
+            return Err(CircuitArtifactsError::TrailingBytes(rest.len()));
+        }
+        Ok(artifacts)
+    }
+}
+
+impl std::fmt::Debug for CircuitArtifacts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CircuitArtifacts").finish_non_exhaustive()
+    }
 }
 
 #[cfg(test)]
@@ -38,9 +43,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "run with `cargo test --release -- --ignored`"]
-    fn loads_embedded_artifacts() {
-        let _ = circuit();
-        let _ = proving_key();
+    fn rejects_bytes_that_are_not_artifacts() {
+        assert!(matches!(
+            CircuitArtifacts::from_bytes(&[0xff; 8]),
+            Err(CircuitArtifactsError::Decode(_))
+        ));
     }
 }
