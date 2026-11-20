@@ -31,12 +31,12 @@ const USDC: AssetId = AssetId::Erc20(USDC_ADDRESS);
 /// Tests a full POI transact flow including shielding, transferring, and unshielding.
 ///
 /// This integration test ensures that the entire POI transact flow works correctly
-/// using the public PoiProvider interface. Includes internal syncing, tx building,
+/// using the public `PoiProvider` interface. Includes internal syncing, tx building,
 /// UTXO management, UTXO/TXID proof generation, and POI submission.
 ///
 /// WARNING: This test currently runs against the real Sepolia testnet, and will
 /// submit real transactions that affect real funds. Minimal amounts are used,
-/// but ensure a throwaway DEV_KEY account is funded with testnet ETH and USDC
+/// but ensure a throwaway `DEV_KEY` account is funded with testnet ETH and USDC
 /// before running.
 ///
 /// The test is run on Sepolia because the POI submission process relies on
@@ -44,7 +44,7 @@ const USDC: AssetId = AssetId::Erc20(USDC_ADDRESS);
 /// proofs are valid against the real chain state.
 #[tokio::test]
 #[serial_test::serial]
-#[ignore]
+#[ignore = "submits funded transactions on Sepolia"]
 async fn test_transact_poi() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -131,7 +131,7 @@ async fn test_shield_poi(
 
     for tx in shield_tx {
         let receipt = provider
-            .send_transaction(tx.into())
+            .send_transaction(tx)
             .await
             .unwrap()
             .get_receipt()
@@ -170,7 +170,7 @@ async fn test_transfer_poi<P: Provider>(
 
     info!("Sending transfer transaction");
     let tx = provider
-        .send_transaction(transfer_tx.tx_data.into())
+        .send_transaction(transfer_tx.tx_data)
         .await
         .unwrap()
         .get_receipt()
@@ -214,7 +214,7 @@ async fn test_unshield_poi<P: Provider>(
         .unwrap();
 
     let tx = provider
-        .send_transaction(unshield_tx.tx_data.into())
+        .send_transaction(unshield_tx.tx_data)
         .await
         .unwrap()
         .get_receipt()
@@ -247,9 +247,10 @@ async fn await_balance_update(
         info!("Waiting for balance to update...");
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-        if start.elapsed().as_secs() > 300 {
-            panic!("Balance did not update within 300 seconds");
-        }
+        assert!(
+            start.elapsed().as_secs() <= 300,
+            "Balance did not update within 300 seconds"
+        );
 
         railgun.sync().await.unwrap();
         let balance = railgun.balance(account.address()).await;

@@ -1,10 +1,10 @@
 use alloy::{rpc::types::Log, sol_types::SolEvent};
-
-use crate::normalize_tree_position::normalize_tree_position;
 use kohaku_railgun::{
     abis::railgun::RailgunSmartWallet,
     indexer::syncer::{self, SyncEvent},
 };
+
+use crate::normalize_tree_position::normalize_tree_position;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LogDecodeError {
@@ -14,14 +14,14 @@ pub enum LogDecodeError {
     Parse(String),
 }
 
-/// Decodes a log emitted by the RailgunSmartWallet into zero or more
+/// Decodes a log emitted by the `RailgunSmartWallet` into zero or more
 /// [`SyncEvent`]s. Shared between any syncer that fetches logs (RPC, and
 /// any host-supplied external syncer) rather than pre-decoded events.
+#[allow(clippy::needless_pass_by_value)]
 pub fn log_to_sync_events(log: Log) -> Result<Vec<SyncEvent>, LogDecodeError> {
     let Some(topic0) = log.topics().first().copied() else {
         return Err(LogDecodeError::Parse(format!(
-            "Log missing topic0: {:?}",
-            log
+            "Log missing topic0: {log:?}"
         )));
     };
     let block_number = log.block_number.unwrap_or(0);
@@ -38,14 +38,11 @@ pub fn log_to_sync_events(log: Log) -> Result<Vec<SyncEvent>, LogDecodeError> {
         RailgunSmartWallet::Unshield::SIGNATURE_HASH => {
             // Unshield events not needed. Spent notes are already
             // tracked via Nullified events.
-            return Ok(vec![]);
+            Ok(vec![])
         }
-        _ => {
-            return Err(LogDecodeError::Parse(format!(
-                "Unknown event with topic0: {:?}",
-                topic0
-            )));
-        }
+        _ => Err(LogDecodeError::Parse(format!(
+            "Unknown event with topic0: {topic0:?}"
+        ))),
     }
 }
 
@@ -90,7 +87,7 @@ fn handle_transact_event(
 
     let mut events = Vec::new();
     for (i, ciphertext) in event.ciphertext.clone().into_iter().enumerate() {
-        let hash = event.hash[i].clone();
+        let hash = event.hash[i];
         let (tree_number, leaf_index) =
             normalize_tree_position(tree_number, start_position + i as u32);
 
@@ -117,14 +114,14 @@ fn handle_nullified_event(
 ) -> Result<Vec<SyncEvent>, LogDecodeError> {
     let event = RailgunSmartWallet::Nullified::decode_log(&log.inner)?;
 
-    let tree_number = event.treeNumber as u32;
+    let tree_number = u32::from(event.treeNumber);
 
     let mut events = Vec::new();
-    for nullifier in event.nullifier.clone().into_iter() {
+    for nullifier in event.nullifier.clone() {
         events.push(SyncEvent::Nullified(
             syncer::Nullified {
-                tree_number: tree_number,
-                nullifier: nullifier,
+                tree_number,
+                nullifier,
             },
             block_timestamp,
         ));

@@ -11,8 +11,8 @@ pub const Q: U256 =
 pub const ORDER: U256 =
     uint!(21888242871839275222246405745257275088614511777268538073601725287587578984328_U256);
 
-pub const A: u64 = 168700;
-pub const D: u64 = 168696;
+pub const A: u64 = 168_700;
+pub const D: u64 = 168_696;
 
 pub fn fr_from_u64(x: u64) -> Fr {
     Fr::from(x)

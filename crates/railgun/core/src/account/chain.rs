@@ -27,10 +27,12 @@ pub enum ChainIdError {
 }
 
 impl ChainId {
+    #[must_use]
     pub fn evm(id: u64) -> Self {
         ChainId::Evm { id }
     }
 
+    #[must_use]
     pub fn all() -> Self {
         ChainId::All
     }
@@ -42,8 +44,8 @@ impl fmt::Display for ChainId {
             ChainId::All => write!(f, "ffffffffffffffff"),
             ChainId::Evm { id } => {
                 // 1 byte chain type (0x00 for EVM) + 7 bytes chain ID
-                let encoded = (*id & 0x00ffffffffffffff) as u64; // mask to 7 bytes
-                write!(f, "{:016x}", encoded)
+                let encoded = *id & 0x00ff_ffff_ffff_ffff; // mask to 7 bytes
+                write!(f, "{encoded:016x}")
             }
         }
     }
@@ -60,7 +62,7 @@ impl FromStr for ChainId {
         }
 
         let chain_type = (value >> 56) as u8; // high byte
-        let chain_id = value & 0x00ffffffffffffff; // low 7 bytes
+        let chain_id = value & 0x00ff_ffff_ffff_ffff; // low 7 bytes
 
         match chain_type {
             0x00 => Ok(ChainId::Evm { id: chain_id }),

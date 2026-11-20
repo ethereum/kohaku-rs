@@ -30,6 +30,7 @@ pub type PoiMerkleTree = NumberedMerkleTree<PoiHasher>;
 
 /// A missing leaf in a `ppoi_poi_merkletree_leaves` page. The node pads past the
 /// end of the list with this value, so it is never inserted.
+#[must_use]
 pub fn is_poi_empty_leaf(leaf: U256) -> bool {
     leaf == PoiHasher::zero()
 }

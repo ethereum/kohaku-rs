@@ -34,6 +34,7 @@ impl Proof {
     /// at infinity. The Railgun verifier accepts it when `tx.origin` is the verification bypass
     /// address, or under a verifier state override; a bundler's simulation cannot
     /// use the former, so the latter is what makes `eth_estimateUserOperationGas` work on it.
+    #[must_use]
     pub fn dummy() -> Self {
         Proof {
             a: G1Affine {
@@ -91,10 +92,10 @@ impl TryFrom<[String; 2]> for G1Affine {
     fn try_from(value: [String; 2]) -> Result<Self, Self::Error> {
         let x = value[0]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G1 x coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G1 x coordinate: {e}"))?;
         let y = value[1]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G1 y coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G1 y coordinate: {e}"))?;
         Ok(G1Affine { x, y })
     }
 }
@@ -114,16 +115,16 @@ impl TryFrom<[[String; 2]; 2]> for G2Affine {
     fn try_from(value: [[String; 2]; 2]) -> Result<Self, Self::Error> {
         let x0 = value[0][0]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G2 x[0] coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G2 x[0] coordinate: {e}"))?;
         let x1 = value[0][1]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G2 x[1] coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G2 x[1] coordinate: {e}"))?;
         let y0 = value[1][0]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G2 y[0] coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G2 y[0] coordinate: {e}"))?;
         let y1 = value[1][1]
             .parse::<U256>()
-            .map_err(|e| format!("Failed to parse G2 y[1] coordinate: {}", e))?;
+            .map_err(|e| format!("Failed to parse G2 y[1] coordinate: {e}"))?;
         Ok(G2Affine {
             x: [x0, x1],
             y: [y0, y1],

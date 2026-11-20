@@ -12,6 +12,7 @@ pub struct ChainedSyncer {
 }
 
 impl ChainedSyncer {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             syncers: Vec::new(),
@@ -19,12 +20,14 @@ impl ChainedSyncer {
     }
 
     /// Adds a syncer to the chain. Syncers are queried in the order they are added.
+    #[must_use]
     pub fn then<S: UtxoSyncer + 'static>(mut self, syncer: S) -> Self {
         self.syncers.push(Arc::new(syncer));
         self
     }
 
     /// Adds a syncer to the chain. Syncers are queried in the order they are added.
+    #[must_use]
     pub fn then_arc(mut self, syncer: Arc<dyn UtxoSyncer>) -> Self {
         self.syncers.push(syncer);
         self
@@ -120,8 +123,10 @@ mod tests {
         calls: Arc<Mutex<Vec<(u64, u64)>>>,
     }
 
+    type RecordedCalls = Arc<Mutex<Vec<(u64, u64)>>>;
+
     impl Fake {
-        fn new(latest: u64, down: bool) -> (Self, Arc<Mutex<Vec<(u64, u64)>>>) {
+        fn new(latest: u64, down: bool) -> (Self, RecordedCalls) {
             let calls = Arc::new(Mutex::new(Vec::new()));
             (
                 Self {

@@ -56,8 +56,8 @@ impl RailgunBuilder {
     }
 
     /// Builds the `RailgunWallet` with the specified configuration.
-    #[must_use]
     #[expect(clippy::unused_async, reason = "Preserve the builder's async API")]
+    #[allow(clippy::unused_async_trait_impl)]
     pub async fn build(self) -> Result<RailgunWallet, RailgunError> {
         let utxo_syncer = self.utxo_syncer.ok_or(RailgunError::MissingUtxoSyncer)?;
 

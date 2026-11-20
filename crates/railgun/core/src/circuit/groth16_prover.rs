@@ -32,14 +32,22 @@ pub enum Groth16ProverError {
     InvalidProof,
 }
 
+impl Default for Groth16Prover {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Groth16Prover {
     /// Uses an explicit artifact source, for controlled testing or alternate hosting.
+    #[must_use]
     pub fn with_artifact_base_url(base_url: &str) -> Self {
         Self {
             artifact_loader: RemoteArtifactLoader::new(base_url),
         }
     }
 
+    #[must_use]
     pub fn new() -> Self {
         let artifact_loader = RemoteArtifactLoader::default();
         Groth16Prover { artifact_loader }
@@ -54,7 +62,7 @@ impl Groth16Prover {
     ) -> Result<Proof, Groth16ProverError> {
         let nullifiers = inputs.nullifiers.len();
         let commitments = inputs.commitments_out.len();
-        let circuit_name = format!("railgun/{:02}x{:02}", nullifiers, commitments);
+        let circuit_name = format!("railgun/{nullifiers:02}x{commitments:02}");
 
         self.prove_named(&circuit_name, inputs.to_circuit_signals())
             .await
@@ -93,7 +101,7 @@ impl Groth16Prover {
         let public_inputs = &witnesses[1..matrices.num_instance_variables];
         let pvk = prepare_verifying_key(&pk.vk);
         let verified =
-            Groth16::<Bn254, CircomReduction>::verify_proof(&pvk, &proof, &public_inputs)?;
+            Groth16::<Bn254, CircomReduction>::verify_proof(&pvk, &proof, public_inputs)?;
 
         if !verified {
             return Err(Groth16ProverError::InvalidProof);

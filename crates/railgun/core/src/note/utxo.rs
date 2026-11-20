@@ -58,6 +58,9 @@ pub enum NoteError {
 }
 
 impl UtxoNote {
+    /// # Panics
+    /// Panics only if the fixed-width Poseidon input is rejected.
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     pub fn new(
         tree_number: u32,
         leaf_index: u32,
@@ -220,16 +223,20 @@ fn note_public_key(master_key: MasterPublicKey, random: &[u8; 16]) -> U256 {
     poseidon_hash(&[master_key.to_u256(), U256::from_be_slice(random)]).unwrap()
 }
 
+/// # Panics
+/// Panics only if the fixed-width Poseidon input is rejected.
+#[must_use]
 pub fn blinded_commitment(hash: U256, npk: U256, tree_number: u32, leaf_index: u32) -> U256 {
     poseidon_hash(&[
         hash,
         npk,
-        U256::from((tree_number as u128) * 65536 + (leaf_index as u128)),
+        U256::from(u128::from(tree_number) * 65536 + u128::from(leaf_index)),
     ])
     .unwrap()
 }
 
 #[cfg(all(test, native))]
+#[must_use]
 pub fn test_note() -> UtxoNote {
     use crate::{
         account::signer::PrivateKeySigner,

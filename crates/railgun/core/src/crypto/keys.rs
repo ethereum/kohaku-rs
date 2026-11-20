@@ -13,7 +13,7 @@ use crate::crypto::aes::{
     AesError, Ciphertext, CiphertextCtr, decrypt_gcm, encrypt_ctr, encrypt_gcm,
 };
 
-/// Private key for signing transactions (BabyJubJub curve).
+/// Private key for signing transactions (`BabyJubJub` curve).
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct SpendingKey([u8; 32]);
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -90,6 +90,7 @@ pub trait HexKey: ByteKey {
 }
 
 pub trait U256Key: ByteKey {
+    #[must_use]
     fn from_u256(value: U256) -> Self {
         let bytes = value.to_be_bytes::<32>();
         Self::from_bytes(bytes)
@@ -164,6 +165,7 @@ impl_byte_key!(BlindedKey);
 impl_byte_key!(MasterPublicKey);
 
 impl SpendingKey {
+    #[must_use]
     pub fn public_key(&self) -> SpendingPublicKey {
         let sk = kohaku_crypto::babyjubjub::PrivateKey::new(self.0);
         let pk = sk.public();
@@ -180,6 +182,9 @@ impl SpendingKey {
         SpendingPublicKey { x: x32, y: y32 }
     }
 
+    /// # Panics
+    /// Panics only if the fixed-size signing input is rejected by the `BabyJubJub` signer.
+    #[must_use]
     pub fn sign(&self, message: U256) -> SpendingSignature {
         let sk = kohaku_crypto::babyjubjub::PrivateKey::new(self.0);
         let sig = sk.sign(message.into()).unwrap();
@@ -201,6 +206,7 @@ fn fr_to_be_bytes(f: Fr) -> [u8; 32] {
 }
 
 impl SpendingPublicKey {
+    #[must_use]
     pub fn new(x: [u8; 32], y: [u8; 32]) -> Self {
         Self { x, y }
     }
@@ -211,6 +217,7 @@ impl SpendingPublicKey {
     /// This is the equation the transact circuit enforces, so a signature accepted here is
     /// exactly a signature the proof will accept. Lets a caller authenticate a signer it does
     /// not trust to hold the expected key, e.g. a hardware device.
+    #[must_use]
     pub fn verify(&self, message: U256, signature: &SpendingSignature) -> bool {
         use num_bigint::{BigInt, Sign};
         let big = |u: U256| BigInt::from_bytes_be(Sign::Plus, &u.to_be_bytes::<32>());
@@ -243,18 +250,22 @@ impl SpendingPublicKey {
         left.x == right.x && left.y == right.y
     }
 
+    #[must_use]
     pub fn x_hex(&self) -> String {
         hex::encode(self.x)
     }
 
+    #[must_use]
     pub fn y_hex(&self) -> String {
         hex::encode(self.y)
     }
 
+    #[must_use]
     pub fn x_u256(&self) -> U256 {
         U256::from_be_bytes(self.x)
     }
 
+    #[must_use]
     pub fn y_u256(&self) -> U256 {
         U256::from_be_bytes(self.y)
     }
@@ -273,11 +284,13 @@ impl std::fmt::Display for SpendingPublicKey {
 }
 
 impl ViewingKey {
+    #[must_use]
     pub fn public_key(&self) -> ViewingPublicKey {
         let signing_key = SigningKey::from_bytes(&self.0);
         ViewingPublicKey(signing_key.verifying_key().to_bytes())
     }
 
+    #[must_use]
     pub fn nullifying_key(&self) -> NullifyingKey {
         NullifyingKey::new(*self)
     }
@@ -302,7 +315,7 @@ impl ViewingKey {
         Ok(SharedKey::new(self, point))
     }
 
-    /// Generate a shared secret compatible with @noble/ed25519's `ed.getSharedSecret`
+    // Generate a shared secret compatible with @noble/ed25519's `ed.getSharedSecret`
     // pub(crate) fn derive_shared_secret(
     //     &self,
     //     their_public: ViewingPublicKey,
@@ -317,19 +330,20 @@ impl ViewingKey {
     //     Ok(SharedKey(shared_secret.to_bytes()))
     // }
 
+    #[must_use]
     pub fn encrypt_ctr(&self, plaintext: &[&[u8]], iv: &[u8; 16]) -> CiphertextCtr {
         encrypt_ctr(plaintext, &self.0, iv)
     }
 
-    fn to_curve25519_scalar(&self) -> Scalar {
+    fn to_curve25519_scalar(self) -> Scalar {
         let hash = Sha512::digest(self.0);
         let mut head = [0u8; 32];
         head.copy_from_slice(&hash[..32]);
 
         // Clamp as per Ed25519
-        head[0] &= 248;
-        head[31] &= 63;
-        head[31] |= 64;
+        head[0] &= 0xf8;
+        head[31] &= 0x3f;
+        head[31] |= 0x40;
 
         Scalar::from_bytes_mod_order(head)
     }
@@ -353,6 +367,7 @@ impl SharedKey {
 }
 
 impl ViewingPublicKey {
+    #[must_use]
     pub const fn from_bytes_const(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -372,6 +387,9 @@ impl MasterPublicKey {
 }
 
 impl NullifyingKey {
+    /// # Panics
+    /// Panics only if the fixed-width Poseidon input is rejected.
+    #[must_use]
     pub fn new(viewing_key: ViewingKey) -> Self {
         NullifyingKey::from_u256(poseidon_hash(&[viewing_key.to_u256()]).unwrap())
     }

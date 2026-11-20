@@ -26,6 +26,7 @@ pub struct TransferNote {
 }
 
 impl TransferNote {
+    #[must_use]
     pub fn new(
         from_key: ViewingKey,
         to: RailgunAddress,

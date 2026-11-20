@@ -18,8 +18,9 @@ use crate::{
 };
 
 /// Several amount intents resolved together, so one selection can cover more
-/// than one output. [`RailgunTransactor::transfer_amount`](crate::wallet::RailgunTransactor::transfer_amount)
-/// is the one-intent form.
+/// than one output.
+/// [`RailgunTransactor::transfer_amount`](crate::wallet::RailgunTransactor::transfer_amount) is the
+/// one-intent form.
 #[derive(Clone, Default)]
 pub struct AmountIntents {
     intents: Vec<Intent>,
@@ -75,10 +76,12 @@ impl Draft {
 }
 
 impl AmountIntents {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn transfer(
         mut self,
         from: Arc<dyn RailgunSigner>,
@@ -122,6 +125,7 @@ impl AmountIntents {
         Ok(self)
     }
 
+    #[must_use]
     pub fn adapt(mut self, contract: Address, params: [u8; 32]) -> Self {
         self.adapt_contract = Some(contract);
         self.adapt_params = Some(params);

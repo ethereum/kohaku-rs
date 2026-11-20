@@ -8,7 +8,7 @@
 //!   main                                              # legacy: transact 01x01..05x05 from the
 //!                                                     # original Railgun release, into ./
 //!   main <ipfs-base> <out-dir> <circuit> [circuit…]   # any release, e.g. the POI circuits:
-//!   main https://ipfs-lb.com/ipfs/QmZ2My…new artifacts/railgun/poi 03x03 13x13
+//!   main <https://ipfs-lb.com/ipfs/QmZ2My…new> artifacts/railgun/poi 03x03 13x13
 //!
 //! The release layout is `{base}/circuits/{name}/zkey.br` and
 //! `{base}/prover/snarkjs/{name}.wasm.br`. When the release also publishes
@@ -58,7 +58,7 @@ pub async fn main() {
     if args.is_empty() {
         for i in 1..6 {
             for j in 1..6 {
-                let circuit_name = format!("0{}x0{}", i, j);
+                let circuit_name = format!("0{i}x0{j}");
                 convert_artifacts(LEGACY_IPFS_BASE, ".", &circuit_name).await;
             }
         }
@@ -85,7 +85,7 @@ async fn fetch(url: &str) -> Vec<u8> {
 async fn convert_artifacts(base: &str, out_dir: &str, circuit_name: &str) {
     info!("Converting artifacts for circuit: {}", circuit_name);
 
-    let compressed = fetch(&format!("{}/circuits/{}/zkey.br", base, circuit_name)).await;
+    let compressed = fetch(&format!("{base}/circuits/{circuit_name}/zkey.br")).await;
     let mut zkey = Vec::new();
     brotli::BrotliDecompress(&mut compressed.as_slice(), &mut zkey).unwrap();
 
@@ -95,7 +95,7 @@ async fn convert_artifacts(base: &str, out_dir: &str, circuit_name: &str) {
     let matrices: SerializableNpIndex<_> = matrices.into();
 
     // Cross-check against the release's own verifying key, when it publishes one.
-    let vkey_url = format!("{}/circuits/{}/vkey.json", base, circuit_name);
+    let vkey_url = format!("{base}/circuits/{circuit_name}/vkey.json");
     match reqwest::get(&vkey_url).await {
         Ok(resp) if resp.status().is_success() => {
             let vkey: Value = resp.json().await.unwrap();
@@ -105,13 +105,13 @@ async fn convert_artifacts(base: &str, out_dir: &str, circuit_name: &str) {
         _ => info!("{circuit_name}: no vkey.json in this release, cross-check skipped"),
     }
 
-    let dir = format!("{}/{}", out_dir, circuit_name);
+    let dir = format!("{out_dir}/{circuit_name}");
     std::fs::create_dir_all(&dir).unwrap();
-    let wasm_path = format!("{}/wasm.br", dir);
-    let proving_key_path = format!("{}/proving_key.bin.br", dir);
-    let matrices_path = format!("{}/matrices.bin.br", dir);
+    let wasm_path = format!("{dir}/wasm.br");
+    let proving_key_path = format!("{dir}/proving_key.bin.br");
+    let matrices_path = format!("{dir}/matrices.bin.br");
 
-    let wasm_bytes = fetch(&format!("{}/prover/snarkjs/{}.wasm.br", base, circuit_name)).await;
+    let wasm_bytes = fetch(&format!("{base}/prover/snarkjs/{circuit_name}.wasm.br")).await;
     std::fs::write(&wasm_path, &wasm_bytes).unwrap();
 
     let params = brotli::enc::BrotliEncoderParams::default();

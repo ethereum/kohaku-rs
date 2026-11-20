@@ -1,9 +1,12 @@
+use kohaku_railgun::indexer::syncer::{self, SyncerError, TxidSyncer, UtxoSyncer};
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::{info, warn};
 
-use crate::subsquid_types::*;
-use kohaku_railgun::indexer::syncer::{self, SyncerError, TxidSyncer, UtxoSyncer};
+use crate::subsquid_types::{
+    BlockNumberResponsese, CommitmentsResponse, GraphqlRequest, GraphqlResponse,
+    NullifiersResponse, OperationsResponse, QueryVars,
+};
 
 /// Subsquid UTXO & TXID syncer.
 ///
@@ -55,6 +58,7 @@ impl SubsquidSyncer {
     /// Sets the latest block override, which causes the syncer to only sync
     /// up to this block. Used in testing to sync against chain forks.
     #[cfg(any(test, feature = "testing"))]
+    #[must_use]
     pub fn with_latest_block(mut self, latest_block: u64) -> Self {
         self.latest_block_override = Some(latest_block);
         self
@@ -121,11 +125,7 @@ impl SubsquidSyncer {
         }
 
         let data: BlockNumberResponsese = self.post_retry(BLOCK_NUMBER_QUERY, ()).await?;
-        let latest_block = data
-            .transactions
-            .first()
-            .map(|tx| tx.block_number)
-            .unwrap_or(0);
+        let latest_block = data.transactions.first().map_or(0, |tx| tx.block_number);
         Ok(latest_block)
     }
 
@@ -142,7 +142,7 @@ impl SubsquidSyncer {
             |data: CommitmentsResponse| {
                 let last = data.commitments.last();
                 let id = last.map(|c| c.id.clone()).unwrap_or_default();
-                let block = last.map(|c| c.block_number).unwrap_or(0);
+                let block = last.map_or(0, |c| c.block_number);
                 let items = data
                     .commitments
                     .into_iter()
@@ -167,7 +167,7 @@ impl SubsquidSyncer {
             |data: NullifiersResponse| {
                 let last = data.nullifiers.last();
                 let id = last.map(|c| c.id.clone()).unwrap_or_default();
-                let block = last.map(|c| c.block_number).unwrap_or(0);
+                let block = last.map_or(0, |c| c.block_number);
                 let items = data
                     .nullifiers
                     .into_iter()
@@ -205,7 +205,7 @@ impl SubsquidSyncer {
         self.fetch_paged("operations", query, from, to, |data: OperationsResponse| {
             let last = data.operations.last();
             let id = last.map(|c| c.id.clone()).unwrap_or_default();
-            let block = last.map(|c| c.block_number).unwrap_or(0);
+            let block = last.map_or(0, |c| c.block_number);
             let items = data
                 .operations
                 .into_iter()

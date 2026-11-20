@@ -27,12 +27,13 @@ sol! {
 /// Tests a full transact flow, including shielding, transferring, and unshielding.
 ///
 /// This integration test ensures that the entire transact flow works correctly using
-/// the public RailgunWallet interface. Includes internal syncing, tx building, UTXO
+/// the public `RailgunWallet` interface. Includes internal syncing, tx building, UTXO
 /// management, and UTXO proof generation.
 ///
 /// This integration test DOES NOT verify any TXID or POI functionality.
 #[tokio::test]
-#[ignore]
+#[ignore = "requires local Anvil and circuit artifacts"]
+#[allow(clippy::too_many_lines)]
 async fn test_transact_utxo() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -97,7 +98,7 @@ async fn test_transact_utxo() {
 
     for tx in shield_tx {
         provider
-            .send_transaction(tx.into())
+            .send_transaction(tx)
             .await
             .unwrap()
             .get_receipt()
@@ -128,7 +129,7 @@ async fn test_transact_utxo() {
 
     for tx in shield_tx {
         provider
-            .send_transaction(tx.into())
+            .send_transaction(tx)
             .await
             .unwrap()
             .get_receipt()
@@ -176,7 +177,7 @@ async fn test_transact_utxo() {
         .unwrap();
 
     provider
-        .send_transaction(transfer_tx.tx_data.into())
+        .send_transaction(transfer_tx.tx_data)
         .await
         .unwrap()
         .get_receipt()
@@ -216,7 +217,7 @@ async fn test_transact_utxo() {
         .unwrap();
 
     provider
-        .send_transaction(unshield_tx.tx_data.into())
+        .send_transaction(unshield_tx.tx_data)
         .await
         .unwrap()
         .get_receipt()

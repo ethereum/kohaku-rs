@@ -1,9 +1,9 @@
 use alloy::primitives::{Address, Bytes, FixedBytes};
+use kohaku_railgun::{caip::AssetId, crypto::Ciphertext, indexer::syncer};
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 
 use crate::normalize_tree_position::normalize_tree_position;
-use kohaku_railgun::{caip::AssetId, crypto::Ciphertext, indexer::syncer};
 
 #[derive(Serialize)]
 pub struct GraphqlRequest<V: Serialize> {
@@ -79,6 +79,7 @@ pub struct ShieldPreimage {
 }
 
 #[derive(Deserialize)]
+#[allow(clippy::struct_field_names)]
 pub struct TokenInfo {
     #[serde(rename = "tokenAddress")]
     pub token_address: Address,
@@ -197,7 +198,7 @@ impl From<Commitment> for syncer::SyncEvent {
         match value.kind {
             CommitmentKind::Legacy => syncer::SyncEvent::Legacy(
                 syncer::LegacyCommitment {
-                    hash: value.hash.into(),
+                    hash: value.hash,
                     tree_number,
                     leaf_index,
                 },

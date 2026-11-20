@@ -17,6 +17,7 @@ pub struct SmartWalletUtxoVerifier {
 }
 
 impl SmartWalletUtxoVerifier {
+    #[must_use]
     pub fn new(address: Address, provider: DynProvider) -> Self {
         Self { address, provider }
     }

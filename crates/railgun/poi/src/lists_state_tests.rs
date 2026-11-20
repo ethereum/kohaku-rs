@@ -1,11 +1,12 @@
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
+
 use super::*;
 use crate::{
     merkle_tree::{MerkleRoot, PoiHasher},
     poi::types::TransactProofData,
-};
-use std::sync::{
-    Mutex,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 #[derive(Clone, Copy)]
 enum LeafPages {
@@ -156,7 +157,7 @@ async fn sync_stops_at_the_zero_leaf_and_resumes() {
     let key = list_key();
     let mut leaves: Vec<U256> = (1..=101u32).map(U256::from).collect();
     let node = FakeNode::new(leaves.clone(), true);
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
 
     lists.sync(&node).await.unwrap();
     assert_eq!(lists.next_index(&key), 101);
@@ -167,7 +168,7 @@ async fn sync_stops_at_the_zero_leaf_and_resumes() {
 
     let saved: PoiListsState =
         serde_json::from_slice(&serde_json::to_vec(&lists.state()).unwrap()).unwrap();
-    let reloaded = PoiLists::load(saved, &[key.clone()]).unwrap();
+    let reloaded = PoiLists::load(saved, std::slice::from_ref(&key)).unwrap();
     assert_eq!(reloaded.next_index(&key), 101);
     assert!(!reloaded.caught_up(&key));
     assert!(
@@ -189,7 +190,7 @@ async fn sync_stops_at_the_zero_leaf_and_resumes() {
 async fn rejected_root_does_not_advance_the_cursor() {
     let key = list_key();
     let node = FakeNode::new((1..=3u32).map(U256::from).collect(), false);
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
 
     let err = lists.sync(&node).await.unwrap_err();
     assert!(matches!(err, PoiSyncError::RootRejected { .. }));
@@ -201,7 +202,7 @@ async fn rejected_root_does_not_advance_the_cursor() {
             .is_none()
     );
 
-    let reloaded = PoiLists::load(lists.state(), &[key.clone()]).unwrap();
+    let reloaded = PoiLists::load(lists.state(), std::slice::from_ref(&key)).unwrap();
     assert_eq!(reloaded.next_index(&key), 0);
     assert!(!reloaded.contains(&key, BlindedCommitment::from(U256::from(1u8))));
 }
@@ -211,7 +212,7 @@ async fn a_rejected_later_page_keeps_the_prefix_but_not_caught_up() {
     let key = list_key();
     let node = FakeNode::new((1..=101u32).map(U256::from).collect(), true);
     node.reject_after(1);
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
 
     let err = lists.sync(&node).await.unwrap_err();
     assert!(matches!(err, PoiSyncError::RootRejected { .. }));
@@ -225,7 +226,7 @@ async fn a_rejected_later_page_keeps_the_prefix_but_not_caught_up() {
 async fn an_empty_page_is_not_the_end_of_the_list() {
     let key = list_key();
     let node = FakeNode::empty();
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
 
     let err = lists.sync(&node).await.unwrap_err();
     assert!(matches!(err, PoiSyncError::ShortPage { got: 0, .. }));
@@ -237,7 +238,7 @@ async fn an_empty_page_is_not_the_end_of_the_list() {
 async fn a_short_page_without_a_zero_is_not_applied() {
     let key = list_key();
     let node = FakeNode::exact((1..=3u32).map(U256::from).collect());
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
 
     let err = lists.sync(&node).await.unwrap_err();
     assert!(matches!(err, PoiSyncError::ShortPage { got: 3, .. }));
@@ -251,7 +252,7 @@ async fn cancellation_during_validation_does_not_publish_a_page() {
     let key = list_key();
     let node = FakeNode::new(vec![U256::from(1)], true);
     node.pause_root.store(true, Ordering::Relaxed);
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
     {
         let future = lists.sync(&node);
         tokio::pin!(future);
@@ -269,7 +270,7 @@ async fn cancellation_during_later_fetch_keeps_the_validated_prefix() {
     let key = list_key();
     let node = FakeNode::new((1..=201u32).map(U256::from).collect(), true);
     node.pause_fetch_at.store(100, Ordering::Relaxed);
-    let mut lists = PoiLists::load(PoiListsState::default(), &[key.clone()]).unwrap();
+    let mut lists = PoiLists::load(PoiListsState::default(), std::slice::from_ref(&key)).unwrap();
     {
         let future = lists.sync(&node);
         tokio::pin!(future);
@@ -279,7 +280,7 @@ async fn cancellation_during_later_fetch_keeps_the_validated_prefix() {
         }
     }
     assert_eq!(lists.next_index(&key), 100);
-    let reloaded = PoiLists::load(lists.state(), &[key.clone()]).unwrap();
+    let reloaded = PoiLists::load(lists.state(), std::slice::from_ref(&key)).unwrap();
     assert_eq!(reloaded.next_index(&key), 100);
     assert!(reloaded.contains(&key, BlindedCommitment::from(U256::from(1))));
     assert!(!reloaded.contains(&key, BlindedCommitment::from(U256::from(101))));

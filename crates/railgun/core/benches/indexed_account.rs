@@ -11,13 +11,17 @@ pub mod bench {
     use kohaku_railgun::{
         account::signer::{PrivateKeySigner, RailgunSigner},
         bench_helpers::{
-            EncryptableNote, IndexedAccount, Note, encrypt::encrypt_shield, transfer::TransferNote,
+            EncryptableNote, IndexedAccount, IndexedAccountState, Note, encrypt::encrypt_shield,
+            transfer::TransferNote,
         },
         caip::AssetId,
         indexer::syncer::{Shield, Transact},
     };
     use rand::random;
 
+    /// # Panics
+    ///
+    /// Panics if test note encryption or account indexing fails.
     pub fn bench_handle_shield_match(c: &mut criterion::Criterion) {
         let signer = PrivateKeySigner::new_evm(random(), random(), 1);
 
@@ -30,7 +34,7 @@ pub mod bench {
             tree_number: 1,
             leaf_index: 0,
             npk: shield.preimage.npk.into(),
-            token: shield.preimage.token.try_into().unwrap(),
+            token: shield.preimage.token.into(),
             value: U256::from(shield.preimage.value),
             ciphertext: shield.ciphertext.clone().into(),
             shield_key: *shield.ciphertext.shieldKey,
@@ -39,7 +43,7 @@ pub mod bench {
 
         c.bench_function("handle_shield_event", |b| {
             b.iter_batched(
-                || IndexedAccount::from_state(signer.clone(), Default::default()),
+                || IndexedAccount::from_state(signer.clone(), IndexedAccountState::default()),
                 |mut account| account.handle_shield_event(&event).unwrap(),
                 criterion::BatchSize::SmallInput,
             );
@@ -76,7 +80,7 @@ pub mod bench {
 
         c.bench_function("handle_transact_event", |b| {
             b.iter_batched(
-                || IndexedAccount::from_state(recipient.clone(), Default::default()),
+                || IndexedAccount::from_state(recipient.clone(), IndexedAccountState::default()),
                 |mut account| account.handle_transact_event(&event).unwrap(),
                 criterion::BatchSize::SmallInput,
             );
@@ -86,7 +90,8 @@ pub mod bench {
     fn bench_handle_shield_nomatch(c: &mut criterion::Criterion) {
         let signer = PrivateKeySigner::new_evm(random(), random(), 1);
         let other_signer = PrivateKeySigner::new_evm(random(), random(), 1);
-        let mut account = IndexedAccount::from_state(signer.clone(), Default::default());
+        let mut account =
+            IndexedAccount::from_state(signer.clone(), IndexedAccountState::default());
 
         let asset = AssetId::erc20(address!("0xDEADDEADDEADDEADDEADDEADDEADDEADDEADDEAD"));
         let value = 100;
@@ -97,7 +102,7 @@ pub mod bench {
             tree_number: 1,
             leaf_index: 0,
             npk: shield.preimage.npk.into(),
-            token: shield.preimage.token.try_into().unwrap(),
+            token: shield.preimage.token.into(),
             value: U256::from(shield.preimage.value),
             ciphertext: shield.ciphertext.clone().into(),
             shield_key: *shield.ciphertext.shieldKey,
@@ -115,7 +120,8 @@ pub mod bench {
         let sender = PrivateKeySigner::new_evm(random(), random(), 1);
         let recipient = PrivateKeySigner::new_evm(random(), random(), 1);
         let other_recipient = PrivateKeySigner::new_evm(random(), random(), 1);
-        let mut account = IndexedAccount::from_state(recipient.clone(), Default::default());
+        let mut account =
+            IndexedAccount::from_state(recipient.clone(), IndexedAccountState::default());
 
         let asset = AssetId::erc20(address!("0xDEADDEADDEADDEADDEADDEADDEADDEADDEADDEAD"));
         let value = 100;

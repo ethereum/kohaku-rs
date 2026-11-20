@@ -33,7 +33,7 @@ impl<F: PrimeField> PoseidonParams<F> {
         if mds.len() != t {
             return Err(Error::InvalidParameters);
         }
-        for row in mds.iter() {
+        for row in &mds {
             if row.len() != t {
                 return Err(Error::InvalidParameters);
             }
@@ -42,7 +42,7 @@ impl<F: PrimeField> PoseidonParams<F> {
         if round_constants.len() != rounds {
             return Err(Error::InvalidParameters);
         }
-        for row in round_constants.iter() {
+        for row in &round_constants {
             if row.len() != t {
                 return Err(Error::InvalidParameters);
             }
@@ -75,7 +75,7 @@ impl<F: PrimeField> PoseidonParams<F> {
     // guassian elimination
     fn mat_inverse(mat: &[Vec<F>]) -> Vec<Vec<F>> {
         let n = mat.len();
-        debug_assert!(mat[0].len() == n);
+        debug_assert_eq!(mat[0].len(), n);
 
         let mut m = mat.to_owned();
         let mut inv = vec![vec![F::zero(); n]; n];
@@ -113,7 +113,7 @@ impl<F: PrimeField> PoseidonParams<F> {
                     std::cmp::Ordering::Less => inv[row][col].mul_assign(&el_inv),
                     std::cmp::Ordering::Equal => {
                         m[row][col] = F::one();
-                        inv[row][col].mul_assign(&el_inv)
+                        inv[row][col].mul_assign(&el_inv);
                     }
                     std::cmp::Ordering::Greater => m[row][col].mul_assign(&el_inv),
                 }
@@ -146,9 +146,9 @@ impl<F: PrimeField> PoseidonParams<F> {
             for (row, mrow) in m.iter().enumerate() {
                 for (col, v) in mrow.iter().enumerate() {
                     if row == col {
-                        debug_assert!(*v == F::one());
+                        debug_assert_eq!(*v, F::one());
                     } else {
-                        debug_assert!(*v == F::zero());
+                        debug_assert_eq!(*v, F::zero());
                     }
                 }
             }
@@ -207,9 +207,9 @@ impl<F: PrimeField> PoseidonParams<F> {
             // update m_i
             m_i = m_mul;
             m_i[0][0] = F::one();
-            for i in 1..t {
-                m_i[0][i] = F::zero();
-                m_i[i][0] = F::zero();
+            m_i[0][1..].fill(F::zero());
+            for row in m_i.iter_mut().skip(1) {
+                row[0] = F::zero();
             }
             m_mul = Self::mat_mat_mul(&mds_, &m_i);
         }
@@ -243,7 +243,7 @@ impl<F: PrimeField> PoseidonParams<F> {
 
     pub(crate) fn mat_vec_mul(mat: &[Vec<F>], input: &[F]) -> Vec<F> {
         let t = mat.len();
-        debug_assert!(t == input.len());
+        debug_assert_eq!(t, input.len());
         let mut out = vec![F::zero(); t];
         for (mat, out) in izip!(mat.iter(), out.iter_mut()) {
             debug_assert_eq!(mat.len(), t);

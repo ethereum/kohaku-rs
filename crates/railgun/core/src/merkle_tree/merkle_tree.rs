@@ -38,6 +38,7 @@ pub struct MerkleRoot(U256);
 pub struct RailgunHasher;
 
 impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
+    #[must_use]
     pub fn new(number: u32) -> Self {
         Self {
             number,
@@ -45,6 +46,7 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn from_state(state: MerkleTreeState) -> Result<Self, MerkleTreeError> {
         Ok(Self {
             number: state.number,
@@ -52,10 +54,12 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
         })
     }
 
+    #[must_use]
     pub fn zero() -> U256 {
         H::zero()
     }
 
+    #[must_use]
     pub fn number(&self) -> u32 {
         self.number
     }
@@ -64,14 +68,17 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
         Ok(self.inner.root().into())
     }
 
+    #[must_use]
     pub fn leaves(&self) -> &[U256] {
         self.inner.leaves()
     }
 
+    #[must_use]
     pub fn leaves_len(&self) -> usize {
         self.inner.leaves().len()
     }
 
+    #[must_use]
     pub fn state(&self) -> MerkleTreeState {
         MerkleTreeState {
             number: self.number,
@@ -99,6 +106,7 @@ impl<H: Hasher<2, U256>> NumberedMerkleTree<H> {
 }
 
 /// Bit-packed leaf position of a proof, as the circuits expect it.
+#[must_use]
 pub fn proof_indices(proof: &MerkleProof) -> U256 {
     proof
         .path
@@ -121,6 +129,7 @@ impl Hasher<2, U256> for RailgunHasher {
 }
 
 impl MerkleRoot {
+    #[must_use]
     pub fn new(root: U256) -> Self {
         MerkleRoot(root)
     }

@@ -1,5 +1,6 @@
 pub mod verifier;
 
+#[allow(clippy::module_inception)]
 mod merkle_tree;
 mod smart_wallet_verifier;
 mod utxo_tree;

@@ -9,6 +9,7 @@ use wasmer::{Module, Store};
 use crate::circuit::remote_artifact_loader::RemoteArtifactLoader;
 
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum CalculateWitnessError {
     #[error("Artifact loader error: {0}")]
     ArtifactLoaderError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),

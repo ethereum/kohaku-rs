@@ -13,7 +13,7 @@ mod bench {
 
     fn benchmark_poseidon(c: &mut criterion::Criterion) {
         for t in 1..=13 {
-            c.bench_function(&format!("poseidon_hash_{}", t), |b| {
+            c.bench_function(&format!("poseidon_hash_{t}"), |b| {
                 b.iter(|| {
                     let r: u128 = random();
                     let inputs = (0..t).map(|_| Fr::from(r)).collect::<Vec<_>>();

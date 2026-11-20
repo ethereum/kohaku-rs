@@ -139,6 +139,7 @@ impl PoiCircuitInputs {
     /// Builds POI circuit inputs on-chain TXID position.
     #[allow(clippy::too_many_arguments)]
     #[allow(private_interfaces)]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn from_inputs(
         spending_pubkey: SpendingPublicKey,
         nullifying_key: NullifyingKey,
@@ -245,6 +246,7 @@ impl PoiCircuitInputs {
     //     poi_in_merkle_proof_path_elements => "poiInMerkleProofPathElements"
     // );
 
+    #[must_use]
     pub fn to_circuit_signals(&self) -> HashMap<String, Vec<U256>> {
         let mut m = HashMap::with_capacity(20);
         m.insert(
@@ -286,8 +288,8 @@ impl PoiCircuitInputs {
             "poiMerkleroots".into(),
             self.poi_merkleroots_padded
                 .iter()
-                .cloned()
-                .map(|r| r.into())
+                .copied()
+                .map(std::convert::Into::into)
                 .collect(),
         );
         m.insert(
@@ -300,7 +302,7 @@ impl PoiCircuitInputs {
             self.poi_in_merkle_proof_path_elements
                 .iter()
                 .flatten()
-                .cloned()
+                .copied()
                 .collect(),
         );
 

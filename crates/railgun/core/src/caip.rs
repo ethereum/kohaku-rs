@@ -16,10 +16,12 @@ pub enum AssetId {
 }
 
 impl AssetId {
+    #[must_use]
     pub const fn erc20(addr: Address) -> Self {
         AssetId::Erc20(addr)
     }
 
+    #[must_use]
     pub fn hash(&self) -> U256 {
         let token_data: TokenData = (*self).into();
         token_data.hash()
@@ -29,9 +31,9 @@ impl AssetId {
 impl Display for AssetId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AssetId::Erc20(address) => write!(f, "erc20:{:?}", address),
-            AssetId::Erc721(address, sub_id) => write!(f, "erc721:{:?}/{}", address, sub_id),
-            AssetId::Erc1155(address, sub_id) => write!(f, "erc1155:{:?}/{}", address, sub_id),
+            AssetId::Erc20(address) => write!(f, "erc20:{address:?}"),
+            AssetId::Erc721(address, sub_id) => write!(f, "erc721:{address:?}/{sub_id}"),
+            AssetId::Erc1155(address, sub_id) => write!(f, "erc1155:{address:?}/{sub_id}"),
         }
     }
 }
@@ -59,6 +61,7 @@ impl From<AssetId> for TokenData {
 }
 
 impl From<TokenData> for AssetId {
+    #[allow(clippy::match_wildcard_for_single_variants)]
     fn from(token_data: TokenData) -> Self {
         match token_data.tokenType {
             TokenType::ERC20 => AssetId::Erc20(token_data.tokenAddress),
@@ -84,7 +87,7 @@ pub enum AssetIdParseError {
 impl FromStr for AssetId {
     type Err = AssetIdParseError;
 
-    /// Parse an AssetId from a string.
+    /// Parse an `AssetId` from a string.
     ///
     /// Supported formats:
     /// - `erc20:0x...` - ERC20 token

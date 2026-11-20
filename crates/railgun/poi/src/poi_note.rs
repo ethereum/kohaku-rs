@@ -9,6 +9,7 @@ pub struct PoiNote {
 }
 
 impl PoiNote {
+    #[must_use]
     pub fn new(note: UtxoNote, pois: HashMap<ListKey, MerkleProof>) -> Self {
         Self { inner: note, pois }
     }

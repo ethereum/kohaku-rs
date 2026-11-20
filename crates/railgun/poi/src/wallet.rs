@@ -99,12 +99,13 @@ impl SpendableNotes {
 }
 
 impl PoiWallet {
-    /// Build a paymaster UserOperation while enforcing the local POI list policy.
+    /// Build a paymaster `UserOperation` while enforcing the local POI list policy.
     #[cfg(feature = "userop")]
     pub fn user_operations(&mut self, provider: impl Provider + 'static) -> RailgunUserOps<'_> {
         RailgunUserOps::with_policy(&mut self.wallet, provider, &mut self.poi)
     }
     /// Compose a core wallet with a configured POI provider.
+    #[must_use]
     pub fn from_provider(wallet: RailgunWallet, poi: PoiProvider) -> Self {
         Self { wallet, poi }
     }
@@ -126,6 +127,7 @@ impl PoiWallet {
         Ok(Self { wallet, poi })
     }
 
+    #[must_use]
     pub fn state(&self) -> PoiWalletCheckpoint {
         PoiWalletCheckpoint {
             railgun: self.wallet.state(),
@@ -137,10 +139,12 @@ impl PoiWallet {
         PoiTransactor { wallet: self }
     }
 
+    #[must_use]
     pub fn chain(&self) -> &kohaku_railgun::chain_config::ChainConfig {
         self.wallet.chain()
     }
 
+    #[must_use]
     pub fn synced_block(&self) -> u64 {
         self.wallet.synced_block()
     }
@@ -150,6 +154,7 @@ impl PoiWallet {
         Ok(())
     }
 
+    #[must_use]
     pub fn account_state(&self, address: RailgunAddress) -> Option<IndexedAccountState> {
         self.wallet.account_state(address)
     }
@@ -158,6 +163,7 @@ impl PoiWallet {
         self.poi.list_keys().iter().map(list_key_string).collect()
     }
 
+    #[must_use]
     pub fn own_operations(&self) -> Vec<(String, Operation)> {
         self.poi
             .own_operations()
@@ -169,6 +175,7 @@ impl PoiWallet {
             .collect()
     }
 
+    #[must_use]
     pub fn poi_status_per_list(&self, commitment: U256) -> Vec<(String, PoiStatus)> {
         self.poi
             .status_per_list(commitment.into())
@@ -177,10 +184,12 @@ impl PoiWallet {
             .collect()
     }
 
+    #[must_use]
     pub fn poi_pending(&self) -> Vec<PendingPoiSummary> {
         self.poi.pending_summaries()
     }
 
+    #[must_use]
     pub fn poi_recovered_valid(&self) -> Vec<String> {
         self.poi
             .recovered_valid()
@@ -241,6 +250,7 @@ impl PoiWallet {
         self.poi.process_pending_report(self.wallet.prover()).await
     }
 
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn discard_pending_poi(
         &mut self,
         operations: &[ProvedOperation],
@@ -296,6 +306,7 @@ impl PoiWallet {
             .collect()
     }
 
+    #[must_use]
     pub fn shield(&self) -> kohaku_railgun::transact::ShieldBuilder {
         self.wallet.shield()
     }
@@ -322,6 +333,7 @@ impl PoiTransactor<'_> {
         )
     }
 
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn resolve_amounts(
         &mut self,
         intents: AmountIntents,

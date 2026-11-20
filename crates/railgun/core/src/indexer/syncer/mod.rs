@@ -1,6 +1,5 @@
-use kohaku_crypto::poseidon_hash;
-
 use alloy::primitives::FixedBytes;
+use kohaku_crypto::poseidon_hash;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -100,6 +99,7 @@ impl Shield {
     /// # Panics
     ///
     /// Never in practice: Poseidon over three field-reduced inputs cannot fail.
+    #[must_use]
     pub fn hash(&self) -> UtxoLeafHash {
         if let Some(hash) = self.hash {
             return hash;

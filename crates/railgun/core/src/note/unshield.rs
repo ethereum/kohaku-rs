@@ -13,6 +13,7 @@ pub struct UnshieldNote {
 }
 
 impl UnshieldNote {
+    #[must_use]
     pub fn new(receiver: Address, asset: AssetId, value: u128) -> Self {
         UnshieldNote {
             receiver,
@@ -21,6 +22,7 @@ impl UnshieldNote {
         }
     }
 
+    #[must_use]
     pub fn preimage(&self) -> abis::railgun::CommitmentPreimage {
         abis::railgun::CommitmentPreimage {
             npk: self.note_public_key().into(),
@@ -29,6 +31,7 @@ impl UnshieldNote {
         }
     }
 
+    #[must_use]
     pub fn unshield_type(&self) -> abis::railgun::UnshieldType {
         abis::railgun::UnshieldType::NORMAL
     }

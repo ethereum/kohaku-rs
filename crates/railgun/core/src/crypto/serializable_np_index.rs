@@ -12,11 +12,11 @@ pub struct SerializableNpIndex<F: Field> {
     pub num_witness_variables: usize,
     /// The number of constraints in the constraint system.
     pub num_constraints: usize,
-    /// The number of non_zero entries in the A matrix.
+    /// The number of `non_zero` entries in the A matrix.
     pub a_num_non_zero: usize,
-    /// The number of non_zero entries in the B matrix.
+    /// The number of `non_zero` entries in the B matrix.
     pub b_num_non_zero: usize,
-    /// The number of non_zero entries in the C matrix.
+    /// The number of `non_zero` entries in the C matrix.
     pub c_num_non_zero: usize,
 
     /// The A constraint matrix. This is empty when

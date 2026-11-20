@@ -14,7 +14,14 @@ pub struct AnvilBuilder {
     log: bool,
 }
 
+impl Default for AnvilBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnvilBuilder {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             fork_url: None,
@@ -24,28 +31,35 @@ impl AnvilBuilder {
         }
     }
 
+    #[must_use]
     pub fn fork_url(mut self, url: impl Into<String>) -> Self {
         self.fork_url = Some(url.into());
         self
     }
 
+    #[must_use]
     pub fn fork_block(mut self, block: u64) -> Self {
         self.fork_block = Some(block);
         self
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn log(mut self) -> Self {
         self.log = true;
         self
     }
 
+    /// # Panics
+    ///
+    /// Panics if Anvil cannot be spawned.
     pub async fn spawn(self) -> Anvil {
         info!(
             "Spawning Anvil with fork_url={:?}, fork_block={:?}, port={}, log={}",

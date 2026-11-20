@@ -51,6 +51,7 @@ pub struct NoteEntry {
 }
 
 impl NoteEntry {
+    #[must_use]
     pub fn from_note(note: UtxoNote, poi_status: Option<PoiStatus>) -> Self {
         Self {
             asset: note.asset(),
@@ -116,6 +117,8 @@ pub enum RailgunError {
 }
 
 impl RailgunWallet {
+    // Preserve the existing builder-facing error signature.
+    #[allow(clippy::unnecessary_wraps)]
     pub(crate) fn new(
         chain: ChainConfig,
         utxo_indexer: UtxoIndexer,
@@ -134,16 +137,19 @@ impl RailgunWallet {
     }
 
     /// Chain configuration used by this wallet.
+    #[must_use]
     pub fn chain(&self) -> &ChainConfig {
         &self.chain
     }
 
     /// Last block the UTXO indexer has been synced to.
+    #[must_use]
     pub fn synced_block(&self) -> u64 {
         self.utxo_indexer.synced_block()
     }
 
     /// A coherent typed checkpoint that the caller may persist in any format.
+    #[must_use]
     pub fn state(&self) -> crate::RailgunCheckpoint {
         crate::RailgunCheckpoint {
             utxo: self.utxo_indexer.state(),
@@ -151,6 +157,7 @@ impl RailgunWallet {
     }
 
     /// Full state of a registered account: unspent, spent and sent notes.
+    #[must_use]
     pub fn account_state(&self, address: RailgunAddress) -> Option<IndexedAccountState> {
         self.utxo_indexer.account_state(address)
     }
@@ -158,6 +165,7 @@ impl RailgunWallet {
     /// Register a signer with the wallet. The wallet will index and track
     /// UTXOs for the associated address.
     #[expect(clippy::unused_async, reason = "Preserve the registration async API")]
+    #[allow(clippy::unused_async_trait_impl)]
     pub async fn register(&mut self, signer: Arc<dyn RailgunSigner>) -> Result<(), RailgunError> {
         self.utxo_indexer.register(signer)?;
         Ok(())
@@ -175,11 +183,13 @@ impl RailgunWallet {
     }
 
     /// Account history for extensions that recover proofs of past operations.
+    #[must_use]
     pub fn recovery_accounts(&self) -> Vec<crate::indexer::recovery::RecoveryAccount> {
         self.utxo_indexer.recovery_accounts()
     }
 
     /// Unspent notes across all registered accounts for extension builders.
+    #[must_use]
     pub fn all_unspent_notes(&self) -> Vec<UtxoNote> {
         self.utxo_indexer
             .registered()
@@ -189,6 +199,7 @@ impl RailgunWallet {
     }
 
     /// Prover used by this wallet.
+    #[must_use]
     pub fn prover(&self) -> &Groth16Prover {
         &self.prover
     }
@@ -198,6 +209,7 @@ impl RailgunWallet {
     /// This is the list [`Spend::try_new`] and the amount helpers read. [`Self::balance`]
     /// is the sum of these notes grouped by asset.
     #[allow(clippy::unused_async)]
+    #[allow(clippy::unused_async_trait_impl)]
     pub async fn unspent_notes(&mut self, address: RailgunAddress) -> Vec<AnnotatedNote> {
         let notes = self.utxo_indexer.unspent(address);
         notes
@@ -238,6 +250,7 @@ impl RailgunWallet {
     }
 
     /// Helper to create a shield builder.
+    #[must_use]
     pub fn shield(&self) -> ShieldBuilder {
         ShieldBuilder::new(self.chain.clone())
     }

@@ -1,12 +1,12 @@
 //! A state override under which Railgun's verifier accepts a dummy proof.
 //!
 //! Railgun only skips the SNARK check for `tx.origin == VERIFICATION_BYPASS`, and a bundler
-//! simulates from its own origin, so estimating a UserOperation's gas normally takes a real
+//! simulates from its own origin, so estimating a `UserOperation`'s gas normally takes a real
 //! proof, hence a spending signature. Instead, the estimate call can carry a state override
 //! that zeroes the G2 elements (`beta2`, `gamma2`, `delta2`) of the verifying keys in use. Every
 //! factor of the pairing check becomes `e(·, O) = 1`, so `verify` returns true for the dummy
-//! proof of [`kohaku_railgun::circuit::proof::Proof::dummy`] while running exactly the code and precompiles
-//! of a real verification: `alpha1` and `ic` are left in place (`verify` requires
+//! proof of [`kohaku_railgun::circuit::proof::Proof::dummy`] while running exactly the code and
+//! precompiles of a real verification: `alpha1` and `ic` are left in place (`verify` requires
 //! `alpha1.x != 0`), and the gas of the ec operations and of the pairing precompile does not
 //! depend on the values.
 //!
@@ -20,8 +20,8 @@ use alloy::{
 };
 
 /// Storage slot of `Verifier.verificationKeys` (`mapping(nullifiers => mapping(commitments =>
-/// VerifyingKey))`) in RailgunSmartWallet V2, whose layout is RailgunLogic's: Initializable,
-/// OwnableUpgradeable, Commitments, TokenBlocklist, then Verifier. Located on the Sepolia
+/// VerifyingKey))`) in `RailgunSmartWallet` V2, whose layout is `RailgunLogic`'s: Initializable,
+/// `OwnableUpgradeable`, Commitments, `TokenBlocklist`, then Verifier. Located on the Sepolia
 /// deployment by matching `alpha1.x` of the 1×2 key, and the same for every deployment of that
 /// bytecode. A new contract version may move it: the override then leaves the keys intact and
 /// the estimate fails on the proof, nothing is sent.
@@ -33,6 +33,7 @@ const G2_FIRST_OFFSET: u64 = 3;
 const G2_SLOTS: u64 = 12;
 
 /// Base slot of the verifying key for `nullifiers` × `commitments`.
+#[must_use]
 pub fn verifying_key_slot(nullifiers: usize, commitments: usize) -> U256 {
     let inner =
         keccak256((U256::from(nullifiers), U256::from(VERIFICATION_KEYS_SLOT)).abi_encode());
@@ -70,7 +71,7 @@ mod tests {
 
     use super::*;
 
-    /// `alpha1.x` of the 1×2 key sits at this base + 1 on Sepolia's RailgunSmartWallet
+    /// `alpha1.x` of the 1×2 key sits at this base + 1 on Sepolia's `RailgunSmartWallet`
     /// (`0xeCFC…3fea`), as read with `eth_getStorageAt` and compared with
     /// `getVerificationKey(1, 2)`.
     #[test]
@@ -117,8 +118,6 @@ mod fork_tests {
         rpc::types::TransactionRequest,
         sol_types::SolCall,
     };
-
-    use super::*;
     use kohaku_railgun::{
         abis::railgun::{
             BoundParams, CommitmentCiphertext, CommitmentPreimage, RailgunSmartWallet, Transaction,
@@ -127,6 +126,8 @@ mod fork_tests {
         chain_config::ChainConfig,
         circuit::proof::Proof,
     };
+
+    use super::*;
 
     #[tokio::test]
     async fn verifier_accepts_the_dummy_proof_only_under_the_override() {

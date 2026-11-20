@@ -78,9 +78,10 @@ impl UtxoIndexer {
     }
 
     /// Returns the latest synced block
+    #[must_use]
     pub fn synced_block(&self) -> u64 {
         let mut min_synced = self.synced_block;
-        for account in self.accounts.iter() {
+        for account in &self.accounts {
             min_synced = min_synced.min(account.synced_block());
         }
         min_synced
@@ -99,6 +100,7 @@ impl UtxoIndexer {
 
     /// Lists all registered accounts
     /// What the POI provider needs to rebuild proofs for past operations.
+    #[must_use]
     pub fn recovery_accounts(&self) -> Vec<crate::indexer::recovery::RecoveryAccount> {
         self.accounts
             .iter()
@@ -116,6 +118,7 @@ impl UtxoIndexer {
     }
 
     /// Full state (unspent, spent and sent notes) of a registered account.
+    #[must_use]
     pub fn account_state(
         &self,
         address: RailgunAddress,
@@ -123,17 +126,22 @@ impl UtxoIndexer {
         self.accounts
             .iter()
             .find(|a| a.address() == address)
-            .map(|a| a.state())
+            .map(super::indexed_account::IndexedAccount::state)
     }
 
+    #[must_use]
     pub fn registered(&self) -> Vec<RailgunAddress> {
-        self.accounts.iter().map(|a| a.address()).collect()
+        self.accounts
+            .iter()
+            .map(super::indexed_account::IndexedAccount::address)
+            .collect()
     }
 
     /// Lists all unspent notes for a given address. Returns an empty list if the address is not
     /// registered.
+    #[must_use]
     pub fn unspent(&self, address: RailgunAddress) -> Vec<UtxoNote> {
-        for account in self.accounts.iter() {
+        for account in &self.accounts {
             if account.address() == address {
                 return account.unspent();
             }
@@ -165,7 +173,7 @@ impl UtxoIndexer {
             if i % 20000 == 0 {
                 info!("Processing event {}/{}", i, events.len());
             }
-            candidate.handle_event(&event, &mut tree_leaves)?;
+            candidate.handle_event(event, &mut tree_leaves)?;
         }
 
         info!("Inserting leaves into UTXO trees");
@@ -187,7 +195,7 @@ impl UtxoIndexer {
 
         info!("Synced to block {}", to_block);
         candidate.synced_block = to_block;
-        for account in candidate.accounts.iter_mut() {
+        for account in &mut candidate.accounts {
             account.set_synced_block(to_block);
         }
 
@@ -225,8 +233,8 @@ impl UtxoIndexer {
             SyncEvent::Shield(shield, _) => self.handle_shield(shield, tree_leaves)?,
             SyncEvent::Transact(transact, _) => self.handle_transact(transact, tree_leaves)?,
             SyncEvent::Nullified(nullified, ts) => self.handle_nullified(nullified, *ts),
-            SyncEvent::Legacy(legacy, _) => self.handle_legacy(legacy, tree_leaves),
-        };
+            SyncEvent::Legacy(legacy, _) => Self::handle_legacy(legacy, tree_leaves),
+        }
 
         Ok(())
     }
@@ -241,7 +249,7 @@ impl UtxoIndexer {
             .or_default()
             .push((event.leaf_index, event.hash()));
 
-        for account in self.accounts.iter_mut() {
+        for account in &mut self.accounts {
             account.handle_shield_event(event)?;
         }
 
@@ -258,7 +266,7 @@ impl UtxoIndexer {
             .or_default()
             .push((event.leaf_index, event.hash.into()));
 
-        for account in self.accounts.iter_mut() {
+        for account in &mut self.accounts {
             account.handle_transact_event(event)?;
         }
 
@@ -266,20 +274,19 @@ impl UtxoIndexer {
     }
 
     fn handle_nullified(&mut self, event: &syncer::Nullified, timestamp: u64) {
-        for account in self.accounts.iter_mut() {
+        for account in &mut self.accounts {
             account.handle_nullified_event(event, timestamp);
         }
     }
 
     fn handle_legacy(
-        &mut self,
-        _event: &syncer::LegacyCommitment,
+        event: &syncer::LegacyCommitment,
         tree_leaves: &mut HashMap<u32, Vec<(u32, UtxoLeafHash)>>,
     ) {
         tree_leaves
-            .entry(_event.tree_number)
+            .entry(event.tree_number)
             .or_default()
-            .push((_event.leaf_index, _event.hash.into()));
+            .push((event.leaf_index, event.hash.into()));
 
         // TODO: Forward legacy to accounts
     }
@@ -294,7 +301,7 @@ impl UtxoIndexer {
                 .utxo_verifier
                 .verify_root(tree.number(), tree.leaves_len() as u32 - 1, tree.root()?)
                 .await
-                .map_err(|e| UtxoIndexerError::VerificationError(e))?;
+                .map_err(UtxoIndexerError::VerificationError)?;
             // A root the chain never had means the local tree is missing or has wrong leaves:
             // every proof built on it would revert ("Invalid Merkle Root"). Refuse to go on.
             if !known {
@@ -313,6 +320,7 @@ impl UtxoIndexer {
     }
 
     /// A coherent checkpoint of trees, account notes and cursors.
+    #[must_use]
     pub fn state(&self) -> UtxoIndexerState {
         let trees = self
             .utxo_trees

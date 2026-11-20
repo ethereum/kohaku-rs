@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-/// IndexerAccount represents a Railgun account being tracked by the indexer.
+/// `IndexerAccount` represents a Railgun account being tracked by the indexer.
 ///
 /// The indexer will use the contained signer to decrypt notes and track the
 /// account's balance and UTXOs.
@@ -43,34 +43,41 @@ impl IndexedAccount {
         }
     }
 
+    #[must_use]
     pub fn state(&self) -> IndexedAccountState {
         self.inner.clone()
     }
 
+    #[must_use]
     pub fn address(&self) -> RailgunAddress {
         self.signer.address()
     }
 
     /// Returns all unspent notes for this account.
+    #[must_use]
     pub fn unspent(&self) -> Vec<UtxoNote> {
         self.inner.notes.clone()
     }
 
     /// Notes spent by this account.
+    #[must_use]
     pub fn spent(&self) -> Vec<UtxoNote> {
         self.inner.spent.clone()
     }
 
     /// Outputs sent by this account to other addresses.
+    #[must_use]
     pub fn sent(&self) -> Vec<SentNote> {
         self.inner.sent.clone()
     }
 
+    #[must_use]
     pub fn signer(&self) -> Arc<dyn RailgunSigner> {
         self.signer.clone()
     }
 
     /// Returns the latest synced block for this account.
+    #[must_use]
     pub fn synced_block(&self) -> u64 {
         self.inner.synced_block
     }
@@ -94,6 +101,8 @@ impl IndexedAccount {
                 .any(|note| note.tree_number == tree_number && note.leaf_index == leaf_index)
     }
 
+    // Keep the Result contract shared by native and WASM indexer callers.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn handle_shield_event(&mut self, event: &syncer::Shield) -> Result<(), NoteError> {
         if self.knows_position(event.tree_number, event.leaf_index) {
             return Ok(());
@@ -119,11 +128,12 @@ impl IndexedAccount {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn handle_transact_event(&mut self, event: &syncer::Transact) -> Result<(), NoteError> {
         if self.knows_position(event.tree_number, event.leaf_index) {
             return Ok(());
         }
-        let note = UtxoNote::decrypt_transact(self.signer.clone(), &event);
+        let note = UtxoNote::decrypt_transact(self.signer.clone(), event);
 
         let note = match note {
             Err(NoteError::Aes(_)) => {
@@ -185,7 +195,7 @@ mod tests {
         let rng = &mut rand::rng();
         let mut account = IndexedAccount {
             signer: sender.clone(),
-            inner: Default::default(),
+            inner: IndexedAccountState::default(),
         };
 
         let outgoing = TransferNote::new(
@@ -287,7 +297,7 @@ mod tests {
         let rng = &mut rand::rng();
         let mut account = IndexedAccount {
             signer: recipient.clone(),
-            inner: Default::default(),
+            inner: IndexedAccountState::default(),
         };
 
         // Ingest a shield note
@@ -296,7 +306,7 @@ mod tests {
             tree_number: 1,
             leaf_index: 0,
             npk: shield.preimage.npk.into(),
-            token: shield.preimage.token.try_into().unwrap(),
+            token: shield.preimage.token.into(),
             value: U256::from(shield.preimage.value),
             ciphertext: shield.ciphertext.clone().into(),
             shield_key: *shield.ciphertext.shieldKey,
@@ -319,7 +329,7 @@ mod tests {
             tree_number: 1,
             leaf_index: 1,
             npk: other_shield.preimage.npk.into(),
-            token: other_shield.preimage.token.try_into().unwrap(),
+            token: other_shield.preimage.token.into(),
             value: U256::from(other_shield.preimage.value),
             ciphertext: other_shield.ciphertext.clone().into(),
             shield_key: *other_shield.ciphertext.shieldKey,
@@ -380,7 +390,7 @@ mod tests {
         // Ingest a nullifier for an unrelated note
         let unrelated_nullified_event = syncer::Nullified {
             tree_number: 1,
-            nullifier: U256::from(1234567890).into(),
+            nullifier: U256::from(1_234_567_890).into(),
         };
 
         account.handle_nullified_event(&unrelated_nullified_event, 0);

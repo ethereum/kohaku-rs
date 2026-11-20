@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 /// with subsquid's ground truth.
 #[tokio::test]
 #[serial_test::serial]
-#[ignore]
+#[ignore = "requires a Sepolia RPC endpoint"]
 async fn test_sync_txid() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())

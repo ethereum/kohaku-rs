@@ -84,6 +84,7 @@ impl PoiLists {
         })
     }
 
+    #[must_use]
     pub fn state(&self) -> PoiListsState {
         let mut state = self.inactive.clone();
         state.extend(
@@ -94,6 +95,7 @@ impl PoiLists {
         PoiListsState(state)
     }
 
+    #[must_use]
     pub fn contains(&self, list_key: &ListKey, commitment: BlindedCommitment) -> bool {
         self.lists
             .get(list_key)
@@ -113,14 +115,13 @@ impl PoiLists {
         }
     }
 
+    #[must_use]
     pub fn next_index(&self, list_key: &ListKey) -> u64 {
-        self.lists
-            .get(list_key)
-            .map(|list| list.next_index)
-            .unwrap_or(0)
+        self.lists.get(list_key).map_or(0, |list| list.next_index)
     }
 
     /// Whether the latest sync of this list reached its zero leaf.
+    #[must_use]
     pub fn caught_up(&self, list_key: &ListKey) -> bool {
         self.lists.get(list_key).is_some_and(|list| list.caught_up)
     }
@@ -134,6 +135,7 @@ impl PoiLists {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn sync_list(
         &mut self,
         client: &impl PoiNodeClient,
@@ -332,8 +334,8 @@ impl PoiList {
         let mut offset = 0usize;
         while offset < leaves.len() {
             let global = start + offset as u64;
-            let tree_number = (global / TOTAL_LEAVES as u64) as u32;
-            let leaf_index = (global % TOTAL_LEAVES as u64) as u32;
+            let tree_number = (global / u64::from(TOTAL_LEAVES)) as u32;
+            let leaf_index = (global % u64::from(TOTAL_LEAVES)) as u32;
             let room = (TOTAL_LEAVES - leaf_index) as usize;
             let count = (leaves.len() - offset).min(room);
             let chunk = &leaves[offset..offset + count];
@@ -359,8 +361,8 @@ fn touched_trees(start: u64, count: usize) -> Vec<u32> {
         return Vec::new();
     }
     let last = start + count as u64 - 1;
-    let first_tree = (start / TOTAL_LEAVES as u64) as u32;
-    let last_tree = (last / TOTAL_LEAVES as u64) as u32;
+    let first_tree = (start / u64::from(TOTAL_LEAVES)) as u32;
+    let last_tree = (last / u64::from(TOTAL_LEAVES)) as u32;
     (first_tree..=last_tree).collect()
 }
 

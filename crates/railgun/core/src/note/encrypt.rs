@@ -26,9 +26,13 @@ pub enum EncryptError {
     Key(#[from] KeyError),
 }
 
-/// Encrypts a note into a CommitmentCiphertext
+/// Encrypts a note into a `CommitmentCiphertext`
 ///
 /// TODO: Add details on blind
+///
+/// # Panics
+/// Panics only if the encrypted fixed-size fields have unexpected lengths.
+#[allow(clippy::too_many_arguments)]
 pub fn encrypt_note(
     receiver: &RailgunAddress,
     shared_random: &[u8; 16],
@@ -92,6 +96,8 @@ pub fn encrypt_note(
     })
 }
 
+/// # Panics
+/// Panics only if key derivation or fixed-width Poseidon hashing fails.
 pub fn encrypt_shield(
     recipient: RailgunAddress,
     asset: AssetId,

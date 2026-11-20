@@ -14,6 +14,7 @@ pub struct UtxoMerkleTree {
 pub struct UtxoLeafHash(U256);
 
 impl UtxoMerkleTree {
+    #[must_use]
     pub fn new(number: u32) -> Self {
         UtxoMerkleTree {
             inner: MerkleTree::new(number),
@@ -26,6 +27,7 @@ impl UtxoMerkleTree {
         })
     }
 
+    #[must_use]
     pub fn number(&self) -> u32 {
         self.inner.number()
     }
@@ -34,10 +36,12 @@ impl UtxoMerkleTree {
         self.inner.root()
     }
 
+    #[must_use]
     pub fn leaves_len(&self) -> usize {
         self.inner.leaves_len()
     }
 
+    #[must_use]
     pub fn state(&self) -> MerkleTreeState {
         self.inner.state()
     }

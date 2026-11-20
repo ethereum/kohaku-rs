@@ -1,11 +1,10 @@
 //! POI node wire types.
 
-use kohaku_railgun::{circuit::proof::Proof, crypto::railgun_txid::Txid, merkle_tree::MerkleRoot};
-use serde::{Deserialize, Serialize};
-
 pub use kohaku_railgun::poi::types::{
     BlindedCommitment, BlindedCommitmentType, ListKey, PoiStatus, TxidVersion,
 };
+use kohaku_railgun::{circuit::proof::Proof, crypto::railgun_txid::Txid, merkle_tree::MerkleRoot};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,10 +82,12 @@ pub struct TransactProofData {
 }
 
 impl ValidatedRailgunTxidStatus {
+    #[must_use]
     pub fn tree(&self) -> u32 {
-        (self.index >> 16) as u32
+        self.index >> 16
     }
 
+    #[must_use]
     pub fn leaf_index(&self) -> u32 {
         self.index & 0xFFFF
     }

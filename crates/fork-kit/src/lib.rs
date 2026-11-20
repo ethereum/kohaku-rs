@@ -16,17 +16,23 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 
+/// # Panics
+///
+/// Panics if Anvil rejects a balance update.
 pub async fn set_balances(provider: &impl Provider, addresses: &[Address], value: U256) {
     for addr in addresses {
         provider.anvil_set_balance(*addr, value).await.unwrap();
     }
 }
 
+/// # Panics
+///
+/// Panics if a private key is invalid or Anvil rejects a balance update.
 pub async fn set_pk_balances(provider: &impl Provider, private_keys: &[&str], value: U256) {
     let addresses: Vec<Address> = private_keys
         .iter()
         .map(|pk| pk.parse::<PrivateKeySigner>().map(|s| s.address()))
         .collect::<Result<_, _>>()
         .unwrap();
-    set_balances(provider, &addresses, value).await
+    set_balances(provider, &addresses, value).await;
 }

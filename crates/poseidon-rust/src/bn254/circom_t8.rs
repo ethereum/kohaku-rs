@@ -31,7 +31,7 @@ pub fn get_t8_params() -> Arc<PoseidonParams<Scalar>> {
                 .map(|c| Scalar::deserialize_compressed(c).unwrap())
                 .collect::<Vec<_>>()
                 .chunks(8)
-                .map(|c| c.to_vec())
+                .map(<[ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>]>::to_vec)
                 .collect();
 
             let rc = RC_BIN
@@ -39,7 +39,7 @@ pub fn get_t8_params() -> Arc<PoseidonParams<Scalar>> {
                 .map(|c| Scalar::deserialize_compressed(c).unwrap())
                 .collect::<Vec<_>>()
                 .chunks(8)
-                .map(|c| c.to_vec())
+                .map(<[ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>]>::to_vec)
                 .collect();
 
             Arc::new(PoseidonParams::new(8, 5, 8, 64, mds, rc).unwrap())

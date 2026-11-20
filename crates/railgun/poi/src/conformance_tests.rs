@@ -569,10 +569,11 @@ async fn lost_submit_response_is_not_followed_by_another_post() {
     assert!(matches!(result, Err(PoiClientError::Http(_))));
     // The node accepted the proof. The client does not retry the POST and does
     // not ask about this commitment; the local list copy is how that shows up.
-    let state = service.state.lock().unwrap();
-    assert!(state.accepted.contains(&output));
-    assert_eq!(*state.methods, vec!["ppoi_submit_transact_proof"]);
-    drop(state);
+    {
+        let state = service.state.lock().unwrap();
+        assert!(state.accepted.contains(&output));
+        assert_eq!(*state.methods, vec!["ppoi_submit_transact_proof"]);
+    }
     service.close().await;
 }
 

@@ -23,12 +23,12 @@ impl<F: PrimeField> Poseidon<F> {
         }
         let mut current_state = input;
         for r in 0..self.params.rounds_f_beginning {
-            self.add_rc(&mut current_state, &self.params.round_constants[r]);
+            Self::add_rc(&mut current_state, &self.params.round_constants[r]);
             self.sbox(&mut current_state);
             current_state = PoseidonParams::mat_vec_mul(&self.params.mds, &current_state);
         }
         let p_end = self.params.rounds_f_beginning + self.params.rounds_p;
-        self.add_rc(&mut current_state, &self.params.opt_round_constants[0]);
+        Self::add_rc(&mut current_state, &self.params.opt_round_constants[0]);
         current_state = PoseidonParams::mat_vec_mul(&self.params.m_i, &current_state);
         for r in self.params.rounds_f_beginning..p_end {
             current_state[0] = self.sbox_p(&current_state[0]);
@@ -40,7 +40,7 @@ impl<F: PrimeField> Poseidon<F> {
             current_state = self.cheap_matmul(&current_state, p_end - r - 1);
         }
         for r in p_end..self.params.rounds {
-            self.add_rc(&mut current_state, &self.params.round_constants[r]);
+            Self::add_rc(&mut current_state, &self.params.round_constants[r]);
             self.sbox(&mut current_state);
             current_state = PoseidonParams::mat_vec_mul(&self.params.mds, &current_state);
         }
@@ -48,7 +48,9 @@ impl<F: PrimeField> Poseidon<F> {
     }
 
     fn sbox(&self, input: &mut [F]) {
-        input.iter_mut().for_each(|el| *el = self.sbox_p(el));
+        for el in input.iter_mut() {
+            *el = self.sbox_p(el);
+        }
     }
 
     fn sbox_p(&self, input: &F) -> F {
@@ -96,7 +98,7 @@ impl<F: PrimeField> Poseidon<F> {
         new_state
     }
 
-    fn add_rc(&self, input: &mut [F], rc: &[F]) {
+    fn add_rc(input: &mut [F], rc: &[F]) {
         debug_assert_eq!(input.len(), rc.len());
         input.iter_mut().zip(rc.iter()).for_each(|(a, b)| {
             a.add_assign(b);
@@ -135,7 +137,7 @@ mod poseidon_bn254_tests {
                 }
             }
 
-            let perm1 = poseidon.permutation(input1.to_owned()).unwrap();
+            let perm1 = poseidon.permutation(input1.clone()).unwrap();
             let perm2 = poseidon.permutation(input1).unwrap();
             let perm3 = poseidon.permutation(input2).unwrap();
             assert_eq!(perm1, perm2);

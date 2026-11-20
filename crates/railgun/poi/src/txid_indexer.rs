@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
@@ -17,7 +20,7 @@ pub struct TxidIndexer {
     inner: TxidIndexerState,
     /// Nullifiers of the registered accounts. Operations spending one of them are
     /// kept in full in `inner.own_ops`, the others are reduced to a txid leaf as before.
-    watched: std::collections::HashSet<U256>,
+    watched: HashSet<U256>,
 
     txid_syncer: Arc<dyn TxidSyncer>,
 }
@@ -65,13 +68,13 @@ impl TxidIndexer {
         Ok(TxidIndexer {
             inner,
             trees: txid_trees,
-            watched: Default::default(),
+            watched: HashSet::default(),
             txid_syncer,
         })
     }
 
     /// Sets the nullifiers whose operations must be retained.
-    pub fn watch_nullifiers(&mut self, nullifiers: std::collections::HashSet<U256>) {
+    pub fn watch_nullifiers(&mut self, nullifiers: HashSet<U256>) {
         self.watched = nullifiers;
     }
 
@@ -87,16 +90,19 @@ impl TxidIndexer {
         }
     }
 
+    #[must_use]
     pub fn tree(&self, tree_number: u32) -> Option<&TxidMerkleTree> {
         self.trees.get(&tree_number)
     }
 
+    #[must_use]
     pub fn txid_position(&self, txid: &Txid) -> Option<(u32, u32)> {
-        self.inner.txid_to_txid_position.get(txid).cloned()
+        self.inner.txid_to_txid_position.get(txid).copied()
     }
 
+    #[must_use]
     pub fn utxo_position(&self, txid: &Txid) -> Option<(u32, u32)> {
-        self.inner.txid_to_utxo_position.get(txid).cloned()
+        self.inner.txid_to_utxo_position.get(txid).copied()
     }
 
     #[tracing::instrument(name = "txid_sync", skip_all)]
@@ -183,11 +189,11 @@ impl TxidIndexer {
             tree_leaves
                 .entry(tree_number)
                 .or_default()
-                .push((leaf_index as u32, leaf));
+                .push((leaf_index, leaf));
 
             self.inner
                 .txid_to_txid_position
-                .insert(txid, (tree_number, leaf_index as u32));
+                .insert(txid, (tree_number, leaf_index));
             self.inner
                 .txid_to_utxo_position
                 .insert(txid, (op.utxo_tree_out, op.utxo_out_start_index));
@@ -215,7 +221,7 @@ impl TxidIndexer {
         info!("Drained {} operations", drain_count);
 
         info!("Validating TXID trees");
-        for (tree_number, tree) in self.trees.iter() {
+        for (tree_number, tree) in &self.trees {
             let index = tree.leaves_len() as u32 - 1;
             let merkleroot = tree.root()?;
             let validated = poi_client
@@ -240,6 +246,7 @@ impl TxidIndexer {
     }
 
     /// Trees, mappings, pending operations and cursor form one checkpoint.
+    #[must_use]
     pub fn state(&self) -> TxidIndexerState {
         TxidIndexerState {
             synced_block: self.inner.synced_block,

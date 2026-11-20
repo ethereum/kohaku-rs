@@ -43,7 +43,7 @@ pub(super) fn encrypt_gcm(
 ) -> Result<Ciphertext, AesError> {
     //? Safe to unwrap as key length is fixed
     let cipher = Aes256GcmU16::new_from_slice(key).unwrap();
-    let nonce = Nonce::<U16>::from_slice(iv);
+    let nonce = Nonce::<U16>::from(*iv);
 
     let mut combined = Vec::new();
     let mut block_lengths = Vec::with_capacity(plaintext.len());
@@ -54,7 +54,7 @@ pub(super) fn encrypt_gcm(
 
     let mut encrypted_raw = cipher
         .encrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: &combined,
                 aad: &[],
@@ -85,7 +85,7 @@ pub(super) fn decrypt_gcm(
 ) -> Result<Vec<Vec<u8>>, AesError> {
     //? Safe to unwrap as key length is fixed
     let cipher = Aes256GcmU16::new_from_slice(key).unwrap();
-    let nonce = Nonce::<U16>::from_slice(&ciphertext.iv);
+    let nonce = Nonce::<U16>::from(ciphertext.iv);
 
     let mut combined = Vec::new();
     for block in &ciphertext.data {
@@ -95,7 +95,7 @@ pub(super) fn decrypt_gcm(
 
     let decrypted = cipher
         .decrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: &combined,
                 aad: &[],
@@ -135,7 +135,7 @@ fn decrypt_ctr(ciphertext: &CiphertextCtr, key: &[u8; 32]) -> Vec<Vec<u8>> {
     let mut data = Vec::with_capacity(ciphertext.data.len());
 
     for block in &ciphertext.data {
-        let mut buffer = block.to_vec();
+        let mut buffer = block.clone();
         cipher.apply_keystream(&mut buffer);
         data.push(buffer);
     }

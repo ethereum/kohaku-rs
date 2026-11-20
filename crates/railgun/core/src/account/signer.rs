@@ -5,12 +5,11 @@ use thiserror::Error;
 
 use crate::{
     account::{address::RailgunAddress, chain::ChainId},
+    common::MaybeSend,
     crypto::keys::{
         MasterPublicKey, SpendingKey, SpendingPublicKey, SpendingSignature, ViewingKey,
     },
 };
-
-use crate::common::MaybeSend;
 
 /// A railgun signer which can sign transactions and provide the associated 0xzk address.
 ///
@@ -46,7 +45,7 @@ pub trait RailgunSigner: MaybeSend {
     }
 }
 
-/// An implementation of RailgunSigner that holds the spending and viewing private keys in memory.
+/// An implementation of `RailgunSigner` that holds the spending and viewing private keys in memory.
 pub struct PrivateKeySigner {
     spending_key: SpendingKey,
     viewing_key: ViewingKey,
@@ -64,6 +63,7 @@ impl RailgunSignerError {
 }
 
 impl PrivateKeySigner {
+    #[must_use]
     pub fn new(spending_key: SpendingKey, viewing_key: ViewingKey, chain_id: ChainId) -> Arc<Self> {
         Arc::new(Self {
             spending_key,
@@ -73,6 +73,7 @@ impl PrivateKeySigner {
     }
 
     /// Helper for creating an EVM signer with a simple u64 chain ID.
+    #[must_use]
     pub fn new_evm(spending_key: SpendingKey, viewing_key: ViewingKey, chain_id: u64) -> Arc<Self> {
         Self::new(spending_key, viewing_key, ChainId::evm(chain_id))
     }
@@ -107,15 +108,17 @@ impl Debug for dyn RailgunSigner {
 /// BIP-32 derivation paths for railgun spending keys.
 ///
 /// <https://github.com/Railgun-Community/engine/blob/e2913b39e13f82f43556d23705fa20d2ece2e8ab/src/key-derivation/wallet-node.ts#L17>
+#[must_use]
 pub fn spending_key_path(index: u32) -> String {
-    format!("m/44'/1984'/0'/0'/{}'", index)
+    format!("m/44'/1984'/0'/0'/{index}'")
 }
 
 /// BIP-32 derivation paths for railgun viewing keys.
 ///
 ///  <https://github.com/Railgun-Community/engine/blob/e2913b39e13f82f43556d23705fa20d2ece2e8ab/src/key-derivation/wallet-node.ts#L17>
+#[must_use]
 pub fn viewing_key_path(index: u32) -> String {
-    format!("m/420'/1984'/0'/0'/{}'", index)
+    format!("m/420'/1984'/0'/0'/{index}'")
 }
 
 #[cfg(test)]

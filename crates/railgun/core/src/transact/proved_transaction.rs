@@ -27,6 +27,7 @@ pub struct ProvedOperation {
 }
 
 impl ProvedTx {
+    #[must_use]
     pub fn new(railgun_smart_wallet: Address, operations: Vec<ProvedOperation>) -> Self {
         let transactions = operations.iter().map(|op| op.transaction.clone()).collect();
         let calldata = RailgunSmartWallet::transactCall {
@@ -45,6 +46,7 @@ impl ProvedTx {
 }
 
 impl ProvedOperation {
+    #[must_use]
     pub fn new(
         operation: Operation,
         circuit_inputs: TransactCircuitInputs,

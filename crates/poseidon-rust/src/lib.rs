@@ -11,11 +11,11 @@ use poseidon::Poseidon;
 
 use crate::{
     bn254::{
-        circom_t10::get_t10_params, circom_t11::get_t11_params, circom_t12::get_t12_params,
-        circom_t13::get_t13_params, circom_t14::get_t14_params, circom_t2::get_t2_params,
-        circom_t3::get_t3_params, circom_t4::get_t4_params, circom_t5::get_t5_params,
-        circom_t6::get_t6_params, circom_t7::get_t7_params, circom_t8::get_t8_params,
-        circom_t9::get_t9_params,
+        circom_t2::get_t2_params, circom_t3::get_t3_params, circom_t4::get_t4_params,
+        circom_t5::get_t5_params, circom_t6::get_t6_params, circom_t7::get_t7_params,
+        circom_t8::get_t8_params, circom_t9::get_t9_params, circom_t10::get_t10_params,
+        circom_t11::get_t11_params, circom_t12::get_t12_params, circom_t13::get_t13_params,
+        circom_t14::get_t14_params,
     },
     error::Error,
 };
@@ -79,9 +79,9 @@ mod tests {
 
         for (i, expected) in expected.iter().enumerate() {
             let inputs: Vec<Fr> = (0..=i).map(|j| Fr::from(j as u128)).collect();
-            println!("Testing with {:?}", inputs);
+            println!("Testing with {inputs:?}");
             let hash = poseidon_hash(&inputs).unwrap();
-            assert_eq!(expected.to_string(), hash.to_string());
+            assert_eq!((*expected).to_string(), hash.to_string());
         }
     }
 }

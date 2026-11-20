@@ -100,7 +100,7 @@ impl Display for PoiStatus {
             PoiStatus::Missing => "Missing",
             PoiStatus::Unavailable => "Unavailable",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

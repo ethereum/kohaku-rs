@@ -171,6 +171,7 @@ impl TransactCircuitInputs {
         })
     }
 
+    #[must_use]
     pub fn to_circuit_signals(&self) -> HashMap<String, Vec<U256>> {
         let mut m = HashMap::with_capacity(14);
         m.insert("merkleRoot".into(), vec![self.merkleroot.into()]);

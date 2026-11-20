@@ -16,7 +16,7 @@ pub struct ChainConfig {
     pub railgun_smart_wallet: Address,
     /// Unshield fee in basis points (bps).
     pub unshield_fee_bps: u16,
-    /// RelayAdapt contract for native base-token shielding (wrap + shield via `multicall`)
+    /// `RelayAdapt` contract for native base-token shielding (wrap + shield via `multicall`)
     ///
     /// Sourced from
     /// <https://github.com/Railgun-Community/shared-models/blob/main/src/models/network-config.ts>
@@ -47,7 +47,7 @@ pub struct ChainConfig {
     pub list_keys: Vec<ListKey>,
 
     /// Privacy Paymaster address for this chain. This is used as the paymaster for all
-    /// UserOperations.
+    /// `UserOperations`.
     pub privacy_paymaster: Option<Address>,
 
     /// Railgun Fee Adapter address for this chain.
@@ -55,6 +55,8 @@ pub struct ChainConfig {
 }
 
 impl ChainConfig {
+    // Preserve the existing positional constructor API.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: ChainId,
         railgun_smart_wallet: Address,
@@ -85,6 +87,7 @@ impl ChainConfig {
         }
     }
 
+    #[must_use]
     pub fn from_chain_id(chain_id: ChainId) -> Option<Self> {
         match chain_id {
             c if c == Self::mainnet().id => Some(Self::mainnet()),
@@ -93,6 +96,7 @@ impl ChainConfig {
         }
     }
 
+    #[must_use]
     pub fn mainnet() -> Self {
         Self::new(
             1,
@@ -100,8 +104,8 @@ impl ChainConfig {
             25,
             address!("0xAc9f360Ae85469B27aEDdEaFC579Ef2d052aD405"),
             address!("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
-            14693013,
-            18514200,
+            14_693_013,
+            18_514_200,
             "https://rail-squid.squids.live/squid-railgun-ethereum-v2/v/v1/graphql",
             "https://ppoi.fdi.network/",
             &["efc6ddb59c098a13fb2b618fdae94c1c3a807abc8fb1837c93620c9143ee9e88"],
@@ -110,15 +114,16 @@ impl ChainConfig {
         )
     }
 
+    #[must_use]
     pub fn sepolia() -> Self {
         Self::new(
-            11155111,
+            11_155_111,
             address!("0xeCFCf3b4eC647c4Ca6D49108b311b7a7C9543fea"),
             25,
             address!("0x7e3d929EbD5bDC84d02Bd3205c777578f33A214D"),
             address!("0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"),
-            5784774,
-            5944700,
+            5_784_774,
+            5_944_700,
             "https://rail-squid.squids.live/squid-railgun-eth-sepolia-v2/v/v1/graphql",
             "https://ppoi.fdi.network/",
             &["efc6ddb59c098a13fb2b618fdae94c1c3a807abc8fb1837c93620c9143ee9e88"],

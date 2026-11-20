@@ -51,6 +51,7 @@ const ADDRESS_VERSION: u8 = 1;
 const PAYLOAD_LENGTH: usize = 73;
 
 impl RailgunAddress {
+    #[must_use]
     pub fn from_public_keys(
         master_key: MasterPublicKey,
         viewing_pubkey: ViewingPublicKey,
@@ -63,6 +64,7 @@ impl RailgunAddress {
         }
     }
 
+    #[must_use]
     pub fn from_private_keys(
         spending_key: SpendingKey,
         viewing_key: ViewingKey,
@@ -74,19 +76,23 @@ impl RailgunAddress {
         RailgunAddress::from_public_keys(master_key, viewing_key.public_key(), chain_id)
     }
 
+    #[must_use]
     pub fn master_key(&self) -> MasterPublicKey {
         self.master_key
     }
 
+    #[must_use]
     pub fn viewing_pubkey(&self) -> ViewingPublicKey {
         self.viewing_pubkey
     }
 
+    #[must_use]
     pub fn chain(&self) -> ChainId {
         self.chain_id
     }
 
     /// The same keys under another advisory chain ID, e.g. the chain-agnostic form.
+    #[must_use]
     pub fn with_chain(mut self, chain_id: ChainId) -> Self {
         self.chain_id = chain_id;
         self
@@ -105,7 +111,7 @@ impl Display for RailgunAddress {
         payload.extend_from_slice(self.viewing_pubkey.as_bytes());
 
         let encoded = bech32::encode::<bech32::Bech32m>(PREFIX, &payload).unwrap();
-        write!(f, "{}", encoded)
+        write!(f, "{encoded}")
     }
 }
 

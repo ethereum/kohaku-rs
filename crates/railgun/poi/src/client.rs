@@ -204,8 +204,7 @@ impl PoiNodeClient for PoiClient {
                 .await;
 
             match resp {
-                Ok(_) => {}
-                Err(PoiClientError::NullResult) => {}
+                Ok(()) | Err(PoiClientError::NullResult) => {}
                 Err(e) => {
                     return Err(e);
                 }
@@ -318,12 +317,13 @@ impl std::error::Error for JsonRpcError {}
 
 #[cfg(all(test, native))]
 mod response_tests {
-    use super::*;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
         time::{Duration, timeout},
     };
+
+    use super::*;
 
     /// One bounded loopback exchange. No live service, profile or owned data.
     async fn exchange<R: DeserializeOwned>(

@@ -3,6 +3,8 @@
 mod adapter_data;
 pub mod verifier_override;
 
+use std::sync::Arc;
+
 use alloy::{
     primitives::{Address, B256, Bytes, U256},
     providers::{DynProvider, Provider},
@@ -13,8 +15,7 @@ use alloy::{
 use kohaku_railgun::{
     account::{chain::ChainId, signer::RailgunSigner},
     caip::AssetId,
-    note::Note,
-    note::utxo::UtxoNote,
+    note::{Note, utxo::UtxoNote},
     poi::types::PoiStatus,
     transact::{AmountError, Spend, SpendError, attach_fee, proved_transaction::ProvedOperation},
     wallet::{RailgunTransactor, RailgunWallet},
@@ -28,7 +29,6 @@ use kohaku_userop_kit::{
 };
 use rand::CryptoRng;
 use serde::Serialize;
-use std::sync::Arc;
 use thiserror::Error;
 use tracing::info;
 
@@ -40,7 +40,7 @@ use crate::{
 /// Fee used to select notes before the bundler has estimated gas.
 const SEED_FEE: u128 = 100_000_000;
 
-/// Result of a single-proof UserOperation build, for logs and UIs.
+/// Result of a single-proof `UserOperation` build, for logs and UIs.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleProofReport {
@@ -81,14 +81,14 @@ pub enum UserOpError {
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-/// Prepares paymaster-backed UserOperations using a caller-supplied chain provider.
+/// Prepares paymaster-backed `UserOperations` using a caller-supplied chain provider.
 pub struct RailgunUserOps<'a> {
     wallet: &'a mut RailgunWallet,
     provider: DynProvider,
     policy: Option<&'a mut dyn UserOpPoiPolicy>,
 }
 
-/// Optional local note policy for POI-aware UserOperation building.
+/// Optional local note policy for POI-aware `UserOperation` building.
 /// Implementations must derive status from a validated local list copy.
 pub trait UserOpPoiPolicy {
     fn status(&self, note: &UtxoNote) -> PoiStatus;
@@ -123,6 +123,11 @@ impl<'a> RailgunUserOps<'a> {
         self.wallet.transactions()
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::unused_async,
+        clippy::unused_async_trait_impl
+    )]
     async fn spends_with_fee(
         &mut self,
         spends: &[Spend],
@@ -207,12 +212,13 @@ impl<'a> RailgunUserOps<'a> {
         Ok(())
     }
 
-    /// The UserOperation [`Self::prepare_userop`] would build, with a dummy proof: same
+    /// The `UserOperation` [`Self::prepare_userop`] would build, with a dummy proof: same
     /// calldata, same paymaster data, nothing proved and the spending signer never asked.
     ///
     /// It cannot be sent. It exists to be simulated, with the verifier told to accept the dummy
     /// proof ([`crate::transact::verifier_override`]), so that the gas limits, hence the fee,
     /// are known before the one real proof.
+    #[allow(clippy::too_many_arguments)]
     pub async fn dummy_userop<S: SmartAccount>(
         &mut self,
         spends: &[Spend],
@@ -281,7 +287,7 @@ impl<'a> RailgunUserOps<'a> {
     /// signature per operation, instead of one per round of the fee convergence loop.
     ///
     /// The loop exists because the fee depends on the gas, which the bundler only estimates by
-    /// simulating a UserOperation carrying a valid proof, itself bound to the fee. Here the
+    /// simulating a `UserOperation` carrying a valid proof, itself bound to the fee. Here the
     /// caller fixes `gas` beforehand, typically from a simulation of [`Self::dummy_userop`].
     /// The fee is `total gas limit x maxFeePerGas`, as the privacy paymaster computes it, so
     /// its check passes by construction.
@@ -289,6 +295,7 @@ impl<'a> RailgunUserOps<'a> {
     /// After proving, the paymaster verification gas is measured on the real proof and the
     /// bundler is asked for its own estimate. If either exceeds a limit the call fails before
     /// anything is sent: that costs a second signature, never funds.
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_userop_single_proof<S: SmartAccount>(
         &mut self,
         spends: &[Spend],
@@ -391,12 +398,17 @@ impl<'a> RailgunUserOps<'a> {
     /// (hence one spending signature) via [`Self::prepare_userop_single_proof`], instead of
     /// the iterative re-proving [`Self::prepare_userop`] does.
     ///
-    /// The bundler estimates a dummy-proof UserOperation ([`Self::dummy_userop`]) with a state
+    /// The bundler estimates a dummy-proof `UserOperation` ([`Self::dummy_userop`]) with a state
     /// override under which the Railgun verifier accepts the dummy proof
     /// ([`crate::transact::verifier_override`]), at the gas cost of a real one. Two rounds,
     /// because the fee is an output note whose value can change which notes are spent: the
     /// second uses the fee the first round's estimate implies. The bundler must support state
     /// overrides on `eth_estimateUserOperationGas`.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the fixed two-round estimation loop does not run.
+    #[allow(clippy::too_many_arguments)]
     pub async fn simulate_gas_limits<S: SmartAccount>(
         &mut self,
         spends: &[Spend],
@@ -449,6 +461,7 @@ impl<'a> RailgunUserOps<'a> {
     /// Fixes the fee by estimation ([`Self::simulate_gas_limits`]) then proves exactly once
     /// ([`Self::prepare_userop_single_proof`]): one spending signature, no iterative re-proving.
     /// Falls back to nothing: if the estimate fails, the error is returned and nothing is signed.
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_userop_single<S: SmartAccount>(
         &mut self,
         spends: &[Spend],
@@ -504,7 +517,7 @@ impl<'a> RailgunUserOps<'a> {
         Ok((privacy_paymaster, railgun_fee_adapter))
     }
 
-    /// UserOperation around already built operations, with the given gas figures.
+    /// `UserOperation` around already built operations, with the given gas figures.
     #[allow(clippy::too_many_arguments, clippy::ptr_arg)]
     async fn userop_from<S: SmartAccount>(
         &self,
@@ -535,12 +548,13 @@ impl<'a> RailgunUserOps<'a> {
             .build())
     }
 
-    /// Build spends into a UserOperation for a compatible delegated or deployed account.
+    /// Build spends into a `UserOperation` for a compatible delegated or deployed account.
     ///
-    /// Constructs a UserOperation sent from the `delegator_address` that executes the provided
+    /// Constructs a `UserOperation` sent from the `delegator_address` that executes the provided
     /// transaction, with an additional fee note transfer to cover the bundler fees. The
     /// `fee_payer` is the signer that will authorize the fee note transfer to the bundler's
     /// address for the estimated fee amount in `fee_token`.
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_userop<S: SmartAccount>(
         &mut self,
         spends: &[Spend],
@@ -635,10 +649,9 @@ impl<'a> RailgunUserOps<'a> {
             info!("Fee updated to {}", new_fee);
         }
 
-        return Err(UserOpError::Other(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(UserOpError::Other(Box::new(std::io::Error::other(
             "Failed to converge on fee estimate",
-        ))));
+        ))))
     }
 }
 
@@ -652,16 +665,16 @@ fn total_gas_limit(gas: &UserOperationGasEstimate) -> u128 {
 }
 
 /// Gets the operation containing the fee note
-fn get_fee_operation<'a>(
-    operations: &'a Vec<ProvedOperation>,
+fn get_fee_operation(
+    operations: &[ProvedOperation],
     fee_asset: AssetId,
     fee_value: u128,
-) -> Result<&'a ProvedOperation, UserOpError> {
+) -> Result<&ProvedOperation, UserOpError> {
     let Some(fee_note_pos) = operations.iter().position(|o| {
         o.inner
             .out_notes()
             .iter()
-            .any(|n| is_fee_note(n, fee_asset, fee_value))
+            .any(|n| is_fee_note(n.as_ref(), fee_asset, fee_value))
     }) else {
         return Err(UserOpError::FeeNoteNotFound);
     };
@@ -678,11 +691,11 @@ fn get_fee_note(
         .inner
         .out_notes()
         .into_iter()
-        .find(|n| is_fee_note(n, fee_asset, fee_value))
+        .find(|n| is_fee_note(n.as_ref(), fee_asset, fee_value))
         .ok_or(UserOpError::FeeNoteNotFound)
 }
 
-fn is_fee_note(note: &Box<dyn Note>, fee_asset: AssetId, fee_value: u128) -> bool {
+fn is_fee_note(note: &dyn Note, fee_asset: AssetId, fee_value: u128) -> bool {
     note.asset() == fee_asset && note.value() == fee_value && note.memo() == "fee"
 }
 
@@ -717,7 +730,7 @@ async fn estimate_paymaster_verification_gas_limit(
         .from(entry_point)
         .to(paymaster)
         .input(data.into());
-    Ok(provider.estimate_gas(request).await? as u128)
+    Ok(u128::from(provider.estimate_gas(request).await?))
 }
 
 mod abi {

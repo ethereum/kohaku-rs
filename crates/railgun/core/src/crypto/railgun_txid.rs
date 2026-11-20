@@ -4,12 +4,15 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::{merkle_tree::MerkleTree, transact::proved_transaction::ProvedOperation};
 
-/// TxID uniquely identifies a Railgun Operation (`RailgunSmartWallet::Transaction`).
-/// Each TxID corresponds to a set of UTXO notes from a single Operation.
+/// `TxID` uniquely identifies a Railgun Operation (`RailgunSmartWallet::Transaction`).
+/// Each `TxID` corresponds to a set of UTXO notes from a single Operation.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Txid(U256);
 
 impl Txid {
+    /// # Panics
+    /// Panics only if the fixed-width Poseidon inputs are rejected.
+    #[must_use]
     pub fn new(nullifiers: &[U256], commitments: &[U256], bound_params_hash: U256) -> Self {
         let max_nullifiers = 13; // Max circuit inputs
         let max_commitments = 13; // Max circuit outputs
@@ -33,13 +36,9 @@ impl Txid {
             .into()
     }
 
+    #[must_use]
     pub fn from_operation(op: &ProvedOperation) -> Self {
-        let nullifiers: Vec<_> = op
-            .inner
-            .in_notes()
-            .iter()
-            .map(|n| n.nullifier.into())
-            .collect();
+        let nullifiers: Vec<_> = op.inner.in_notes().iter().map(|n| n.nullifier).collect();
 
         let commitments: Vec<_> = op
             .inner
@@ -62,9 +61,9 @@ impl From<U256> for Txid {
     }
 }
 
-impl Into<U256> for Txid {
-    fn into(self) -> U256 {
-        self.0
+impl From<Txid> for U256 {
+    fn from(val: Txid) -> Self {
+        val.0
     }
 }
 

@@ -3,18 +3,18 @@ use alloy::{
     rpc::types::Filter,
     transports::{RpcError, TransportErrorKind},
 };
-use tracing::{info, warn};
-
-use crate::log_to_sync_events;
 use kohaku_railgun::{
     chain_config::ChainConfig,
     indexer::syncer::{SyncEvent, SyncerError, UtxoSyncer},
 };
+use tracing::{info, warn};
+
+use crate::log_to_sync_events;
 
 /// JSON-RPC UTXO syncer.
 ///
-/// Queries an Ethereum node for events emitted by the RailgunSmartWallet and parses them into
-/// SyncEvents.
+/// Queries an Ethereum node for events emitted by the `RailgunSmartWallet` and parses them into
+/// `SyncEvents`.
 pub struct RpcSyncer {
     chain: ChainConfig,
     provider: DynProvider,
@@ -34,17 +34,19 @@ impl RpcSyncer {
             chain,
             provider: provider.erased(),
             batch_size: 10,
-            batch_delay: web_time::Duration::from_millis(1000),
+            batch_delay: web_time::Duration::from_secs(1),
         }
     }
 
     /// Sets the batch size for `eth_getLogs` calls.
+    #[must_use]
     pub fn with_batch_size(mut self, batch_size: u64) -> Self {
         self.batch_size = batch_size;
         self
     }
 
     /// Sets the delay between `eth_getLogs` calls.
+    #[must_use]
     pub fn with_batch_delay(mut self, batch_delay: web_time::Duration) -> Self {
         self.batch_delay = batch_delay;
         self

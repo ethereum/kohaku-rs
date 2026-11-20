@@ -42,6 +42,7 @@ pub struct PointProjective {
 }
 
 impl PrivateKey {
+    #[must_use]
     pub fn new(key: [u8; 32]) -> Self {
         Self { key }
     }
@@ -56,6 +57,7 @@ impl PrivateKey {
         Ok(Self { key })
     }
 
+    #[must_use]
     pub fn scalar_key(&self) -> NumBigInt {
         // compatible with circomlib blake512
         let hash = blake_hash::Blake512::digest(&self.key);
@@ -72,10 +74,13 @@ impl PrivateKey {
         sk >> 3
     }
 
+    #[must_use]
     pub fn public(&self) -> Point {
         b8().mul_scalar(&self.scalar_key())
     }
 
+    // Keep the public value-taking API used by downstream callers.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn sign(&self, msg: NumBigInt) -> Result<Signature, Box<dyn std::error::Error>> {
         let q_big = u256_to_num_bigint(Q);
         if msg >= q_big {
@@ -110,7 +115,7 @@ impl PrivateKey {
 
         // hm = Poseidon(R.x, R.y, A.x, A.y, msg_fr)
         let msg_fr = Fr::from_str(&msg.to_string())
-            .map_err(|_| "msg cannot be converted to field element")?;
+            .map_err(|()| "msg cannot be converted to field element")?;
         let hm = poseidon_hash(&[r_b8.x, r_b8.y, pk.x, pk.y, msg_fr])?;
 
         // hm_big = bigint(hm)
@@ -127,6 +132,7 @@ impl PrivateKey {
 }
 
 impl Point {
+    #[must_use]
     pub fn projective(&self) -> PointProjective {
         PointProjective {
             x: self.x,
@@ -135,6 +141,7 @@ impl Point {
         }
     }
 
+    #[must_use]
     pub fn mul_scalar(&self, n: &NumBigInt) -> Point {
         // double-and-add (same as reference)
 
@@ -161,6 +168,11 @@ impl Point {
 }
 
 impl PointProjective {
+    /// Converts a projective point to affine coordinates.
+    ///
+    /// # Panics
+    /// Panics if a nonzero field element unexpectedly has no inverse.
+    #[must_use]
     pub fn affine(&self) -> Point {
         if self.z == Fr::ZERO {
             return Point {
@@ -176,6 +188,9 @@ impl PointProjective {
         }
     }
 
+    // Single-letter names follow the published addition formula.
+    #[allow(clippy::many_single_char_names)]
+    #[must_use]
     pub fn add(&self, q: &PointProjective) -> PointProjective {
         // add-2008-bbjlp
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-add-2008-bbjlp
@@ -210,6 +225,7 @@ impl PointProjective {
     }
 }
 
+#[must_use]
 pub fn b8() -> Point {
     Point {
         x: fr_from_u256(B8_X),

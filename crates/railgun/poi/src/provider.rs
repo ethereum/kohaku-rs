@@ -122,8 +122,7 @@ const UNMINED_GRACE_SECS: u64 = 15 * 60;
 fn now_secs() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Non-sensitive view of a [`PendingPoiEntry`] for UIs.
@@ -197,6 +196,7 @@ impl PoiProvider {
         })
     }
 
+    #[must_use]
     pub fn state(&self) -> PoiCheckpoint {
         PoiCheckpoint {
             provider: self.inner.clone(),
@@ -285,6 +285,7 @@ impl PoiProvider {
         Ok(removed)
     }
 
+    #[must_use]
     pub fn list_keys(&self) -> Vec<ListKey> {
         self.poi_client.list_keys()
     }
@@ -311,6 +312,7 @@ impl PoiProvider {
     /// its zero leaf. Until then it is `Unavailable`: the list was not observed,
     /// and asking the node about this commitment would name it. A blocked shield
     /// is not queried separately, so once the list is caught up it is `Missing`.
+    #[must_use]
     pub fn status_per_list(
         &self,
         blinded_commitment: BlindedCommitment,
@@ -339,6 +341,7 @@ impl PoiProvider {
     }
 
     /// Summaries of the POI proofs still waiting to be generated and submitted.
+    #[must_use]
     pub fn pending_summaries(&self) -> Vec<PendingPoiSummary> {
         self.inner
             .pending
@@ -355,11 +358,13 @@ impl PoiProvider {
     }
 
     /// Past operations whose POI the recovery pass found `Valid`.
+    #[must_use]
     pub fn recovered_valid(&self) -> Vec<Txid> {
         self.inner.recovered_valid.iter().copied().collect()
     }
 
     /// Operations of the registered accounts that the txid indexer keeps in full.
+    #[must_use]
     pub fn own_operations(&self) -> Vec<(Txid, Operation)> {
         self.txid_indexer
             .own_ops()
@@ -486,7 +491,7 @@ impl PoiProvider {
 
         // `submit_pending` walks the list backwards: newest first here means oldest submitted
         // first, which matters when an operation spends the change of a previous one.
-        queued.sort_by(|a, b| b.0.cmp(&a.0));
+        queued.sort_by_key(|entry| std::cmp::Reverse(entry.0));
         let count = queued.len();
         self.inner
             .pending
@@ -511,7 +516,7 @@ impl PoiProvider {
             let entry = self.inner.pending[i].clone();
             let txid = format!("{:?}", entry.txid);
             match self.submit_poi(prover, &entry).await {
-                Ok(_) => {
+                Ok(()) => {
                     info!("Submitted POI for {:?}", entry.txid);
                     report.submitted.push(txid);
                     self.inner.pending.remove(i);
@@ -542,20 +547,18 @@ impl PoiProvider {
         prover: &Groth16Prover,
         entry: &PendingPoiEntry,
     ) -> Result<(), PendingPoiError> {
-        let txid_tree_number = match self.txid_indexer.txid_position(&entry.txid) {
-            Some((tree_number, _)) => tree_number,
-            None => return Err(PendingPoiError::MissingTxid(entry.txid)),
+        let Some((txid_tree_number, _)) = self.txid_indexer.txid_position(&entry.txid) else {
+            return Err(PendingPoiError::MissingTxid(entry.txid));
         };
 
-        let (utxo_tree_number, utxo_leaf_index) = match self.txid_indexer.utxo_position(&entry.txid)
-        {
-            Some((tree_number, leaf_index)) => (tree_number, leaf_index),
-            None => return Err(PendingPoiError::MissingUtxoTree(entry.utxo_tree_in)),
+        let Some((utxo_tree_number, utxo_leaf_index)) =
+            self.txid_indexer.utxo_position(&entry.txid)
+        else {
+            return Err(PendingPoiError::MissingUtxoTree(entry.utxo_tree_in));
         };
 
-        let txid_tree = match self.txid_indexer.tree(txid_tree_number) {
-            Some(tree) => tree,
-            None => return Err(PendingPoiError::MissingTxidTree(txid_tree_number)),
+        let Some(txid_tree) = self.txid_indexer.tree(txid_tree_number) else {
+            return Err(PendingPoiError::MissingTxidTree(txid_tree_number));
         };
 
         let utxo_tree_out = UtxoTreeIndex::included(utxo_tree_number, utxo_leaf_index);
@@ -578,6 +581,7 @@ impl PoiProvider {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_proof(
         &self,
         prover: &Groth16Prover,
@@ -632,8 +636,8 @@ impl PoiProvider {
             let blinded_commitments_out =
                 blinded_commitments(entry, utxo_tree_number, utxo_leaf_index);
 
-            let txid_merkleroot_index =
-                txid_tree_number as u64 * TOTAL_LEAVES as u64 + (txid_tree.leaves_len() as u64 - 1);
+            let txid_merkleroot_index = u64::from(txid_tree_number) * u64::from(TOTAL_LEAVES)
+                + (txid_tree.leaves_len() as u64 - 1);
 
             proof_data.insert(
                 list_key.clone(),
@@ -808,8 +812,8 @@ fn blinded_commitments(
         .enumerate()
     {
         let blinded_commitment = utxo::blinded_commitment(
-            commitment.clone(),
-            npk.clone(),
+            *commitment,
+            *npk,
             utxo_tree_number,
             utxo_leaf_index + i as u32,
         )
@@ -1021,11 +1025,12 @@ mod submission_control_tests {
                             "0x0488f89b25bc7011eaf6a5edce71aeafb9fe706faa3c0a5cd9cbe868ae3b9ffc"
                         ]);
                     }
-                    "ppoi_validate_poi_merkleroots" => body["result"] = serde_json::json!(true),
+                    "ppoi_validate_poi_merkleroots" | "ppoi_validate_txid_merkleroot" => {
+                        body["result"] = serde_json::json!(true);
+                    }
                     "ppoi_validated_txid" => {
                         body["result"] = serde_json::json!({"validatedTxidIndex": 0});
                     }
-                    "ppoi_validate_txid_merkleroot" => body["result"] = serde_json::json!(true),
                     _ => {
                         body["error"] = serde_json::json!({"code": -32602, "message": "Fixture refuses submission"});
                     }

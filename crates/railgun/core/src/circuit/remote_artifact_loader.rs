@@ -56,6 +56,7 @@ impl Cache {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum RemoteArtifactLoaderError {
     #[error("HTTP error: {0}")]
     HttpError(#[from] reqwest::Error),

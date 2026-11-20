@@ -160,6 +160,7 @@ impl Spend {
     }
 
     /// Send the remainder to `to` instead of back to the signer. Call before [`Self::with_change`].
+    #[must_use]
     pub fn change_to(mut self, to: RailgunAddress) -> Self {
         if !self.finalized {
             self.change_to = to;
@@ -168,6 +169,7 @@ impl Spend {
     }
 
     /// Sets the adapt contract and parameters copied into the bound parameters.
+    #[must_use]
     pub fn adapt(mut self, contract: Address, params: [u8; 32]) -> Self {
         self.adapt_contract = Some(contract);
         self.adapt_params = Some(params);
@@ -200,31 +202,38 @@ impl Spend {
         Ok(self)
     }
 
+    #[must_use]
     pub fn inputs(&self) -> &[UtxoNote] {
         &self.inputs
     }
 
     /// Transfer outputs, not including change. Empty until [`Self::with_change`].
+    #[must_use]
     pub fn transfers(&self) -> &[TransferNote] {
         &self.outputs
     }
 
+    #[must_use]
     pub fn change_note(&self) -> Option<&TransferNote> {
         self.change.as_ref()
     }
 
+    #[must_use]
     pub fn unshield_note(&self) -> Option<UnshieldNote> {
         self.unshield
     }
 
+    #[must_use]
     pub fn tree(&self) -> u32 {
         self.inputs[0].tree_number
     }
 
+    #[must_use]
     pub fn asset(&self) -> AssetId {
         self.inputs[0].asset
     }
 
+    #[must_use]
     pub fn signer(&self) -> Arc<dyn RailgunSigner> {
         self.signer.clone()
     }

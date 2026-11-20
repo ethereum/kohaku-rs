@@ -13,7 +13,7 @@ use crate::{
 /// Otherwise known as the `RailgunSmartWallet::Transaction` struct in solidity.
 ///
 /// - An operation MUST only spend notes from a single tree.
-/// - An operation MUST have fewer than to 12 out_notes (13 including unshield), which can be to
+/// - An operation MUST have fewer than to 12 `out_notes` (13 including unshield), which can be to
 ///   arbitrary addresses.
 /// - An operation MUST only spend a single asset.
 ///   - The POI proof circuit inputs are designed around this assumption, since the token of the
@@ -27,7 +27,7 @@ use crate::{
 ///     for unshielding.
 #[derive(Debug, Clone)]
 pub struct Operation {
-    /// The UTXO tree number that the in_notes being spent are from
+    /// The UTXO tree number that the `in_notes` being spent are from
     pub utxo_tree_number: u32,
 
     /// The holder of the assets being spent.
@@ -59,10 +59,10 @@ impl Operation {
     ///
     /// - Spending and viewing keys are the same for all notes in
     /// - Tree number is the same for all notes in
-    /// - AssetID is the same for all notes
-    /// - notes_in.value = notes_out.value + unshield_note.value
-    /// - notes_in.len() <= 13
-    /// - notes_out.len() + unshield_note.is_some() <= 13
+    /// - `AssetID` is the same for all notes
+    /// - `notes_in.value` = `notes_out.value` + `unshield_note.value`
+    /// - `notes_in.len()` <= 13
+    /// - `notes_out.len()` + `unshield_note.is_some()` <= 13
     pub fn new(
         tree_number: u32,
         from: Arc<dyn RailgunSigner>,
@@ -109,9 +109,9 @@ impl Operation {
     }
 
     pub fn verify(&self) -> Result<(), OperationVerificationError> {
-        let in_value: u128 = self.in_notes.iter().map(|n| n.value()).sum();
-        let out_value: u128 = self.out_notes.iter().map(|n| n.value()).sum();
-        let unshield_value: u128 = self.unshield_note.as_ref().map_or(0, |n| n.value());
+        let in_value: u128 = self.in_notes.iter().map(super::Note::value).sum();
+        let out_value: u128 = self.out_notes.iter().map(super::Note::value).sum();
+        let unshield_value: u128 = self.unshield_note.as_ref().map_or(0, super::Note::value);
 
         if in_value != out_value + unshield_value {
             return Err(OperationVerificationError::Imbalanced(
@@ -121,7 +121,7 @@ impl Operation {
             ));
         }
 
-        if self.out_notes.len() + self.unshield_note.is_some() as usize > 13 {
+        if self.out_notes.len() + usize::from(self.unshield_note.is_some()) > 13 {
             return Err(OperationVerificationError::TooManyOutputNotes(
                 self.out_notes.len(),
             ));
@@ -138,21 +138,25 @@ impl Operation {
 }
 
 impl Operation {
+    #[must_use]
     pub fn in_value(&self) -> u128 {
-        self.in_notes.iter().map(|n| n.value()).sum()
+        self.in_notes.iter().map(super::Note::value).sum()
     }
 
     /// Total value being transfered to other railgun addresses in this operation
+    #[must_use]
     pub fn out_value(&self) -> u128 {
-        let out_notes_value: u128 = self.out_notes.iter().map(|n| n.value()).sum();
-        let unshield_value: u128 = self.unshield_note.as_ref().map_or(0, |n| n.value());
+        let out_notes_value: u128 = self.out_notes.iter().map(super::Note::value).sum();
+        let unshield_value: u128 = self.unshield_note.as_ref().map_or(0, super::Note::value);
         out_notes_value + unshield_value
     }
 
+    #[must_use]
     pub fn in_notes(&self) -> &[UtxoNote] {
         &self.in_notes
     }
 
+    #[must_use]
     pub fn out_notes(&self) -> Vec<Box<dyn Note>> {
         let mut notes: Vec<Box<dyn Note>> = Vec::new();
 
@@ -161,16 +165,18 @@ impl Operation {
         }
 
         if let Some(unshield) = &self.unshield_note {
-            notes.push(Box::new(unshield.clone()));
+            notes.push(Box::new(*unshield));
         }
 
         notes.into_iter().filter(|n| n.value() > 0).collect()
     }
 
+    #[must_use]
     pub fn unshield_note(&self) -> Option<UnshieldNote> {
-        self.unshield_note.clone()
+        self.unshield_note
     }
 
+    #[must_use]
     pub fn out_encryptable_notes(&self) -> Vec<Box<dyn EncryptableNote>> {
         let mut notes: Vec<Box<dyn EncryptableNote>> = Vec::new();
 

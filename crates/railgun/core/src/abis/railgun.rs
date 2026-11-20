@@ -23,6 +23,8 @@ pub enum TokenDataError {
 }
 
 impl TokenData {
+    /// # Panics
+    /// Panics for a 96-byte hash whose token type is neither ERC721 nor ERC1155.
     pub fn from_hash(hash: &[u8]) -> Result<Self, TokenDataError> {
         if hash.len() == 32 {
             let token_address = Address::from_slice(&hash[12..32]);
@@ -53,6 +55,7 @@ impl TokenData {
         })
     }
 
+    #[must_use]
     pub fn hash(&self) -> ruint::aliases::U256 {
         if self.tokenType == TokenType::ERC20 {
             let mut bytes = [0u8; 32];
@@ -101,6 +104,7 @@ impl From<Proof> for SnarkProof {
 }
 
 impl BoundParams {
+    #[must_use]
     pub fn new(
         tree_number: u16,
         min_gas_price: u128,
@@ -121,6 +125,7 @@ impl BoundParams {
         }
     }
 
+    #[must_use]
     pub fn hash(&self) -> U256 {
         let encoded = self.abi_encode();
         hash_to_scalar(&encoded)
@@ -128,6 +133,7 @@ impl BoundParams {
 }
 
 impl Transaction {
+    #[must_use]
     pub fn new(
         proof: SnarkProof,
         merkle_root: FixedBytes<32>,
@@ -139,8 +145,8 @@ impl Transaction {
         Transaction {
             proof,
             merkleRoot: merkle_root,
-            nullifiers: nullifiers,
-            commitments: commitments,
+            nullifiers,
+            commitments,
             boundParams: bound_params,
             unshieldPreimage: unshield_preimage,
         }
@@ -290,7 +296,7 @@ sol! {
         G1Point c;
     }
 
-    /// RelayAdapt: native wrap + shield entrypoint (see Railgun `RelayAdapt.json` ABI).
+    /// `RelayAdapt`: native wrap + shield entrypoint (see Railgun `RelayAdapt.json` ABI).
     contract RelayAdapt {
         struct Call {
             address to;

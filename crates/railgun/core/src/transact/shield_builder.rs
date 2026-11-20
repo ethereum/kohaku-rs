@@ -29,6 +29,7 @@ pub enum ShieldError {
 }
 
 impl ShieldBuilder {
+    #[must_use]
     pub fn new(chain: ChainConfig) -> Self {
         Self {
             chain,
@@ -38,12 +39,14 @@ impl ShieldBuilder {
     }
 
     /// Adds a shield operation to the transaction builder
+    #[must_use]
     pub fn shield(mut self, recipient: RailgunAddress, asset: AssetId, value: u128) -> Self {
         self.shields.push((recipient, asset, value));
         self
     }
 
     /// Adds a shield operation for a native asset to the transaction builder
+    #[must_use]
     pub fn shield_native(mut self, recipient: RailgunAddress, value: u128) -> Self {
         self.native_shields.push((recipient, value));
         self

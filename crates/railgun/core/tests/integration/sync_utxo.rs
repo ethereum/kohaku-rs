@@ -14,7 +14,7 @@ use tracing_subscriber::EnvFilter;
 /// with railgun's on-chain merkle tree.
 #[tokio::test]
 #[serial_test::serial]
-#[ignore]
+#[ignore = "requires a Sepolia RPC endpoint"]
 async fn test_sync_utxo() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
