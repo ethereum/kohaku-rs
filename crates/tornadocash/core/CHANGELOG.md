@@ -4,6 +4,10 @@ All notable changes to `kohaku-tornadocash` are documented here. This crate foll
 
 ## 0.3.0 - UNRELEASED
 
+### Added
+
+- `Serialize` and `Deserialize` for `Withdrawal`, `ProvenWithdrawal` and `Payer`, and `PartialEq` and `Eq` for `Withdrawal` and `ProvenWithdrawal` ([#147](https://github.com/ethereum/kohaku-rs/pull/147))
+
 ### Removed
 
 - **Breaking:** Removed `TornadoProviderExt` trait extension. Moved to `kohaku-tornadocash-provider` crate (#...)[]

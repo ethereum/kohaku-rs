@@ -32,6 +32,28 @@ impl Withdrawal {
         })
     }
 
+    /// Serialize this withdrawal, including its note secrets, as a JSON string.
+    ///
+    /// The format is unspecified; only `fromJSON` from the same package version reads it.
+    ///
+    /// # Errors
+    /// Throws if the withdrawal cannot be serialized.
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> Result<String, JsError> {
+        Ok(serde_json::to_string(&self.inner)?)
+    }
+
+    /// Parse a withdrawal from the output of `toJSON`.
+    ///
+    /// # Errors
+    /// Throws if `json` is not a serialized withdrawal.
+    #[wasm_bindgen(js_name = fromJSON)]
+    pub fn from_json(json: &str) -> Result<Self, JsError> {
+        Ok(Self {
+            inner: serde_json::from_str(json)?,
+        })
+    }
+
     /// Set this withdrawal's payer.
     #[wasm_bindgen(js_name = withPayer)]
     pub fn with_payer(&mut self, payer: &Payer) {

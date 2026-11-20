@@ -7,6 +7,7 @@ All notable changes to `kohaku-tornadocash-wasm` are documented here. This crate
 ### Added
 
 - `CircuitArtifacts.fromBytes` ([#145](https://github.com/ethereum/kohaku-rs/pull/145))
+- `toJSON` and `fromJSON` on `Withdrawal` and `ProvenWithdrawal` ([#147](https://github.com/ethereum/kohaku-rs/pull/147))
 
 ### Changed
 

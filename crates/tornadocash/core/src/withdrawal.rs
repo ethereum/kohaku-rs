@@ -12,6 +12,7 @@ use ark_ff::MontFp;
 use kohaku_tornadocash_circuit::{CircuitArtifacts, CircuitInputs, prove};
 use rand::CryptoRng;
 use ruint::aliases::U256;
+use serde::{Deserialize, Serialize};
 use websnark_rs::proof::Proof;
 
 use crate::{
@@ -20,7 +21,7 @@ use crate::{
 };
 
 /// A Tornado Cash withdrawal.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Withdrawal {
     pub pool: Pool,
     pub note: Note,
@@ -29,7 +30,7 @@ pub struct Withdrawal {
 }
 
 /// A proven Tornado Cash withdrawal.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProvenWithdrawal {
     inner: Withdrawal,
     root: Field,
@@ -37,7 +38,7 @@ pub struct ProvenWithdrawal {
 }
 
 /// The payer of a withdrawal transaction.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Payer {
     pub address: Address,
     pub fee: U256,
