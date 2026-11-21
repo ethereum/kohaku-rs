@@ -1,0 +1,8 @@
+fn main() {
+    cfg_aliases::cfg_aliases! {
+        native: { not(target_arch = "wasm32") },
+        wasm: { all(target_arch = "wasm32") },
+        parallel: { feature = "parallel" },
+        bench: { all(not(target_arch = "wasm32"), feature = "bench") },
+    }
+}

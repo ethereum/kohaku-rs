@@ -12,13 +12,7 @@ use crate::hex::Hex;
 /// Updating or freeing the source tree does not change this proof.
 #[wasm_bindgen]
 pub struct MerkleProof {
-    inner: CoreMerkleProof,
-}
-
-impl From<CoreMerkleProof> for MerkleProof {
-    fn from(inner: CoreMerkleProof) -> Self {
-        Self { inner }
-    }
+    pub(crate) inner: CoreMerkleProof,
 }
 
 #[wasm_bindgen]
@@ -39,5 +33,11 @@ impl MerkleProof {
     #[must_use]
     pub fn verify(&self) -> bool {
         self.inner.verify::<TornadoHasher>()
+    }
+}
+
+impl From<CoreMerkleProof> for MerkleProof {
+    fn from(inner: CoreMerkleProof) -> Self {
+        Self { inner }
     }
 }

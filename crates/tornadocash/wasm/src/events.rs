@@ -99,12 +99,8 @@ impl LogInput {
         let topics = self
             .topics
             .into_iter()
-            .map(|topic| {
-                let bytes = topic.to_bytes()?;
-                let bytes: [u8; 32] = bytes.as_slice().try_into()?;
-                Ok(B256::from(bytes))
-            })
-            .collect::<Result<Vec<_>, JsError>>()?;
+            .map(B256::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
         let data = self.data.to_bytes()?.into();
         // The input does not identify an emitter. Core decoding uses only topics/data.
         let inner = alloy::primitives::Log::new(Address::ZERO, topics, data)

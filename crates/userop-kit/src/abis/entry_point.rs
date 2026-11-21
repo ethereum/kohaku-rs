@@ -9,7 +9,7 @@ sol! {
     contract EntryPoint {
         function getNonce(address sender, uint192 key) external view returns (uint256 nonce);
 
-        #[derive(Debug)]
+        #[derive(Debug, serde::Serialize)]
         /// The "packed" version of the 4337 UserOperation
         ///
         /// See the 0.8.0 EntryPoint impl for format details:

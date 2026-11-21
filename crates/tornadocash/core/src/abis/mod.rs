@@ -1,4 +1,4 @@
-// sol! macro-generated code does not abide by clippy, strangely enough.
+// sol! macro-generated code does not abide by clippy.
 #![allow(clippy::all)]
 #![allow(clippy::pedantic)]
 

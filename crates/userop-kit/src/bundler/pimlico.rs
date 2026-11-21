@@ -1,10 +1,9 @@
-use std::time::{Duration, Instant};
 
 use alloy::{primitives::B256, rpc::types::state::StateOverride};
 use reqwest::Url;
 use serde::Deserialize;
-use tokio::time::sleep;
 use tracing::info;
+use web_time::{Duration, Instant};
 
 use crate::{
     bundler::{Bundler, BundlerError, rpc_client::RpcClient},
@@ -113,6 +112,19 @@ impl Bundler for PimlicoBundler {
         })
     }
 
+    async fn gas_price(&self) -> Result<Option<super::GasPrice>, BundlerError> {
+        let price: PimlicoUserOperationGasPrice = self
+            .client
+            .request("pimlico_getUserOperationGasPrice", serde_json::json!([]))
+            .await
+            .map_err(|e| BundlerError::Other(Box::new(e)))?;
+        // Same tier as `estimate_gas`, so both paths quote the same price.
+        Ok(Some(super::GasPrice {
+            max_fee_per_gas: price.slow.max_fee_per_gas,
+            max_priority_fee_per_gas: price.slow.max_priority_fee_per_gas,
+        }))
+    }
+
     async fn send_user_operation(
         &self,
         op: &SignedUserOperation,
@@ -159,4 +171,14 @@ impl Bundler for PimlicoBundler {
 
         Err(BundlerError::Timeout)
     }
+}
+
+#[cfg(native)]
+async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+#[cfg(wasm)]
+async fn sleep(duration: Duration) {
+    gloo_timers::future::sleep(duration).await;
 }

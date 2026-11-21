@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use alloy::primitives::Address;
 use kohaku_tornadocash::Asset as CoreAsset;
 use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
@@ -47,11 +46,9 @@ impl Asset {
     /// Throws if the address cannot be decoded into 20 bytes or decimals is not a
     /// finite integer JavaScript number in 0..=255.
     pub fn erc20(address: &Ts<Hex>, symbol: String, decimals: JsU8) -> Result<Self, JsError> {
-        let address = Address::try_from(address.to_rust()?)?;
-
         Ok(Self {
             inner: CoreAsset::Erc20 {
-                address,
+                address: Hex::decode(address)?,
                 symbol: Cow::Owned(symbol),
                 decimals: u8::try_from(decimals)?,
             },
@@ -114,6 +111,12 @@ impl Asset {
             CoreAsset::Native { .. } => Ok(None),
             CoreAsset::Erc20 { address, .. } => Ok(Some(Hex::from(*address).into_ts()?)),
         }
+    }
+}
+
+impl From<CoreAsset> for Asset {
+    fn from(inner: CoreAsset) -> Self {
+        Self { inner }
     }
 }
 

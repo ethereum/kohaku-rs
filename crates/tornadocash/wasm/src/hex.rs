@@ -1,7 +1,8 @@
 use alloy::primitives::{Address, B256};
 use kohaku_tornadocash::{Field, Nullifier, Secret};
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
+use tsify::{Ts, Tsify};
+use wasm_bindgen::JsError;
 
 #[derive(Serialize, Deserialize, Tsify)]
 #[tsify(type = "`0x${string}`")]
@@ -24,10 +25,28 @@ pub enum HexError {
 }
 
 impl Hex {
+    /// Deserialize a JS hex string and convert it into `T`.
+    pub fn decode<T>(value: &Ts<Hex>) -> Result<T, JsError>
+    where
+        T: TryFrom<Hex, Error = HexError>,
+    {
+        Ok(T::try_from(value.to_rust()?)?)
+    }
+
     pub fn to_bytes(&self) -> Result<Vec<u8>, HexError> {
         let text = self.0.strip_prefix("0x").ok_or(HexError::MissingPrefix)?;
 
         Ok(hex::decode(text)?)
+    }
+}
+
+impl TryFrom<Hex> for B256 {
+    type Error = HexError;
+
+    fn try_from(value: Hex) -> Result<Self, Self::Error> {
+        let bytes = value.to_bytes()?;
+        let bytes: [u8; 32] = bytes.as_slice().try_into()?;
+        Ok(Self::from(bytes))
     }
 }
 
@@ -67,13 +86,13 @@ impl TryFrom<Hex> for Secret {
 
 impl From<Nullifier> for Hex {
     fn from(value: Nullifier) -> Self {
-        Self(format!("0x{}", hex::encode(value.as_bytes())))
+        Self::from(value.as_bytes().as_slice())
     }
 }
 
 impl From<Secret> for Hex {
     fn from(value: Secret) -> Self {
-        Self(format!("0x{}", hex::encode(value.as_bytes())))
+        Self::from(value.as_bytes().as_slice())
     }
 }
 
@@ -93,9 +112,7 @@ impl TryFrom<Hex> for Field {
     type Error = HexError;
 
     fn try_from(value: Hex) -> Result<Self, Self::Error> {
-        let bytes = value.to_bytes()?;
-        let bytes: [u8; 32] = bytes.as_slice().try_into()?;
-        Self::try_from(B256::from(bytes)).map_err(|_| HexError::InvalidField)
+        Self::try_from(B256::try_from(value)?).map_err(|_| HexError::InvalidField)
     }
 }
 

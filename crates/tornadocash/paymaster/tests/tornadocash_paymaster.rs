@@ -6,16 +6,18 @@ use alloy::{
 };
 use kohaku_fork_kit::{
     alto::AltoBuilder,
+    artifacts::tornado_artifacts,
     entry_point::deploy_entry_point,
-    paymaster::{deploy_fee_adapter, deploy_paymaster},
+    paymaster::{allow_instance, deploy_paymaster},
     pool::deploy_pool,
     simple_account::deploy_simple_account,
 };
 use kohaku_tornadocash::{
-    Deposit, PaymasterInfo, TornadoProviderExt, Withdrawal,
+    Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
 use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
+use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
@@ -50,7 +52,14 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let entrypoint = deploy_entry_point(&provider).await?;
     deploy_simple_account(&provider).await?;
 
-    let mut pool = deploy_pool(provider.clone(), None).await?;
+    let mut pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
+        Asset::ETH,
+        10_u128.pow(17),
+        0,
+        None,
+    );
     let paymaster_address = deploy_paymaster(
         provider.clone(),
         entrypoint,
@@ -58,12 +67,8 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    let adapter_address =
-        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
-    pool.paymaster = Some(PaymasterInfo {
-        address: paymaster_address,
-        adapter: adapter_address,
-    });
+    allow_instance(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");
@@ -111,6 +116,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .with_tornado_paymaster(
             withdrawal,
             &withdrawal_merkle_proof,
+            tornado_artifacts(),
             &provider,
             &*alto,
             &mut rand::rng(),
@@ -152,7 +158,14 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
     let entrypoint = deploy_entry_point(&provider).await?;
     deploy_simple_account(&provider).await?;
 
-    let mut pool = deploy_pool(provider.clone(), None).await?;
+    let mut pool = Pool::new(
+        provider.get_chain_id().await?,
+        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
+        Asset::ETH,
+        10_u128.pow(17),
+        0,
+        None,
+    );
     let paymaster_address = deploy_paymaster(
         provider.clone(),
         entrypoint,
@@ -160,12 +173,8 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         PLACEHOLDER_WETH,
     )
     .await?;
-    let adapter_address =
-        deploy_fee_adapter(provider.clone(), paymaster_address, pool.address).await?;
-    pool.paymaster = Some(PaymasterInfo {
-        address: paymaster_address,
-        adapter: adapter_address,
-    });
+    allow_instance(provider.clone(), paymaster_address, pool.address).await?;
+    pool.paymaster = Some(paymaster_address);
 
     // Deposit a note
     info!("Depositing into pool");
@@ -217,6 +226,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         .with_tornado_paymaster(
             withdrawal,
             &withdrawal_merkle_proof,
+            tornado_artifacts(),
             &provider,
             &*alto,
             &mut rand::rng(),

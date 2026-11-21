@@ -2,7 +2,7 @@
 
 Tornadocash zk circuits for Kohaku.
 
-Includes tornadocash's circuit artifacts instead of downloading them separately and wraps [`websnark-rs`](https://crates.io/crates/websnark-rs) with a simple API for proof generation. Tornadocash's artifacts are ~9.3 MiB compressed, so this crate will substantially increase the size of your binary.
+Wraps [`websnark-rs`](https://crates.io/crates/websnark-rs) with a simple API for proof generation.
 
 ## Benchmarks
 

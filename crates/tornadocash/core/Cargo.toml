@@ -1,6 +1,6 @@
 [package]
 name = "kohaku-tornadocash"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Tornado Cash core types"
 license.workspace = true
@@ -15,10 +15,7 @@ parallel = ["kohaku-tornadocash-circuit/parallel"]
 
 [dependencies]
 alloy = { workspace = true, features = [
-    "rpc",
     "rpc-types",
-    "network",
-    "providers",
     "sol-types",
 ] }
 ark-bn254 = { workspace = true }
@@ -39,6 +36,7 @@ websnark-rs = { workspace = true }
 alloy = { workspace = true, features = [
     "signers",
     "signer-local",
+    "providers",
     "provider-anvil-node",
 ] }
 anyhow = { workspace = true }

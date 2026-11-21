@@ -36,7 +36,9 @@ let
       runHook preBuild
       export HOME="$TMPDIR"
       export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-      npm install --no-audit --no-fund --ignore-scripts --omit=dev
+      # --omit=optional: skip host-specific optional deps (fsevents on darwin) so the output,
+      # and therefore outputHash, is the same on every system.
+      npm install --no-audit --no-fund --ignore-scripts --omit=dev --omit=optional
       runHook postBuild
     '';
 

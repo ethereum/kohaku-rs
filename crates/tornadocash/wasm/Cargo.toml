@@ -1,6 +1,6 @@
 [package]
 name = "kohaku-tornadocash-wasm"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 description = "Tornado Cash wasm bindings"
 license.workspace = true
@@ -10,10 +10,15 @@ repository.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-alloy = { workspace = true, features = ["providers", "reqwest"] }
+alloy = { workspace = true }
 hex = { workspace = true }
 js-sys = { workspace = true }
 kohaku-tornadocash = { workspace = true }
+kohaku-tornadocash-circuit = { workspace = true }
+kohaku-tornadocash-relayer = { workspace = true }
+kohaku-tornadocash-syncer = { workspace = true }
+kohaku-tornadocash-provider = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -27,6 +32,9 @@ wasm-bindgen-test = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.4.3", features = ["wasm_js"] }
 getrandom_02 = { version = "0.2", features = ["js"], package = "getrandom" }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+brotli = { workspace = true }
 
 [lints]
 workspace = true

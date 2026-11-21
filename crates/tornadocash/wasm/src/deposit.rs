@@ -9,7 +9,7 @@ use crate::{call::Call, note::Note, pool::Pool};
 /// See [`kohaku_tornadocash::Deposit`] for more details.
 #[wasm_bindgen]
 pub struct Deposit {
-    inner: CoreDeposit,
+    pub(crate) inner: CoreDeposit,
 }
 
 #[wasm_bindgen]
@@ -91,8 +91,8 @@ mod tests {
     fn deposit_fixture(core_pool: CorePool) -> (Deposit, CoreDeposit) {
         let core_note = CoreNote::new([1_u8; 31], [2_u8; 31]);
         let core = CoreDeposit::new(&core_pool, core_note.clone());
-        let pool = Pool { inner: core_pool };
-        let note = Note { inner: core_note };
+        let pool = Pool::from(core_pool);
+        let note = Note::from(core_note);
 
         (Deposit::new(&pool, &note), core)
     }

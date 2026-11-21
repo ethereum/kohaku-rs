@@ -59,7 +59,8 @@ impl RelayerStatus {
     /// Quotes the fee for a withdrawal paid by the relayer.
     ///
     /// # Errors
-    /// Returns an error if the relayer does not support the given pool.
+    /// Returns an error if the relayer does not support the given pool, or an ERC20
+    /// quote has a zero price or overflows an intermediate or final value.
     pub fn quote(&self, pool: &Pool, gas_price: u128, refund: U256) -> Result<Payer, RelayerError> {
         // Scale the fee percentage into a fixed-point integer.
         const FEE_PRECISION: u64 = 1_000_000;
@@ -92,10 +93,18 @@ impl RelayerStatus {
             return Err(RelayerError::UnsupportedPool(pool.clone()));
         }
 
-        // If the asset is non-native, the fee is:
-        let fee = (expense + refund) * U256::from(10).pow(U256::from(pool.asset.decimals()))
-            / price
-            + fee_percent;
+        // Preserve the ERC20 formula and its operation order, checking each step.
+        let expense_with_refund = expense
+            .checked_add(refund)
+            .ok_or(RelayerError::QuoteOverflow)?;
+        let scale = U256::from(10)
+            .checked_pow(U256::from(pool.asset.decimals()))
+            .ok_or(RelayerError::QuoteOverflow)?;
+        let fee = expense_with_refund
+            .checked_mul(scale)
+            .and_then(|value| value.checked_div(price))
+            .and_then(|value| value.checked_add(fee_percent))
+            .ok_or(RelayerError::QuoteOverflow)?;
         Ok(Payer {
             address: self.reward_account,
             fee,
@@ -199,5 +208,52 @@ mod tests {
 
         // 1% of 100 DAI + ((1 gwei * 500,000 gas) + 100 refund) valued in DAI
         assert_eq!(fee, U256::from(1_000_500_000_000_000_100u64));
+    }
+
+    fn dai_status(price: U256) -> RelayerStatus {
+        let pool = Pool::ETHEREUM_DAI_100;
+        RelayerStatus {
+            net_id: pool.chain_id,
+            tornado_service_fee: 1.0,
+            eth_prices: HashMap::from([(pool.symbol().to_owned(), price)]),
+            instances: HashMap::from([(
+                pool.symbol().to_owned(),
+                Instance {
+                    instance_address: HashMap::from([(pool.amount(), pool.address)]),
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn erc20_quote_rejects_expense_plus_refund_overflow() {
+        let status = dai_status(U256::ONE);
+        assert!(matches!(
+            status.quote(&Pool::ETHEREUM_DAI_100, 1, U256::MAX),
+            Err(RelayerError::QuoteOverflow)
+        ));
+    }
+
+    #[test]
+    fn erc20_quote_rejects_multiplication_overflow_before_division() {
+        let status = dai_status(U256::MAX);
+        // Even if division would reduce the result, preserve the formula's order.
+        assert!(matches!(
+            status.quote(&Pool::ETHEREUM_DAI_100, 0, U256::MAX),
+            Err(RelayerError::QuoteOverflow)
+        ));
+    }
+
+    #[test]
+    fn erc20_quote_rejects_final_fee_overflow() {
+        let status = dai_status(U256::ONE);
+        // This refund scales without overflowing, but adding the service fee overflows.
+        let refund = U256::MAX / U256::from(1_000_000_000_000_000_000_u64);
+        assert!(matches!(
+            status.quote(&Pool::ETHEREUM_DAI_100, 0, refund),
+            Err(RelayerError::QuoteOverflow)
+        ));
     }
 }

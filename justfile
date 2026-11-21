@@ -25,11 +25,11 @@ prepare crate:
     fi
     cargo publish -p {{crate}} --dry-run
 
+# Pushes the release tag. `.github/workflows/release.yaml` does the publish
 publish crate:
     #!/usr/bin/env bash
     set -euo pipefail
     cd crates
     tag="{{crate}}-v$(cargo pkgid -p {{crate}} | sed 's/.*@//')"
-    cargo publish -p {{crate}}
     git tag -a "$tag" -m "Release $tag"
     git push origin "$tag"
