@@ -132,6 +132,7 @@ impl SagaSyncer {
             .get(self.manifest_url())
             .send()
             .await?
+            .error_for_status()?
             .bytes()
             .await?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -143,6 +144,7 @@ impl SagaSyncer {
             .get(self.chunk_url(file))
             .send()
             .await?
+            .error_for_status()?
             .bytes()
             .await?;
         Ok(bytes.to_vec())
@@ -169,7 +171,21 @@ fn stream_key(pool: &Pool) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    use alloy::primitives::B256;
+    use reqwest::StatusCode;
+
     use super::*;
+
+    const HOT_HEAD_FILE: &str = "tornado-cash-11155111-eth-0.1.hot.jsonl.gz";
+    //? The body S3 sends for a missing key.
+    const NO_SUCH_KEY: &str =
+        "<?xml version='1.0' encoding='UTF-8'?><Error><Code>NoSuchKey</Code></Error>";
 
     #[test]
     fn derives_stream_key() {
@@ -177,5 +193,104 @@ mod tests {
             stream_key(&Pool::ETHEREUM_ETHER_01),
             "tornado-cash-1-eth-0.1"
         );
+    }
+
+    #[tokio::test]
+    async fn reports_a_missing_manifest_as_an_http_error() {
+        let base_url = serve(vec![(
+            "/index.json".into(),
+            StatusCode::NOT_FOUND,
+            NO_SUCH_KEY.into(),
+        )]);
+
+        let err = loopback_syncer(&base_url)
+            .sync(&Pool::SEPOLIA_ETHER_01, 0, u64::MAX)
+            .await
+            .unwrap_err();
+
+        assert_eq!(http_status(&err), Some(StatusCode::NOT_FOUND), "{err}");
+    }
+
+    #[tokio::test]
+    async fn reports_a_missing_hot_head_as_an_http_error() {
+        let pool = Pool::SEPOLIA_ETHER_01;
+        let manifest = serde_json::json!({
+            "availableProtocols": {
+                stream_key(&pool): {
+                    "protocol": "tornado-cash",
+                    "chainId": format!("{:#x}", pool.chain_id),
+                    "trackedAddresses": [pool.address],
+                    "trackedEventTopics": [],
+                    "chunks": [],
+                    "hotHead": {
+                        "fromBlock": format!("{:#x}", pool.deployed_block),
+                        "toBlock": format!("{:#x}", pool.deployed_block + 1),
+                        "file": HOT_HEAD_FILE,
+                        "size": "0x0",
+                        "digest": { "type": "sha256", "data": B256::ZERO },
+                    },
+                },
+            },
+        });
+        let base_url = serve(vec![
+            ("/index.json".into(), StatusCode::OK, manifest.to_string()),
+            (
+                format!("/{HOT_HEAD_FILE}"),
+                StatusCode::NOT_FOUND,
+                NO_SUCH_KEY.into(),
+            ),
+        ]);
+
+        let err = loopback_syncer(&base_url)
+            .sync(&pool, 0, u64::MAX)
+            .await
+            .unwrap_err();
+
+        assert_eq!(http_status(&err), Some(StatusCode::NOT_FOUND), "{err}");
+    }
+
+    /// Returns a syncer for `base_url` that ignores proxy settings, so requests reach the
+    /// loopback server.
+    fn loopback_syncer(base_url: &str) -> SagaSyncer {
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        SagaSyncer::with_client(client, base_url)
+    }
+
+    fn http_status(err: &SagaSyncError) -> Option<StatusCode> {
+        match err {
+            SagaSyncError::Http(err) => err.status(),
+            _ => None,
+        }
+    }
+
+    /// Plays `responses` in order on a loopback port, one per connection, and returns its base
+    /// URL.
+    ///
+    /// Asserts that each request line asks for the path its response is scripted for.
+    fn serve(responses: Vec<(String, StatusCode, String)>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+        thread::spawn(move || {
+            for ((path, status, body), stream) in responses.into_iter().zip(listener.incoming()) {
+                let mut stream = stream.unwrap();
+                let mut lines = BufReader::new(&stream).lines();
+                let request_line = lines.next().unwrap().unwrap();
+                assert_eq!(request_line, format!("GET {path} HTTP/1.1"));
+                for line in lines {
+                    if line.unwrap().is_empty() {
+                        break;
+                    }
+                }
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+
+        base_url
     }
 }
