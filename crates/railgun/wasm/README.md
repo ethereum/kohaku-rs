@@ -16,7 +16,8 @@ sync, proof generation, PPOI recovery, and paymaster `UserOperation` preparation
 - `new Shield(chain)` collects `addErc20(recipient, token, amount)` and
   `addNative(recipient, amount)` entries. `build()` returns plain `{to, data,
   value}` transaction objects. It uses fresh cryptographic randomness for
-  each shield and consumes the builder.
+  each shield and consumes the builder. Each amount must be positive and below
+  the protocol's 120-bit note limit.
 - `PoiSession.open(chain, rpcUrl, spendingKey, viewingKey, checkpointJson?,
   artifactBaseUrl?)` restores a wallet or starts a full resync. The RPC chain
   ID is checked against `chain`. The optional artifact base URL can point to a
@@ -25,6 +26,8 @@ sync, proof generation, PPOI recovery, and paymaster `UserOperation` preparation
   UTXOs, TXIDs, and PPOI lists, then queue missing historical proofs. A fresh
   checkpoint replays chain history. Use bounded sync
   windows for resumable first syncs.
+- `syncHistoryTo(block)` advances only UTXO history in bounded windows; call
+  `refreshPoi()` after the last window to refresh TXIDs and PPOI lists.
 - `processPendingPoiJson()` generates and submits queued proofs. Its report
   distinguishes submitted proofs, TXIDs not yet indexed, inputs awaiting POI,
   and failures. Submission is **not** PPOI acceptance: sync the lists again
