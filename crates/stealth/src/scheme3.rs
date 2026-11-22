@@ -11,6 +11,7 @@ pub use pqsa_per_payment::{
 pub use secrecy::ExposeSecret;
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SchemeError {
     #[error("scheme 3 engine error: {0:?}")]
     Engine(#[from] EngineError),
@@ -396,9 +397,9 @@ mod tests {
             bytes: bytes.clone(),
             consumed: 0,
         };
-        for expected in bytes.chunks_exact(128) {
+        for expected in bytes.as_chunks::<128>().0 {
             let seed = AccountSeed::generate(&mut rng);
-            assert_eq!(seed.expose_secret().as_slice(), expected);
+            assert_eq!(seed.expose_secret(), expected);
         }
         assert_eq!(rng.consumed, bytes.len());
     }

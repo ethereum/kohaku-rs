@@ -11,6 +11,7 @@ use tracing::debug;
 use crate::{abis::IERC6538Registry, contracts::Deployment, scheme3::MetaAddress};
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ContractError {
     #[error(transparent)]
     Rpc(#[from] TransportError),
