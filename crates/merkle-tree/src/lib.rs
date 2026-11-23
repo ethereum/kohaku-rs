@@ -14,6 +14,7 @@ pub use proof::MerkleProof;
 const PARALLEL_THRESHOLD: usize = 256;
 
 /// A Merkle tree with a fixed depth and arity.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MerkleTree<const DEPTH: usize, const ARITY: usize, E: Element, H: Hasher<ARITY, E>> {
     /// `nodes[0]` holds the leaves; `nodes[level]` holds the hashes at `level`.
     nodes: Vec<Vec<E>>,
@@ -21,6 +22,7 @@ pub struct MerkleTree<const DEPTH: usize, const ARITY: usize, E: Element, H: Has
     /// The hash of an empty subtree at each level, `0..=DEPTH`.
     zeros: Vec<E>,
 
+    #[serde(skip)]
     phantom: std::marker::PhantomData<H>,
 }
 

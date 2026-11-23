@@ -5292,6 +5292,7 @@ dependencies = [
  "criterion 0.8.2",
  "rand 0.10.2",
  "rayon",
+ "serde",
  "thiserror 2.0.20",
 ]
 

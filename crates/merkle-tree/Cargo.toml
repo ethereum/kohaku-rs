@@ -9,9 +9,11 @@ repository.workspace = true
 [features]
 default = []
 parallel = ["dep:rayon"]
+serde = ["dep:serde"]
 
 [dependencies]
 rayon = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
