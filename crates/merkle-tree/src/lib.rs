@@ -22,7 +22,7 @@ pub struct MerkleTree<const DEPTH: usize, const ARITY: usize, E: Element, H: Has
     /// The hash of an empty subtree at each level, `0..=DEPTH`.
     zeros: Vec<E>,
 
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     phantom: std::marker::PhantomData<H>,
 }
 
