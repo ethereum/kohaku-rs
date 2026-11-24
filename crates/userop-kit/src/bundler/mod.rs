@@ -13,6 +13,8 @@ mod rpc_client;
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait Bundler {
+    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError>;
+
     /// Estimates gas for `op`.
     ///
     /// Simulates against `state_override` if provided.
@@ -33,14 +35,6 @@ pub trait Bundler {
         &self,
         hash: UserOperationHash,
     ) -> Result<UserOperationReceipt, BundlerError>;
-
-    /// Gas price the bundler currently accepts, without needing a UserOperation to simulate.
-    ///
-    /// `estimate_gas` returns a price too, but only for a UserOperation that passes simulation,
-    /// which for the privacy paymaster means one carrying a real proof. A caller that must fix the
-    /// fee before proving (single signature on a hardware signer) needs the price first.
-    /// `None` when the bundler has no such endpoint.
-    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -5,7 +5,7 @@ use tracing::info;
 use web_time::{Duration, Instant};
 
 use crate::{
-    bundler::{Bundler, BundlerError, rpc_client::RpcClient},
+    bundler::{Bundler, BundlerError, GasPrice, rpc_client::RpcClient},
     signable_user_operation::SignableUserOperation,
     signed_user_operation::SignedUserOperation,
     user_operation::{UserOperationGasEstimate, UserOperationHash, UserOperationReceipt},
@@ -74,6 +74,19 @@ impl PimlicoBundler {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl Bundler for PimlicoBundler {
+    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError> {
+        let price: PimlicoUserOperationGasPrice = self
+            .client
+            .request("pimlico_getUserOperationGasPrice", serde_json::json!([]))
+            .await
+            .map_err(|e| BundlerError::Other(Box::new(e)))?;
+
+        Ok(Some(GasPrice {
+            max_fee_per_gas: price.slow.max_fee_per_gas,
+            max_priority_fee_per_gas: price.slow.max_priority_fee_per_gas,
+        }))
+    }
+
     async fn estimate_gas(
         &self,
         op: &SignableUserOperation,
@@ -109,19 +122,6 @@ impl Bundler for PimlicoBundler {
             max_fee_per_gas: price.slow.max_fee_per_gas,
             max_priority_fee_per_gas: price.slow.max_priority_fee_per_gas,
         })
-    }
-
-    async fn gas_price(&self) -> Result<Option<super::GasPrice>, BundlerError> {
-        let price: PimlicoUserOperationGasPrice = self
-            .client
-            .request("pimlico_getUserOperationGasPrice", serde_json::json!([]))
-            .await
-            .map_err(|e| BundlerError::Other(Box::new(e)))?;
-        // Same tier as `estimate_gas`, so both paths quote the same price.
-        Ok(Some(super::GasPrice {
-            max_fee_per_gas: price.slow.max_fee_per_gas,
-            max_priority_fee_per_gas: price.slow.max_priority_fee_per_gas,
-        }))
     }
 
     async fn send_user_operation(
