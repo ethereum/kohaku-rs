@@ -40,10 +40,10 @@ let payload = operation.typed_data();
 address, including counterfactual deployment through its factory. Its account
 address is the UserOperation sender and withdrawal recipient; the EOA owner
 signs the operation. `Simple7702SmartAccount` supports EIP-7702 delegation to
-the default Simple7702 implementation or a compatible external implementation
-selected with `.with_implementation(address)?`. The selected implementation
-must preserve the v0.8 EntryPoint EIP-712 validation and atomic
-`executeBatch(Call[])` behavior.
+the implementation passed to `new`, such as
+`SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08`, which is not deployed on every chain.
+The implementation must preserve the v0.8 EntryPoint EIP-712 validation and
+atomic `executeBatch(Call[])` behavior.
 
 For an external owner signer, send `operation.typed_data()` to
 `eth_signTypedData_v4`, then attach the returned signature with

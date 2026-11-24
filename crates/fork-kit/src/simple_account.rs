@@ -9,13 +9,12 @@ use alloy::{
     providers::{DynProvider, Provider},
     rpc::types::TransactionRequest,
 };
+use kohaku_userop_kit::smart_account::simple_7702_smart_account::SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08;
 
 const DETERMINISTIC_DEPLOYER: Address = address!("0x4e59b44847b379578588920ca78fbf26c0b4956c");
 
 const SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08_CREATECALL: &str =
     include_str!("../fixtures/simple_7702_account_v08.createcall.hex");
-pub const SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08: Address =
-    address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
 
 /// Deploys a new `SimpleSmartAccount` implementation contract.
 ///

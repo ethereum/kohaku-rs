@@ -15,10 +15,13 @@ use crate::{
     },
 };
 
-/// An EIP-7702 account using the Simple7702 execution ABI.
+/// The eth-infinitism Simple7702Account v0.8 implementation address.
 ///
-/// Defaults to the v0.8 EntryPoint and the eth-infinitism Simple7702Account implementation at
-/// `0xe6Cae83BdE06E4c305530e199D7217f42808555B`.
+/// This is a deterministic deployment address. It is not deployed on every chain.
+pub const SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08: Address =
+    address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
+
+/// An EIP-7702 account using the Simple7702 execution ABI.
 #[derive(Clone)]
 pub struct Simple7702SmartAccount<P: Provider> {
     owner: Address,
@@ -28,31 +31,17 @@ pub struct Simple7702SmartAccount<P: Provider> {
 }
 
 impl<P: Provider> Simple7702SmartAccount<P> {
-    /// Creates a Simple7702 account with the v0.8 EntryPoint.
-    pub fn new(provider: P, owner: Address, chain_id: u64) -> Self {
+    /// Creates an account that delegates `owner` to `implementation`.
+    ///
+    /// The implementation must support Simple7702Account's v0.8 EIP-712
+    /// signature validation and atomic execution ABI.
+    pub fn new(provider: P, owner: Address, implementation: Address, chain_id: u64) -> Self {
         Self {
             owner,
             chain_id,
             provider,
-            implementation: address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B"),
+            implementation,
         }
-    }
-
-    /// Delegates to `implementation`.
-    ///
-    /// The implementation must support Simple7702Account's v0.8 EIP-712
-    /// signature validation and atomic execution ABI.
-    pub fn with_implementation(
-        mut self,
-        implementation: Address,
-    ) -> Result<Self, SmartAccountError> {
-        if implementation.is_zero() {
-            return Err(SmartAccountError::Other(anyhow::anyhow!(
-                "Delegation implementation cannot be zero"
-            )));
-        }
-        self.implementation = implementation;
-        Ok(self)
     }
 }
 
@@ -108,9 +97,8 @@ mod tests {
         let mock = Asserter::new();
         let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
         let implementation = Address::repeat_byte(0x77);
-        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1)
-            .with_implementation(implementation)
-            .unwrap();
+        let account =
+            Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), implementation, 1);
         mock.push_success(&"0x9");
 
         let AccountInit::Eip7702(auth) = account.init().await.unwrap() else {
@@ -125,7 +113,12 @@ mod tests {
     async fn builder_keeps_entrypoint_and_authorization_nonces_separate() {
         let mock = Asserter::new();
         let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1);
+        let account = Simple7702SmartAccount::new(
+            provider,
+            Address::repeat_byte(0x44),
+            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
+            1,
+        );
         mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
         mock.push_success(&"0x9");
 
@@ -147,7 +140,12 @@ mod tests {
         fn assert_send(_: impl Send) {}
 
         let provider = ProviderBuilder::new().connect_mocked_client(Asserter::new());
-        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1);
+        let account = Simple7702SmartAccount::new(
+            provider,
+            Address::repeat_byte(0x44),
+            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
+            1,
+        );
         assert_send(UserOperationBuilder::new_with_smart_account(&account));
     }
 }
