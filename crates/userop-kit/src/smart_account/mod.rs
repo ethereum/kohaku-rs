@@ -1,17 +1,13 @@
 //! Account initialization, signing domains, and execution encoding for ERC-4337 operations.
 
 use alloy::{
-    network::TransactionBuilder,
-    primitives::{Address, Bytes, U256, aliases::U192, bytes},
-    providers::Provider,
-    rpc::types::{Authorization, TransactionRequest},
+    primitives::{Address, Bytes, U256, bytes},
+    rpc::types::Authorization,
 };
-use alloy_sol_types::{Eip712Domain, SolCall};
-use anyhow::Context;
+use alloy_sol_types::Eip712Domain;
 use serde::{Deserialize, Serialize};
 
-use crate::abis::entry_point::EntryPoint;
-
+mod shared;
 pub mod simple_7702_smart_account;
 pub mod simple_account;
 
@@ -105,61 +101,4 @@ pub enum SmartAccountError {
     ProviderError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
-}
-
-/// Reads `sender`'s key-0 nonce from `entry_point`.
-pub(crate) async fn entry_point_nonce<P: Provider>(
-    provider: &P,
-    entry_point: Address,
-    sender: Address,
-) -> Result<U256, SmartAccountError> {
-    let data = EntryPoint::getNonceCall::new((sender, U192::ZERO)).abi_encode();
-    let ret = provider
-        .call(
-            TransactionRequest::default()
-                .with_to(entry_point)
-                .with_input(data),
-        )
-        .await?;
-
-    Ok(EntryPoint::getNonceCall::abi_decode_returns(&ret)
-        .context("Invalid EntryPoint nonce response")?)
-}
-
-/// Encodes `calls` as `executeBatch(Call[])`, or empty calldata when there are none.
-pub(crate) fn encode_execute_batch(calls: &[Call]) -> Bytes {
-    if calls.is_empty() {
-        // If no calls, return empty data to save gas.
-        return Bytes::new();
-    }
-
-    let calls = calls
-        .iter()
-        .map(|call| abi::BaseAccount::Call {
-            target: call.target,
-            value: call.value,
-            data: call.data.clone(),
-        })
-        .collect();
-
-    abi::BaseAccount::executeBatchCall::new((calls,))
-        .abi_encode()
-        .into()
-}
-
-mod abi {
-    use alloy::sol;
-
-    sol!(
-        contract BaseAccount {
-            struct Call {
-                address target;
-                uint256 value;
-                bytes data;
-            }
-
-            function executeBatch(Call[] calldata calls) external;
-        }
-
-    );
 }

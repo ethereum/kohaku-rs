@@ -13,8 +13,8 @@ use crate::{
     abis::simple_account_factory::SimpleAccountFactory,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError, encode_execute_batch,
-        entry_point_nonce,
+        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
+        shared::{encode_execute_batch, entry_point_nonce},
     },
 };
 
