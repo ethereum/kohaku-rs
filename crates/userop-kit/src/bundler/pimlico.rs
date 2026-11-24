@@ -1,4 +1,3 @@
-
 use alloy::{primitives::B256, rpc::types::state::StateOverride};
 use reqwest::Url;
 use serde::Deserialize;

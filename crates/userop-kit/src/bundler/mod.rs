@@ -1,7 +1,6 @@
 use alloy::rpc::types::state::StateOverride;
 
 use crate::{
-    builder::UserOperationBuilder,
     signable_user_operation::SignableUserOperation,
     signed_user_operation::SignedUserOperation,
     user_operation::{UserOperationGasEstimate, UserOperationHash, UserOperationReceipt},
@@ -9,17 +8,6 @@ use crate::{
 
 pub mod pimlico;
 mod rpc_client;
-
-pub trait BundlerExt: Sized {
-    /// Estimates and sets the gas for this UserOperation.
-    ///
-    /// Simulates against `state_override` if provided.
-    fn with_gas_estimate<B: Bundler + ?Sized>(
-        self,
-        bundler: &B,
-        state_override: Option<&StateOverride>,
-    ) -> impl Future<Output = Result<Self, BundlerError>>;
-}
 
 /// A bundler provider for 4337 UserOperation JSON-RPC methods.
 #[cfg_attr(native, async_trait::async_trait)]
@@ -68,17 +56,4 @@ pub enum BundlerError {
     Timeout,
     #[error("Other: {0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
-}
-
-impl<S> BundlerExt for UserOperationBuilder<S> {
-    async fn with_gas_estimate<B: Bundler + ?Sized>(
-        self,
-        bundler: &B,
-        state_override: Option<&StateOverride>,
-    ) -> Result<Self, BundlerError> {
-        let op = self.build();
-        let est = bundler.estimate_gas(&op, state_override).await?;
-
-        Ok(self.with_gas(est))
-    }
 }

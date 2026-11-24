@@ -22,7 +22,7 @@ use kohaku_railgun::{
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
-    bundler::{Bundler, BundlerError, BundlerExt},
+    bundler::{Bundler, BundlerError},
     signable_user_operation::SignableUserOperation,
     smart_account::SmartAccount,
     user_operation::UserOperationGasEstimate,

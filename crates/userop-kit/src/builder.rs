@@ -1,8 +1,12 @@
+#[cfg(feature = "bundler")]
+use alloy::rpc::types::state::StateOverride;
 use alloy::{
     dyn_abi::Eip712Domain,
     primitives::{Address, Bytes, U256},
 };
 
+#[cfg(feature = "bundler")]
+use crate::bundler::{Bundler, BundlerError};
 use crate::{
     signable_user_operation::SignableUserOperation,
     smart_account::{AccountInit, SmartAccount, SmartAccountError},
@@ -108,6 +112,24 @@ impl<S> UserOperationBuilder<S> {
     pub fn with_gas(mut self, gas: UserOperationGasEstimate) -> Self {
         self.set_gas(gas);
         self
+    }
+
+    /// Estimates and sets the gas for this UserOperation.
+    ///
+    /// Simulates against `state_override` if provided.
+    ///
+    /// # Errors
+    /// Returns an error if the bundler's gas estimation fails.
+    #[cfg(feature = "bundler")]
+    pub async fn with_gas_estimate<B: Bundler + ?Sized>(
+        self,
+        bundler: &B,
+        state_override: Option<&StateOverride>,
+    ) -> Result<Self, BundlerError> {
+        let op = self.build();
+        let est = bundler.estimate_gas(&op, state_override).await?;
+
+        Ok(self.with_gas(est))
     }
 
     /// Sets the factory and factory data for this UserOperation.
