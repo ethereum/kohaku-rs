@@ -1,15 +1,19 @@
 //! Account initialization, signing domains, and execution encoding for ERC-4337 operations.
 
 use alloy::{
-    primitives::{Address, Bytes, U256, bytes},
-    rpc::types::Authorization,
+    network::TransactionBuilder,
+    primitives::{Address, Bytes, U256, aliases::U192, bytes},
+    providers::Provider,
+    rpc::types::{Authorization, TransactionRequest},
 };
-use alloy_sol_types::Eip712Domain;
+use alloy_sol_types::{Eip712Domain, SolCall};
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
 
-pub mod deployed_simple_account;
+use crate::abis::entry_point::EntryPoint;
+
 pub mod simple_7702_smart_account;
 pub mod simple_account;
-pub mod simple_smart_account;
 
 // A nonzero 65-byte signature used when estimating ECDSA account validation.
 pub(crate) const DUMMY_SIGNATURE: Bytes = bytes!(
@@ -44,6 +48,20 @@ pub enum AccountInit {
     },
 }
 
+/// A call executed by a Smart Account batch.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(js, derive(tsify::Tsify))]
+#[cfg_attr(js, tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct Call {
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub target: Address,
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub value: U256,
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub data: Bytes,
+}
+
 /// Provides account initialization, nonce reads, and execution encoding.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
@@ -72,15 +90,6 @@ pub trait SmartAccount: MaybeSend {
     /// Returns an error if the account's initialization state cannot be read.
     async fn init(&self) -> Result<AccountInit, SmartAccountError>;
 
-    /// Checks whether the sender can safely be used by this account profile.
-    ///
-    /// # Errors
-    /// Returns an error if the sender is already used and reuse was not allowed,
-    /// or if its state cannot be read.
-    async fn validate_sender(&self) -> Result<(), SmartAccountError> {
-        Ok(())
-    }
-
     /// Returns an estimation signature with the account's expected format.
     fn dummy_signature(&self) -> Bytes;
 
@@ -98,26 +107,12 @@ pub enum SmartAccountError {
     Other(#[from] anyhow::Error),
 }
 
-/// Shared preflight for the built-in Railgun delegated and deployed account profiles.
-/// Cannot detect ERC20 holdings or past activity that leaves no current state.
-pub async fn validate_unused_sender<P: alloy::providers::Provider + ?Sized>(
+/// Reads `sender`'s key-0 nonce from `entry_point`.
+pub(crate) async fn entry_point_nonce<P: Provider>(
     provider: &P,
-    sender: Address,
     entry_point: Address,
-    allow_used: bool,
-) -> Result<(), SmartAccountError> {
-    if allow_used {
-        return Ok(());
-    }
-    use alloy::{
-        network::TransactionBuilder, primitives::aliases::U192, rpc::types::TransactionRequest,
-    };
-    use alloy_sol_types::SolCall;
-
-    use crate::abis::entry_point::EntryPoint;
-    let code = provider.get_code_at(sender).await?;
-    let balance = provider.get_balance(sender).await?;
-    let native_nonce = provider.get_transaction_count(sender).await?;
+    sender: Address,
+) -> Result<U256, SmartAccountError> {
     let data = EntryPoint::getNonceCall::new((sender, U192::ZERO)).abi_encode();
     let ret = provider
         .call(
@@ -126,12 +121,45 @@ pub async fn validate_unused_sender<P: alloy::providers::Provider + ?Sized>(
                 .with_input(data),
         )
         .await?;
-    let nonce = EntryPoint::getNonceCall::abi_decode_returns(&ret)
-        .map_err(|e| SmartAccountError::Other(e.into()))?;
-    if !code.is_empty() || !balance.is_zero() || native_nonce != 0 || !nonce.is_zero() {
-        return Err(SmartAccountError::Other(anyhow::anyhow!(
-            "Execution account {sender} appears touched (code/delegation, nonce or ETH); explicitly set allow_used(true) to use it"
-        )));
+
+    Ok(EntryPoint::getNonceCall::abi_decode_returns(&ret)
+        .context("Invalid EntryPoint nonce response")?)
+}
+
+/// Encodes `calls` as `executeBatch(Call[])`, or empty calldata when there are none.
+pub(crate) fn encode_execute_batch(calls: &[Call]) -> Bytes {
+    if calls.is_empty() {
+        // If no calls, return empty data to save gas.
+        return Bytes::new();
     }
-    Ok(())
+
+    let calls = calls
+        .iter()
+        .map(|call| abi::BaseAccount::Call {
+            target: call.target,
+            value: call.value,
+            data: call.data.clone(),
+        })
+        .collect();
+
+    abi::BaseAccount::executeBatchCall::new((calls,))
+        .abi_encode()
+        .into()
+}
+
+mod abi {
+    use alloy::sol;
+
+    sol!(
+        contract BaseAccount {
+            struct Call {
+                address target;
+                uint256 value;
+                bytes data;
+            }
+
+            function executeBatch(Call[] calldata calls) external;
+        }
+
+    );
 }

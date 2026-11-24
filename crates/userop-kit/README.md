@@ -36,21 +36,14 @@ let payload = operation.typed_data();
 
 ## Railgun withdrawal execution accounts
 
-`DeployedSimpleAccount` supports an external eth-infinitism SimpleAccount v0.8.0
+`SimpleAccount` supports an external eth-infinitism SimpleAccount v0.8.0
 address, including counterfactual deployment through its factory. Its account
 address is the UserOperation sender and withdrawal recipient; the EOA owner
-signs the operation. `Simple7702SmartAccount` and `SimpleSmartAccount` support
-EIP-7702 delegation to the default Simple7702 implementation or a compatible
-external implementation selected with `.with_implementation(address)?`. The
-selected implementation must preserve the v0.8 EntryPoint EIP-712 validation
-and atomic `executeBatch(Call[])` behavior.
-
-These Railgun account adapters check code, native and EntryPoint nonces, and
-ETH balance before building an operation. A previously used sender requires an
-explicit `.allow_used(true)`. RPC failures stop the preflight. ERC20 holdings
-and past activity without a current-state signal are outside this check.
-Custom `SmartAccount` adapters can implement `validate_sender` for their own
-reuse policy.
+signs the operation. `Simple7702SmartAccount` supports EIP-7702 delegation to
+the default Simple7702 implementation or a compatible external implementation
+selected with `.with_implementation(address)?`. The selected implementation
+must preserve the v0.8 EntryPoint EIP-712 validation and atomic
+`executeBatch(Call[])` behavior.
 
 For an external owner signer, send `operation.typed_data()` to
 `eth_signTypedData_v4`, then attach the returned signature with

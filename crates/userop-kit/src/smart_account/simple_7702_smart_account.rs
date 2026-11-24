@@ -1,19 +1,18 @@
 //! EIP-7702 accounts using the Simple7702 execution ABI.
 
 use alloy::{
-    network::TransactionBuilder,
-    primitives::{Address, Bytes, U256, address, aliases::U192},
+    primitives::{Address, Bytes, U256, address},
     providers::Provider,
-    rpc::types::{Authorization, TransactionRequest},
+    rpc::types::Authorization,
 };
-use alloy_sol_types::{Eip712Domain, SolCall};
-use anyhow::Context;
-use serde::{Deserialize, Serialize};
+use alloy_sol_types::Eip712Domain;
 
 use crate::{
-    abis::entry_point::EntryPoint,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
-    smart_account::{AccountInit, DUMMY_SIGNATURE, SmartAccount, SmartAccountError},
+    smart_account::{
+        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError, encode_execute_batch,
+        entry_point_nonce,
+    },
 };
 
 /// An EIP-7702 account using the Simple7702 execution ABI.
@@ -25,47 +24,17 @@ pub struct Simple7702SmartAccount<P: Provider> {
     owner: Address,
     chain_id: u64,
     provider: P,
-
-    allow_used: bool,
     implementation: Address,
-    entry_point: Address,
-    domain: Eip712Domain,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(js, derive(tsify::Tsify))]
-#[cfg_attr(js, tsify(into_wasm_abi, from_wasm_abi))]
-#[serde(rename_all = "camelCase")]
-pub struct Call {
-    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub target: Address,
-    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub value: U256,
-    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub data: Bytes,
 }
 
 impl<P: Provider> Simple7702SmartAccount<P> {
-    /// Explicitly permits a deployed, delegated, funded, or previously used sender.
-    pub fn allow_used(mut self, allow_used: bool) -> Self {
-        self.allow_used = allow_used;
-        self
-    }
-
     /// Creates a Simple7702 account with the v0.8 EntryPoint.
     pub fn new(provider: P, owner: Address, chain_id: u64) -> Self {
-        let implementation = address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B");
-        let entry_point = ENTRY_POINT_08;
-        let domain = entry_point_08_domain(chain_id);
-
         Self {
             owner,
             chain_id,
             provider,
-            allow_used: false,
-            implementation,
-            entry_point,
-            domain,
+            implementation: address!("0xe6Cae83BdE06E4c305530e199D7217f42808555B"),
         }
     }
 
@@ -93,46 +62,23 @@ impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
     type Call = Vec<Call>;
 
     fn entry_point(&self) -> Address {
-        self.entry_point
+        ENTRY_POINT_08
     }
 
     fn domain(&self) -> Eip712Domain {
-        self.domain.clone()
+        entry_point_08_domain(self.chain_id)
     }
 
     fn address(&self) -> Address {
         self.owner
     }
 
-    async fn validate_sender(&self) -> Result<(), SmartAccountError> {
-        super::validate_unused_sender(
-            &self.provider,
-            self.address(),
-            self.entry_point(),
-            self.allow_used,
-        )
-        .await
-    }
-
     async fn nonce(&self) -> Result<U256, SmartAccountError> {
-        let call = EntryPoint::getNonceCall::new((self.owner, U192::from(0))).abi_encode();
-
-        let nonce = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(self.entry_point)
-                    .input(call.into()),
-            )
-            .await?;
-        let nonce = EntryPoint::getNonceCall::abi_decode_returns(&nonce)
-            .context("Failed to decode nonce")?;
-
-        Ok(nonce)
+        entry_point_nonce(&self.provider, ENTRY_POINT_08, self.owner).await
     }
 
     async fn init(&self) -> Result<AccountInit, SmartAccountError> {
-        let nonce = self.owner_nonce().await?;
+        let nonce = self.provider.get_transaction_count(self.owner).await?;
 
         Ok(AccountInit::Eip7702(Authorization {
             chain_id: U256::from(self.chain_id),
@@ -146,49 +92,8 @@ impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
     }
 
     fn abi_encode_call(call_data: &Self::Call) -> Bytes {
-        if call_data.is_empty() {
-            // If no calls, return empty data to save gas.
-            return Bytes::new();
-        }
-
-        let calls = call_data
-            .iter()
-            .map(|call| abi::BaseAccount::Call {
-                target: call.target,
-                value: call.value,
-                data: call.data.clone(),
-            })
-            .collect();
-
-        abi::BaseAccount::executeBatchCall::new((calls,))
-            .abi_encode()
-            .into()
+        encode_execute_batch(call_data)
     }
-}
-
-impl<P: Provider> Simple7702SmartAccount<P> {
-    /// Gets the nonce for the owner address
-    async fn owner_nonce(&self) -> Result<u64, SmartAccountError> {
-        let nonce = self.provider.get_transaction_count(self.owner).await?;
-        Ok(nonce)
-    }
-}
-
-mod abi {
-    use alloy::sol;
-
-    sol!(
-        contract BaseAccount {
-            struct Call {
-                address target;
-                uint256 value;
-                bytes data;
-            }
-
-            function executeBatch(Call[] calldata calls) external;
-        }
-
-    );
 }
 
 #[cfg(all(test, native))]
@@ -220,8 +125,7 @@ mod tests {
     async fn builder_keeps_entrypoint_and_authorization_nonces_separate() {
         let mock = Asserter::new();
         let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account =
-            Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1).allow_used(true);
+        let account = Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), 1);
         mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
         mock.push_success(&"0x9");
 

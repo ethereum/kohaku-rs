@@ -8,7 +8,7 @@ use kohaku_railgun::{account::signer::RailgunSigner, caip::AssetId, transact::Sp
 use kohaku_userop_kit::{
     bundler::pimlico::PimlicoBundler,
     signed_user_operation::SignedUserOperation,
-    smart_account::simple_7702_smart_account::{Call as AccountCall, Simple7702SmartAccount},
+    smart_account::{Call as AccountCall, simple_7702_smart_account::Simple7702SmartAccount},
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;

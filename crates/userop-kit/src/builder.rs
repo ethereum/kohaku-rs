@@ -24,7 +24,6 @@ impl<S: SmartAccount> UserOperationBuilder<S> {
     /// # Errors
     /// Returns an error if the account's nonce or initialization state cannot be read.
     pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
-        smart_account.validate_sender().await?;
         let builder = Self::new(
             smart_account.address(),
             smart_account.entry_point(),

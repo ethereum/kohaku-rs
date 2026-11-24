@@ -22,7 +22,7 @@ use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
     bundler::Bundler,
-    smart_account::simple_7702_smart_account::{Call, Simple7702SmartAccount},
+    smart_account::{Call, simple_7702_smart_account::Simple7702SmartAccount},
 };
 use tracing::info;
 

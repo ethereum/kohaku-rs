@@ -22,7 +22,7 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 # use kohaku_userop_kit::{
 #     builder::UserOperationBuilder,
 #     bundler::{Bundler, pimlico::PimlicoBundler},
-#     smart_account::simple_7702_smart_account::{Call, Simple7702SmartAccount},
+#     smart_account::{Call, simple_7702_smart_account::Simple7702SmartAccount},
 # };
 #
 # async fn example(
