@@ -122,7 +122,7 @@ impl PoiSession {
             .map_err(js_error)?;
         let signed = signable.sign(&account_signer).await.map_err(js_error)?;
         let result = PreparedUserOp {
-            user_op_hash: format!("{:#x}", signed.hash(self.wallet.chain().id).0),
+            user_op_hash: format!("{:#x}", signed.hash().0),
             signed,
         };
         json(&result)

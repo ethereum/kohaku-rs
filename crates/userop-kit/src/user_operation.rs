@@ -4,7 +4,7 @@ use alloy::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::abis::entry_point::EntryPoint::PackedUserOperation;
+pub use crate::abis::entry_point::EntryPoint::PackedUserOperation;
 
 /// ERC-4337 UserOperation in unpacked JSON-RPC wire format.
 ///
@@ -181,7 +181,8 @@ pub struct UserOperationReceipt {
 }
 
 impl UserOperation {
-    pub fn into_packed(&self) -> PackedUserOperation {
+    /// Returns the packed form the EntryPoint hashes and executes.
+    pub fn to_packed(&self) -> PackedUserOperation {
         self.into()
     }
 

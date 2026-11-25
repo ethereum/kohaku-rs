@@ -16,7 +16,6 @@ use crate::{
 pub struct UserOperationBuilder<S> {
     user_op: UserOperation,
 
-    gas_set: bool,
     entry_point: Address,
     domain: Eip712Domain,
     smart_account_type: std::marker::PhantomData<S>,
@@ -76,7 +75,6 @@ impl<S> UserOperationBuilder<S> {
             },
             entry_point,
             domain,
-            gas_set: false,
             smart_account_type: std::marker::PhantomData,
         }
     }
@@ -155,8 +153,6 @@ impl<S> UserOperationBuilder<S> {
     }
 
     fn set_gas(&mut self, gas: UserOperationGasEstimate) {
-        self.gas_set = true;
-
         self.user_op.call_gas_limit = gas.call_gas_limit;
         self.user_op.verification_gas_limit = gas.verification_gas_limit;
         self.user_op.pre_verification_gas = gas.pre_verification_gas;

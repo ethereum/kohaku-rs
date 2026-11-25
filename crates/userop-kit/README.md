@@ -47,10 +47,8 @@ atomic `executeBatch(Call[])` behavior.
 
 For an external owner signer, send `operation.typed_data()` to
 `eth_signTypedData_v4`, then attach the returned signature with
-`operation.with_owner_signature(owner, signature)?` or
-`operation.with_signature(owner, signature)?`. The former preserves the
-signable operation. An EIP-7702 authorization must already be signed for
-either method. `sign(&owner)` remains available for local signers.
+`operation.into_signed(owner, signature)?`. An EIP-7702 authorization must
+already be signed. `sign(&owner)` remains available for local signers.
 
 Use final bundler simulation before broadcasting, including factory gas and
 the full withdrawal call sequence. Keep the account recoverable if execution

@@ -7,9 +7,8 @@ use alloy::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    abis::entry_point::EntryPoint::PackedUserOperation,
     signed_user_operation::SignedUserOperation,
-    user_operation::{Authorization, UserOperation},
+    user_operation::{Authorization, PackedUserOperation, UserOperation},
 };
 
 /// A signable UserOperation, which includes the UserOperation data alongside the EntryPoint to
@@ -46,10 +45,11 @@ impl SignableUserOperation {
             Authorization::None => Authorization::None,
         };
 
-        Ok(SignedUserOperation {
+        Ok(SignedUserOperation::new(
             user_op,
-            entry_point: self.entry_point,
-        })
+            self.entry_point,
+            &self.domain,
+        ))
     }
 
     /// Returns the EIP-712 payload for external UserOperation signing.
@@ -67,7 +67,7 @@ impl SignableUserOperation {
     /// # Errors
     /// Returns an error if recovery fails, the signature belongs to a different
     /// owner, or an EIP-7702 authorization remains unsigned.
-    pub fn with_signature(
+    pub fn into_signed(
         mut self,
         owner: Address,
         signature: Signature,
@@ -82,23 +82,11 @@ impl SignableUserOperation {
         );
         self.user_op.signature = signature.as_bytes().into();
 
-        Ok(SignedUserOperation {
-            user_op: self.user_op,
-            entry_point: self.entry_point,
-        })
-    }
-
-    /// Attaches an external owner's signature while preserving this signable operation.
-    ///
-    /// # Errors
-    /// Returns an error if signature recovery fails, the owner differs, or a
-    /// delegation authorization remains unsigned.
-    pub fn with_owner_signature(
-        &self,
-        owner: Address,
-        signature: Signature,
-    ) -> anyhow::Result<SignedUserOperation> {
-        self.clone().with_signature(owner, signature)
+        Ok(SignedUserOperation::new(
+            self.user_op,
+            self.entry_point,
+            &self.domain,
+        ))
     }
 
     /// Returns the total gas limit for this UserOperation, including paymaster gas limits if
@@ -180,9 +168,7 @@ mod tests {
         let hash = operation.signing_hash();
         let signature = owner.sign_hash_sync(&hash).unwrap();
 
-        let signed = operation
-            .with_signature(owner.address(), signature)
-            .unwrap();
+        let signed = operation.into_signed(owner.address(), signature).unwrap();
 
         assert_eq!(signed.user_op.sender, sender);
         assert_ne!(signed.user_op.sender, owner.address());
@@ -194,9 +180,7 @@ mod tests {
         let operation = test_user_operation();
         let signature = owner().sign_hash_sync(&operation.signing_hash()).unwrap();
 
-        let error = operation
-            .with_signature(Address::ZERO, signature)
-            .unwrap_err();
+        let error = operation.into_signed(Address::ZERO, signature).unwrap_err();
 
         assert!(
             error
@@ -218,7 +202,7 @@ mod tests {
         let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
 
         let error = operation
-            .with_signature(owner.address(), signature)
+            .into_signed(owner.address(), signature)
             .unwrap_err();
 
         assert!(
@@ -244,9 +228,7 @@ mod tests {
             Authorization::SignedEip7702(authorization.into_signed(signature));
         let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
 
-        let signed = operation
-            .with_signature(owner.address(), signature)
-            .unwrap();
+        let signed = operation.into_signed(owner.address(), signature).unwrap();
 
         assert!(matches!(
             signed.user_op.authorization,
