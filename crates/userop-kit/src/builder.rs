@@ -21,35 +21,6 @@ pub struct UserOperationBuilder<S> {
     smart_account_type: std::marker::PhantomData<S>,
 }
 
-impl<S: SmartAccount> UserOperationBuilder<S> {
-    /// Creates a builder with the account's nonce, initialization, and estimation signature.
-    ///
-    /// # Errors
-    /// Returns an error if the account's nonce or initialization state cannot be read.
-    pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
-        let builder = Self::new(
-            smart_account.address(),
-            smart_account.entry_point(),
-            smart_account.domain(),
-        )
-        .with_nonce(smart_account.nonce().await?)
-        .with_signature(smart_account.dummy_signature());
-
-        Ok(match smart_account.init().await? {
-            AccountInit::None => builder,
-            AccountInit::Eip7702(auth) => builder.with_authorization(auth),
-            AccountInit::Factory { factory, data } => builder.with_factory(factory, data),
-        })
-    }
-
-    /// Sets the call data for this UserOperation by encoding the provided call using the smart
-    /// account's ABI encoding.
-    pub fn with_call(mut self, call: &S::Call) -> Self {
-        self.user_op.call_data = S::abi_encode_call(call);
-        self
-    }
-}
-
 impl<S> UserOperationBuilder<S> {
     /// Creates a new UserOperationBuilder with the specified sender, entry point, and EIP-712
     /// domain.
@@ -80,6 +51,36 @@ impl<S> UserOperationBuilder<S> {
     }
 }
 
+impl<S: SmartAccount> UserOperationBuilder<S> {
+    /// Creates a builder with the account's nonce, initialization, and estimation signature.
+    ///
+    /// # Errors
+    /// Returns an error if the account's nonce or initialization state cannot be read.
+    pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
+        let builder = Self::new(
+            smart_account.address(),
+            smart_account.entry_point(),
+            smart_account.domain(),
+        )
+        .with_nonce(smart_account.nonce().await?)
+        .with_stub_signature(smart_account.stub_signature());
+
+        Ok(match smart_account.init().await? {
+            AccountInit::None => builder,
+            AccountInit::Eip7702(auth) => builder.with_authorization(auth),
+            AccountInit::Factory { factory, data } => builder.with_factory(factory, data),
+        })
+    }
+
+    /// Sets the call data for this UserOperation by encoding `calls` with the smart account's
+    /// execution ABI.
+    pub fn with_calls(mut self, calls: impl IntoIterator<Item = S::Call>) -> Self {
+        let calls: Vec<S::Call> = calls.into_iter().collect();
+        self.user_op.call_data = S::encode_calls(&calls);
+        self
+    }
+}
+
 impl<S> UserOperationBuilder<S> {
     /// Sets the calldata for this UserOperation.
     pub fn with_calldata(mut self, calldata: Bytes) -> Self {
@@ -87,8 +88,8 @@ impl<S> UserOperationBuilder<S> {
         self
     }
 
-    /// Sets the paymaster address and data for this UserOperation.
-    pub fn with_paymaster_and_data(mut self, paymaster: Address, paymaster_data: Bytes) -> Self {
+    /// Sets the paymaster and the data passed to it for this UserOperation.
+    pub fn with_paymaster(mut self, paymaster: Address, paymaster_data: Bytes) -> Self {
         self.user_op.paymaster = Some(paymaster);
         self.user_op.paymaster_data = Some(paymaster_data);
         self
@@ -159,8 +160,10 @@ impl<S> UserOperationBuilder<S> {
         }
     }
 
-    /// Sets the signature for this UserOperation.
-    pub(crate) fn with_signature(mut self, signature: Bytes) -> Self {
+    /// Sets the placeholder signature used to simulate this UserOperation during gas estimation.
+    ///
+    /// Signing replaces it with the real signature.
+    pub fn with_stub_signature(mut self, signature: Bytes) -> Self {
         self.user_op.signature = signature;
         self
     }

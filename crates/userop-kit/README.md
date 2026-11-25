@@ -39,7 +39,7 @@ let payload = operation.typed_data();
 `SimpleAccount` supports an external eth-infinitism SimpleAccount v0.8.0
 address, including counterfactual deployment through its factory. Its account
 address is the UserOperation sender and withdrawal recipient; the EOA owner
-signs the operation. `Simple7702SmartAccount` supports EIP-7702 delegation to
+signs the operation. `Simple7702Account` supports EIP-7702 delegation to
 the implementation passed to `new`, such as
 `SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08`, which is not deployed on every chain.
 The implementation must preserve the v0.8 EntryPoint EIP-712 validation and

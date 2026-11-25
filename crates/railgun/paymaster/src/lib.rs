@@ -229,7 +229,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         fee: u128,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
@@ -251,7 +251,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         fee: u128,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
@@ -310,7 +310,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
     ) -> Result<(SignableUserOperation, SingleProofReport), UserOpError> {
@@ -423,7 +423,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         rng: &mut impl CryptoRng,
     ) -> Result<UserOpGas, UserOpError> {
         let mut fee = SEED_FEE;
@@ -483,7 +483,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         rng: &mut impl CryptoRng,
     ) -> Result<SignableUserOperation, UserOpError> {
         let gas = self
@@ -538,7 +538,7 @@ impl<'a> RailgunUserOps<'a> {
         // `&Vec` because `get_fee_operation` takes one.
         operations: &Vec<ProvedOperation>,
         sender: &S,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         privacy_paymaster: Address,
         railgun_fee_adapter: Address,
         fee_token: Address,
@@ -556,8 +556,8 @@ impl<'a> RailgunUserOps<'a> {
         Ok(UserOperationBuilder::new_with_smart_account(sender)
             .await
             .map_err(|e| UserOpError::Other(Box::new(e)))?
-            .with_call(calldata)
-            .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
+            .with_calls(calldata.iter().cloned())
+            .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data))
             .with_gas_limits(gas.limits)
             .with_max_fee_per_gas(gas.fees.max_fee_per_gas)
             .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas)
@@ -578,7 +578,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         rng: &mut impl CryptoRng,
     ) -> Result<SignableUserOperation, UserOpError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
@@ -632,8 +632,8 @@ impl<'a> RailgunUserOps<'a> {
             let mut signable = UserOperationBuilder::new_with_smart_account(sender)
                 .await
                 .map_err(|e| UserOpError::Other(Box::new(e)))?
-                .with_call(&calldata)
-                .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
+                .with_calls(calldata.iter().cloned())
+                .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data))
                 .with_gas_estimate(bundler, None)
                 .await?
                 .with_max_fee_per_gas(fees.max_fee_per_gas)

@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn with_signature_preserves_the_separate_account_sender() {
+    fn into_signed_preserves_the_separate_account_sender() {
         let operation = test_user_operation();
         let sender = operation.user_op.sender;
         let owner = owner();
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn with_signature_rejects_a_different_owner() {
+    fn into_signed_rejects_a_different_owner() {
         let operation = test_user_operation();
         let signature = owner().sign_hash_sync(&operation.signing_hash()).unwrap();
 
@@ -190,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn with_signature_rejects_an_unsigned_authorization() {
+    fn into_signed_rejects_an_unsigned_authorization() {
         let mut operation = test_user_operation();
         operation.user_op.authorization = Eip7702Auth::Unsigned(alloy::rpc::types::Authorization {
             chain_id: U256::from(1),
@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn with_signature_preserves_a_signed_authorization() {
+    fn into_signed_preserves_a_signed_authorization() {
         let mut operation = test_user_operation();
         let owner = owner();
         let authorization = alloy::rpc::types::Authorization {

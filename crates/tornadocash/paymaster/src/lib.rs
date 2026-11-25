@@ -109,7 +109,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
             })
             .prove(merkle_proof, circuit_artifacts, rng)?;
 
-        Ok(builder.with_paymaster_and_data(paymaster_address, encode_paymaster_data(&proven)))
+        Ok(builder.with_paymaster(paymaster_address, encode_paymaster_data(&proven)))
     }
 }
 
@@ -145,7 +145,7 @@ where
     let overrides = verifier_override(provider, pool).await?;
     let fees = bundler.get_user_operation_gas_price().await?.slow;
     let builder = builder
-        .with_paymaster_and_data(paymaster_address, encode_paymaster_data(&placeholder))
+        .with_paymaster(paymaster_address, encode_paymaster_data(&placeholder))
         .with_gas_estimate(bundler, Some(&overrides))
         .await?
         .with_max_fee_per_gas(fees.max_fee_per_gas)

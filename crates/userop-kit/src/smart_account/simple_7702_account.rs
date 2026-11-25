@@ -10,7 +10,7 @@ use alloy_sol_types::Eip712Domain;
 use crate::{
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
+        AccountInit, Call, ECDSA_STUB_SIGNATURE, SmartAccount, SmartAccountError,
         shared::{encode_execute_batch, entry_point_nonce},
     },
 };
@@ -23,14 +23,14 @@ pub const SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08: Address =
 
 /// An EIP-7702 account using the Simple7702 execution ABI.
 #[derive(Clone)]
-pub struct Simple7702SmartAccount<P: Provider> {
+pub struct Simple7702Account<P: Provider> {
     owner: Address,
     chain_id: u64,
     provider: P,
     implementation: Address,
 }
 
-impl<P: Provider> Simple7702SmartAccount<P> {
+impl<P: Provider> Simple7702Account<P> {
     /// Creates an account that delegates `owner` to `implementation`.
     ///
     /// The implementation must support Simple7702Account's v0.8 EIP-712
@@ -47,8 +47,8 @@ impl<P: Provider> Simple7702SmartAccount<P> {
 
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
-impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
-    type Call = Vec<Call>;
+impl<P: Provider> SmartAccount for Simple7702Account<P> {
+    type Call = Call;
 
     fn entry_point(&self) -> Address {
         ENTRY_POINT_08
@@ -76,12 +76,12 @@ impl<P: Provider> SmartAccount for Simple7702SmartAccount<P> {
         }))
     }
 
-    fn dummy_signature(&self) -> Bytes {
-        DUMMY_SIGNATURE.clone()
+    fn stub_signature(&self) -> Bytes {
+        ECDSA_STUB_SIGNATURE.clone()
     }
 
-    fn abi_encode_call(call_data: &Self::Call) -> Bytes {
-        encode_execute_batch(call_data)
+    fn encode_calls(calls: &[Self::Call]) -> Bytes {
+        encode_execute_batch(calls)
     }
 }
 
@@ -98,7 +98,7 @@ mod tests {
         let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
         let implementation = Address::repeat_byte(0x77);
         let account =
-            Simple7702SmartAccount::new(provider, Address::repeat_byte(0x44), implementation, 1);
+            Simple7702Account::new(provider, Address::repeat_byte(0x44), implementation, 1);
         mock.push_success(&"0x9");
 
         let AccountInit::Eip7702(auth) = account.init().await.unwrap() else {
@@ -113,7 +113,7 @@ mod tests {
     async fn builder_keeps_entrypoint_and_authorization_nonces_separate() {
         let mock = Asserter::new();
         let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account = Simple7702SmartAccount::new(
+        let account = Simple7702Account::new(
             provider,
             Address::repeat_byte(0x44),
             SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
@@ -140,7 +140,7 @@ mod tests {
         fn assert_send(_: impl Send) {}
 
         let provider = ProviderBuilder::new().connect_mocked_client(Asserter::new());
-        let account = Simple7702SmartAccount::new(
+        let account = Simple7702Account::new(
             provider,
             Address::repeat_byte(0x44),
             SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,

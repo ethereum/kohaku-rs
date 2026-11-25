@@ -9,7 +9,7 @@ use kohaku_railgun::{account::signer::RailgunSigner, caip::AssetId, transact::Sp
 use kohaku_userop_kit::{
     SignedUserOperation,
     smart_account::{
-        Call as AccountCall, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
+        Call as AccountCall, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -90,7 +90,7 @@ impl PoiSession {
     ) -> Result<String, JsError> {
         let key = B256::from(Hex(account_private_key).fixed::<32>()?);
         let account_signer = AccountSigner::from_bytes(&key).map_err(js_error)?;
-        let account = Simple7702SmartAccount::new(
+        let account = Simple7702Account::new(
             self.provider.clone(),
             account_signer.address(),
             SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,

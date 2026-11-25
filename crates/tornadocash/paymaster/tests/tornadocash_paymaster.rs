@@ -22,7 +22,7 @@ use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
     UserOperationBuilder,
     bundler::BundlerApi,
-    smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount},
+    smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
 };
 use tracing::info;
 
@@ -101,7 +101,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     // Sponsor a UserOp with the note
     info!("Withdrawing from pool with tornadocash paymaster");
     let owner = PrivateKeySigner::random();
-    let smart_account = Simple7702SmartAccount::new(
+    let smart_account = Simple7702Account::new(
         provider.clone(),
         owner.address(),
         SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
@@ -110,7 +110,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
 
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
-        .with_call(&vec![Call {
+        .with_calls([Call {
             to: SINK,
             ..Default::default()
         }]);
@@ -212,7 +212,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
     // Spend 90% of the note within the same operation that withdraws it
     let spend = U256::from(pool.amount_wei) * U256::from(90) / U256::from(100);
     let owner = PrivateKeySigner::random();
-    let smart_account = Simple7702SmartAccount::new(
+    let smart_account = Simple7702Account::new(
         provider.clone(),
         owner.address(),
         SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
@@ -221,7 +221,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
 
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
-        .with_call(&vec![Call {
+        .with_calls([Call {
             to: SINK,
             value: spend,
             ..Default::default()

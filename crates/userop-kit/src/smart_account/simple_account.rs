@@ -13,7 +13,7 @@ use crate::{
     abis::simple_account_factory::SimpleAccountFactory,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
+        AccountInit, Call, ECDSA_STUB_SIGNATURE, SmartAccount, SmartAccountError,
         shared::{encode_execute_batch, entry_point_nonce},
     },
 };
@@ -78,7 +78,7 @@ impl<P: Provider> SimpleAccount<P> {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl<P: Provider> SmartAccount for SimpleAccount<P> {
-    type Call = Vec<Call>;
+    type Call = Call;
 
     fn address(&self) -> Address {
         self.address
@@ -111,12 +111,12 @@ impl<P: Provider> SmartAccount for SimpleAccount<P> {
         }
     }
 
-    fn dummy_signature(&self) -> Bytes {
-        DUMMY_SIGNATURE.clone()
+    fn stub_signature(&self) -> Bytes {
+        ECDSA_STUB_SIGNATURE.clone()
     }
 
-    fn abi_encode_call(call: &Self::Call) -> Bytes {
-        encode_execute_batch(call)
+    fn encode_calls(calls: &[Self::Call]) -> Bytes {
+        encode_execute_batch(calls)
     }
 }
 

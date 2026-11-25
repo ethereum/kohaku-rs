@@ -15,7 +15,7 @@ the gas limits. The crate does not send a `UserOperation` or persist wallet stat
 
 ## Delegated and deployed execution accounts
 
-The existing builder accepts either `Simple7702SmartAccount` or `SimpleAccount`
+The existing builder accepts either `Simple7702Account` or `SimpleAccount`
 from `kohaku-userop-kit`.
 Both use the same v0.8 execution-call format and fee/proof path. Use the account's
 address as the payout recipient when the `UserOp` makes calls. For a deployed account,

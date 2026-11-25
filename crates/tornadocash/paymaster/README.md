@@ -25,7 +25,7 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 # use kohaku_userop_kit::{
 #     UserOperationBuilder,
 #     bundler::BundlerApi,
-#     smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount},
+#     smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
 # };
 #
 # async fn example(
@@ -39,7 +39,7 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 let owner = PrivateKeySigner::random();
 let bundler = RootProvider::new_http("https://bundler.pimlico.com".parse()?);
 
-let smart_account = Simple7702SmartAccount::new(
+let smart_account = Simple7702Account::new(
     provider.clone(),
     owner.address(),
     SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
@@ -47,7 +47,7 @@ let smart_account = Simple7702SmartAccount::new(
 );
 let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
     .await?
-    .with_call(&vec![Call::default()]);
+    .with_calls([Call::default()]);
 
 // The note pays for gas, and its remainder is withdrawn to `owner` during validation, so the
 // operation's own calls can spend it.
