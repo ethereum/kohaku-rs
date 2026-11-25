@@ -143,4 +143,4 @@ account and RNG helpers use `SchemeError`.
 See [tests/README.md][tests] for native and browser commands, fixture sources,
 and update instructions. Set `RUST_LOG=kohaku_stealth=debug` for SDK logs.
 
-[tests]: https://github.com/0xakk0r0kamui/kohaku-sapq-rs/blob/master/crates/stealth/tests/README.md
+[tests]: https://github.com/ethereum/kohaku-rs/blob/master/crates/stealth/tests/README.md
