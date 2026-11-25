@@ -153,7 +153,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
         )
         .await?;
     let calls = vec![Call {
-        target: chain.wrapped_base_token,
+        to: chain.wrapped_base_token,
         value: U256::ZERO,
         data: weth_contract
             .withdraw(U256::from(UNWRAP_AMOUNT))
