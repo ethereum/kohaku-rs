@@ -8,13 +8,13 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(typescript_type = "number")]
     pub type JsU8;
-    #[wasm_bindgen(typescript_type = "number")]
+    #[wasm_bindgen(typescript_type = "number", is_type_of = |value| value.as_f64().is_some())]
     pub type JsU32;
-    #[wasm_bindgen(typescript_type = "bigint")]
+    #[wasm_bindgen(typescript_type = "bigint", is_type_of = JsValue::is_bigint)]
     pub type JsU64;
     #[wasm_bindgen(typescript_type = "bigint")]
     pub type JsU128;
-    #[wasm_bindgen(typescript_type = "bigint")]
+    #[wasm_bindgen(typescript_type = "bigint", is_type_of = JsValue::is_bigint)]
     pub type JsU256;
 }
 

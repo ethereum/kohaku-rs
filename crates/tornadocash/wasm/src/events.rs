@@ -25,33 +25,37 @@ pub struct LogInput {
 }
 
 /// A plain JavaScript snapshot of [`SyncEvent`].
-#[derive(Serialize, Deserialize, Tsify)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
+#[derive(Serialize, Tsify)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DecodedEvent {
-    Deposit {
-        commitment: Hex,
-        #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
-        #[tsify(type = "number")]
-        leaf_index: JsU32,
-        #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
-        #[tsify(type = "bigint")]
-        block_number: JsU64,
-    },
-    Withdrawal {
-        to: Hex,
-        nullifier_hash: Hex,
-        relayer: Hex,
-        #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
-        #[tsify(type = "bigint")]
-        fee: JsU256,
-        #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
-        #[tsify(type = "bigint")]
-        block_number: JsU64,
-    },
+    Deposit(DecodedDepositEvent),
+    Withdrawal(DecodedWithdrawalEvent),
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DecodedDepositEvent {
+    commitment: Hex,
+    #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
+    #[tsify(type = "number")]
+    leaf_index: JsU32,
+    #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
+    #[tsify(type = "bigint")]
+    block_number: JsU64,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DecodedWithdrawalEvent {
+    to: Hex,
+    nullifier_hash: Hex,
+    relayer: Hex,
+    #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
+    #[tsify(type = "bigint")]
+    fee: JsU256,
+    #[serde(with = "tsify::serde_wasm_bindgen::preserve")]
+    #[tsify(type = "bigint")]
+    block_number: JsU64,
 }
 
 /// Decode a supplied log into a [`SyncEvent`].
@@ -78,19 +82,39 @@ pub fn decode_event(log: &Ts<LogInput>) -> Result<Option<Ts<DecodedEvent>>, JsEr
 impl From<SyncEvent> for DecodedEvent {
     fn from(event: SyncEvent) -> Self {
         match event {
-            SyncEvent::Deposit(event) => Self::Deposit {
+            SyncEvent::Deposit(event) => Self::Deposit(DecodedDepositEvent {
                 commitment: event.commitment.into(),
                 leaf_index: event.leaf_index.into(),
                 block_number: event.block_number.into(),
-            },
-            SyncEvent::Withdrawal(event) => Self::Withdrawal {
+            }),
+            SyncEvent::Withdrawal(event) => Self::Withdrawal(DecodedWithdrawalEvent {
                 to: event.to.into(),
                 nullifier_hash: event.nullifier_hash.into(),
                 relayer: event.relayer.into(),
                 fee: event.fee.into(),
                 block_number: event.block_number.into(),
-            },
+            }),
         }
+    }
+}
+
+impl DecodedEvent {
+    pub(crate) fn to_sync_event(event: Ts<Self>) -> Result<SyncEvent, JsError> {
+        #[derive(Deserialize)]
+        struct EventTag {
+            kind: String,
+        }
+
+        // Serde buffers internally tagged enums, losing the original JS numbers and bigints.
+        // Read the tag separately so the payload deserializer receives the JS values directly.
+        let value = JsValue::from(event);
+        let tag: EventTag = tsify::serde_wasm_bindgen::from_value(value.clone())?;
+        let decoded = match tag.kind.as_str() {
+            "deposit" => Self::Deposit(DecodedDepositEvent::from_js(value)?),
+            "withdrawal" => Self::Withdrawal(DecodedWithdrawalEvent::from_js(value)?),
+            _ => return Err(JsError::new("Unknown event kind")),
+        };
+        decoded.try_into()
     }
 }
 
@@ -99,27 +123,17 @@ impl TryFrom<DecodedEvent> for SyncEvent {
 
     fn try_from(event: DecodedEvent) -> Result<Self, Self::Error> {
         Ok(match event {
-            DecodedEvent::Deposit {
-                commitment,
-                leaf_index,
-                block_number,
-            } => Self::Deposit(DepositEvent {
-                commitment: commitment.try_into()?,
-                leaf_index: leaf_index.try_into()?,
-                block_number: block_number.try_into()?,
+            DecodedEvent::Deposit(event) => Self::Deposit(DepositEvent {
+                commitment: event.commitment.try_into()?,
+                leaf_index: event.leaf_index.try_into()?,
+                block_number: event.block_number.try_into()?,
             }),
-            DecodedEvent::Withdrawal {
-                to,
-                nullifier_hash,
-                relayer,
-                fee,
-                block_number,
-            } => Self::Withdrawal(WithdrawalEvent {
-                to: to.try_into()?,
-                nullifier_hash: nullifier_hash.try_into()?,
-                relayer: relayer.try_into()?,
-                fee: fee.try_into()?,
-                block_number: block_number.try_into()?,
+            DecodedEvent::Withdrawal(event) => Self::Withdrawal(WithdrawalEvent {
+                to: event.to.try_into()?,
+                nullifier_hash: event.nullifier_hash.try_into()?,
+                relayer: event.relayer.try_into()?,
+                fee: event.fee.try_into()?,
+                block_number: event.block_number.try_into()?,
             }),
         })
     }
@@ -170,18 +184,19 @@ mod wasm_tests {
             leaf_index: 7,
             block_number: 9_007_199_254_740_993,
         });
-        let DecodedEvent::Deposit {
-            commitment,
-            leaf_index,
-            block_number,
-        } = DecodedEvent::from(event)
-        else {
+        let DecodedEvent::Deposit(event) = DecodedEvent::from(event) else {
             panic!("expected deposit snapshot");
         };
 
-        assert_eq!(Field::try_from(commitment).unwrap(), expected_commitment);
-        assert_eq!(u32::try_from(leaf_index).unwrap(), 7);
-        assert_eq!(u64::try_from(block_number).unwrap(), 9_007_199_254_740_993);
+        assert_eq!(
+            Field::try_from(event.commitment).unwrap(),
+            expected_commitment
+        );
+        assert_eq!(u32::try_from(event.leaf_index).unwrap(), 7);
+        assert_eq!(
+            u64::try_from(event.block_number).unwrap(),
+            9_007_199_254_740_993
+        );
     }
 
     #[wasm_bindgen_test]
@@ -197,22 +212,18 @@ mod wasm_tests {
             fee: expected_fee,
             block_number: 42,
         });
-        let DecodedEvent::Withdrawal {
-            to,
-            nullifier_hash,
-            relayer,
-            fee,
-            block_number,
-        } = DecodedEvent::from(event)
-        else {
+        let DecodedEvent::Withdrawal(event) = DecodedEvent::from(event) else {
             panic!("expected withdrawal snapshot");
         };
 
-        assert_eq!(Address::try_from(to).unwrap(), recipient);
-        assert_eq!(Field::try_from(nullifier_hash).unwrap(), expected_nullifier);
-        assert_eq!(Address::try_from(relayer).unwrap(), expected_relayer);
-        assert_eq!(U256::try_from(fee).unwrap(), expected_fee);
-        assert_eq!(u64::try_from(block_number).unwrap(), 42);
+        assert_eq!(Address::try_from(event.to).unwrap(), recipient);
+        assert_eq!(
+            Field::try_from(event.nullifier_hash).unwrap(),
+            expected_nullifier
+        );
+        assert_eq!(Address::try_from(event.relayer).unwrap(), expected_relayer);
+        assert_eq!(U256::try_from(event.fee).unwrap(), expected_fee);
+        assert_eq!(u64::try_from(event.block_number).unwrap(), 42);
     }
 
     #[wasm_bindgen_test]
