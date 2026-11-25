@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use alloy::{
     primitives::{Address, B256, Bytes, U256},
+    providers::RootProvider,
     signers::local::PrivateKeySigner as AccountSigner,
 };
 use kohaku_railgun::{account::signer::RailgunSigner, caip::AssetId, transact::Spend};
 use kohaku_userop_kit::{
-    bundler::pimlico::PimlicoBundler,
     signed_user_operation::SignedUserOperation,
     smart_account::{
         Call as AccountCall,
@@ -42,7 +42,7 @@ fn account_calls(text: &str) -> Result<Vec<AccountCall>, JsError> {
         .into_iter()
         .map(|call| {
             Ok(AccountCall {
-                target: Address::try_from(Hex(call.target))?,
+                to: Address::try_from(Hex(call.target))?,
                 value: call.value.parse().map_err(js_error)?,
                 data: Bytes::from(Hex(call.data).bytes()?),
             })
@@ -77,7 +77,7 @@ fn weth_withdraw(weth: Address, amount: u128) -> AccountCall {
     let mut calldata = vec![0x2e, 0x1a, 0x7d, 0x4d];
     calldata.extend_from_slice(&U256::from(amount).to_be_bytes::<32>());
     AccountCall {
-        target: weth,
+        to: weth,
         value: U256::ZERO,
         data: calldata.into(),
     }
@@ -103,7 +103,7 @@ impl PoiSession {
         if !matches!(bundler_url.scheme(), "http" | "https") {
             return Err(JsError::new("Railgun bundler URL must use HTTP or HTTPS"));
         }
-        let bundler = PimlicoBundler::new(bundler_url);
+        let bundler = RootProvider::new_http(bundler_url);
         let fee_payer: Arc<dyn RailgunSigner> = self.signer.clone();
         let fee_token = self.wallet.chain().wrapped_base_token;
         let signable = self
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn weth_unwrap_is_first_and_uses_exact_requested_amount() {
         let call = weth_withdraw(Address::ZERO, 42);
-        assert_eq!(call.target, Address::ZERO);
+        assert_eq!(call.to, Address::ZERO);
         assert_eq!(&call.data[..4], &[0x2e, 0x1a, 0x7d, 0x4d]);
         assert_eq!(&call.data[4..], &U256::from(42).to_be_bytes::<32>());
     }

@@ -11,7 +11,10 @@ use kohaku_tornadocash::{
 };
 use kohaku_tornadocash_circuit::CircuitArtifacts;
 use kohaku_tornadocash_provider::TornadoProviderExt;
-use kohaku_userop_kit::{builder::UserOperationBuilder, bundler::Bundler};
+use kohaku_userop_kit::{
+    builder::UserOperationBuilder,
+    bundler::{BundlerApi, pimlico::PimlicoApi},
+};
 
 use crate::abis::{TornadoPaymaster, TornadoPaymasterData};
 
@@ -49,7 +52,7 @@ pub trait UserOperationPaymasterExt: Sized {
     ) -> impl std::future::Future<Output = Result<Self, PaymasterError>>
     where
         R: rand::CryptoRng,
-        B: Bundler + ?Sized;
+        B: BundlerApi + PimlicoApi + ?Sized;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,8 +62,6 @@ pub enum PaymasterError {
     PoolMissingPaymaster(Pool),
     #[error("Pool denomination cannot cover the operation's gas: {required} > {denomination}")]
     InsufficientDenomination { required: U256, denomination: U256 },
-    #[error("Bundler error: {0}")]
-    Bundler(#[from] kohaku_userop_kit::bundler::BundlerError),
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::contract::Error),
     #[error("Transport error: {0}")]
@@ -82,7 +83,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
     ) -> Result<Self, PaymasterError>
     where
         R: rand::CryptoRng,
-        B: Bundler + ?Sized,
+        B: BundlerApi + PimlicoApi + ?Sized,
     {
         let pool = &withdrawal.pool;
         let paymaster_address = pool
@@ -122,7 +123,7 @@ async fn estimate_fee<S, B>(
     bundler: &B,
 ) -> Result<(UserOperationBuilder<S>, U256), PaymasterError>
 where
-    B: Bundler + ?Sized,
+    B: BundlerApi + PimlicoApi + ?Sized,
 {
     let pool = &withdrawal.pool;
     let denomination = U256::from(pool.amount_wei);
@@ -142,10 +143,13 @@ where
         .prove_dummy(merkle_proof);
 
     let overrides = verifier_override(provider, pool).await?;
+    let fees = bundler.get_user_operation_gas_price().await?.slow;
     let builder = builder
         .with_paymaster_and_data(paymaster_address, encode_paymaster_data(&placeholder))
         .with_gas_estimate(bundler, Some(&overrides))
-        .await?;
+        .await?
+        .with_max_fee_per_gas(fees.max_fee_per_gas)
+        .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas);
 
     let cost = gas_cost(provider, pool, paymaster_address, &builder).await?;
     let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);

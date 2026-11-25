@@ -1,12 +1,12 @@
-#[cfg(feature = "bundler")]
-use alloy::rpc::types::state::StateOverride;
 use alloy::{
     dyn_abi::Eip712Domain,
     primitives::{Address, Bytes, U256},
 };
+#[cfg(feature = "bundler")]
+use alloy::{rpc::types::state::StateOverride, transports::TransportResult};
 
 #[cfg(feature = "bundler")]
-use crate::bundler::{Bundler, BundlerError};
+use crate::bundler::BundlerApi;
 use crate::{
     signable_user_operation::SignableUserOperation,
     smart_account::{AccountInit, SmartAccount, SmartAccountError},
@@ -106,28 +106,41 @@ impl<S> UserOperationBuilder<S> {
         self
     }
 
-    /// Sets the gas parameters for this UserOperation.
-    pub fn with_gas(mut self, gas: UserOperationGasEstimate) -> Self {
-        self.set_gas(gas);
+    /// Sets the gas limits for this UserOperation.
+    pub fn with_gas_limits(mut self, gas: UserOperationGasEstimate) -> Self {
+        self.set_gas_limits(gas);
         self
     }
 
-    /// Estimates and sets the gas for this UserOperation.
+    /// Sets the max fee per gas for this UserOperation.
+    pub fn with_max_fee_per_gas(mut self, max_fee_per_gas: u128) -> Self {
+        self.user_op.max_fee_per_gas = max_fee_per_gas;
+        self
+    }
+
+    /// Sets the max priority fee per gas for this UserOperation.
+    pub fn with_max_priority_fee_per_gas(mut self, max_priority_fee_per_gas: u128) -> Self {
+        self.user_op.max_priority_fee_per_gas = max_priority_fee_per_gas;
+        self
+    }
+
+    /// Estimates and sets the gas limits for this UserOperation.
     ///
     /// Simulates against `state_override` if provided.
     ///
     /// # Errors
     /// Returns an error if the bundler's gas estimation fails.
     #[cfg(feature = "bundler")]
-    pub async fn with_gas_estimate<B: Bundler + ?Sized>(
+    pub async fn with_gas_estimate<B: BundlerApi + ?Sized>(
         self,
         bundler: &B,
         state_override: Option<&StateOverride>,
-    ) -> Result<Self, BundlerError> {
-        let op = self.build();
-        let est = bundler.estimate_gas(&op, state_override).await?;
+    ) -> TransportResult<Self> {
+        let estimate = bundler
+            .estimate_user_operation_gas(&self.build(), state_override)
+            .await?;
 
-        Ok(self.with_gas(est))
+        Ok(self.with_gas_limits(estimate))
     }
 
     /// Sets the factory and factory data for this UserOperation.
@@ -152,13 +165,11 @@ impl<S> UserOperationBuilder<S> {
         self
     }
 
-    fn set_gas(&mut self, gas: UserOperationGasEstimate) {
+    fn set_gas_limits(&mut self, gas: UserOperationGasEstimate) {
         self.user_op.call_gas_limit = gas.call_gas_limit;
         self.user_op.verification_gas_limit = gas.verification_gas_limit;
         self.user_op.pre_verification_gas = gas.pre_verification_gas;
         self.user_op.paymaster_verification_gas_limit = gas.paymaster_verification_gas_limit;
         self.user_op.paymaster_post_op_gas_limit = gas.paymaster_post_op_gas_limit;
-        self.user_op.max_fee_per_gas = gas.max_fee_per_gas;
-        self.user_op.max_priority_fee_per_gas = gas.max_priority_fee_per_gas;
     }
 }

@@ -51,7 +51,7 @@ pub enum AccountInit {
 #[serde(rename_all = "camelCase")]
 pub struct Call {
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub target: Address,
+    pub to: Address,
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]
     pub value: U256,
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]

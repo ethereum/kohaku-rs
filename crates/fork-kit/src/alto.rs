@@ -4,11 +4,10 @@ use std::{ops::Deref, process::Stdio, time::Duration};
 
 use alloy::{
     primitives::{Address, U256},
-    providers::{DynProvider, Provider},
+    providers::{DynProvider, Provider, RootProvider},
     signers::local::PrivateKeySigner,
 };
 use anyhow::bail;
-use kohaku_userop_kit::bundler::pimlico::PimlicoBundler;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command},
@@ -29,10 +28,10 @@ pub struct AltoBuilder {
     utility_private_key: String,
 }
 
-/// A running [`alto`](https://github.com/pimlicolabs/alto) process and a connected [`PimlicoBundler`].
+/// A running [`alto`](https://github.com/pimlicolabs/alto) process and a provider connected to it.
 pub struct AltoInstance {
     child: Child,
-    bundler: PimlicoBundler,
+    bundler: RootProvider,
 }
 
 impl AltoBuilder {
@@ -125,7 +124,7 @@ impl AltoBuilder {
         match timeout(READY_TIMEOUT, ready_rx).await {
             Ok(Ok(())) => Ok(AltoInstance {
                 child,
-                bundler: PimlicoBundler::new(format!("http://127.0.0.1:{port}").parse()?),
+                bundler: RootProvider::new_http(format!("http://127.0.0.1:{port}").parse()?),
             }),
             Ok(Err(_)) => {
                 let _ = child.start_kill();
@@ -166,7 +165,7 @@ async fn forward_lines(stream: impl AsyncRead + Unpin, label: &'static str) {
 }
 
 impl Deref for AltoInstance {
-    type Target = PimlicoBundler;
+    type Target = RootProvider;
 
     fn deref(&self) -> &Self::Target {
         &self.bundler

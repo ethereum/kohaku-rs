@@ -41,7 +41,7 @@ pub fn encode_execute_batch(calls: &[Call]) -> Bytes {
     let calls = calls
         .iter()
         .map(|call| BaseAccount::Call {
-            target: call.target,
+            target: call.to,
             value: call.value,
             data: call.data.clone(),
         })

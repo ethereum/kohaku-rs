@@ -50,6 +50,12 @@ For an external owner signer, send `operation.typed_data()` to
 `operation.into_signed(owner, signature)?`. An EIP-7702 authorization must
 already be signed. `sign(&owner)` remains available for local signers.
 
+The `bundler` module adds ERC-4337 bundler methods to any alloy provider
+connected to a bundler, such as `RootProvider::new_http(bundler_url)`:
+`BundlerApi` for the standard methods, and `PimlicoApi` for Pimlico's gas
+price. `send_user_operation` returns a `PendingUserOperation`; call
+`.get_receipt()` on it to wait for inclusion.
+
 Use final bundler simulation before broadcasting, including factory gas and
 the full withdrawal call sequence. Keep the account recoverable if execution
 fails after a validation-phase payout or postOp refund. Account bytecode and
