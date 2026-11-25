@@ -1,13 +1,10 @@
 //! SimpleAccount v0.8 accounts deployed directly or through SimpleAccountFactory.
 
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes, U256},
     providers::Provider,
-    rpc::types::TransactionRequest,
 };
 use alloy_sol_types::{Eip712Domain, SolCall};
-use anyhow::Context;
 
 use crate::{
     abis::simple_account_factory::SimpleAccountFactory,
@@ -52,16 +49,10 @@ impl<P: Provider> SimpleAccount<P> {
         salt: U256,
         chain_id: u64,
     ) -> Result<Self, SmartAccountError> {
-        let data = SimpleAccountFactory::getAddressCall::new((owner, salt)).abi_encode();
-        let ret = provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(factory)
-                    .with_input(data),
-            )
+        let address = SimpleAccountFactory::new(factory, &provider)
+            .getAddress(owner, salt)
+            .call()
             .await?;
-        let address = SimpleAccountFactory::getAddressCall::abi_decode_returns(&ret)
-            .context("Invalid SimpleAccountFactory address response")?;
         let data = SimpleAccountFactory::createAccountCall::new((owner, salt))
             .abi_encode()
             .into();

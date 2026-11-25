@@ -4,7 +4,7 @@ use crate::{
     bundler::PendingUserOperation,
     signable_user_operation::SignableUserOperation,
     signed_user_operation::SignedUserOperation,
-    user_operation::{UserOperationGasEstimate, UserOperationHash, UserOperationReceipt},
+    user_operation::{UserOperationGasLimits, UserOperationHash, UserOperationReceipt},
 };
 
 /// ERC-4337 bundler methods (ERC-7769).
@@ -17,7 +17,7 @@ pub trait BundlerApi: Send + Sync {
         &self,
         op: &SignableUserOperation,
         state_override: Option<&StateOverride>,
-    ) -> TransportResult<UserOperationGasEstimate>;
+    ) -> TransportResult<UserOperationGasLimits>;
 
     async fn send_user_operation(
         &self,
@@ -37,7 +37,7 @@ impl<P: Provider> BundlerApi for P {
         &self,
         op: &SignableUserOperation,
         state_override: Option<&StateOverride>,
-    ) -> TransportResult<UserOperationGasEstimate> {
+    ) -> TransportResult<UserOperationGasLimits> {
         //? The state override is an optional trailing param, so omit it rather
         //? than sending `null`.
         let Some(state_override) = state_override else {

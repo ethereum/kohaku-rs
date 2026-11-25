@@ -16,6 +16,6 @@ pub use entry_point::ENTRY_POINT_08;
 pub use signable_user_operation::SignableUserOperation;
 pub use signed_user_operation::SignedUserOperation;
 pub use user_operation::{
-    Eip7702Auth, PackedUserOperation, UserOperation, UserOperationGasEstimate, UserOperationHash,
+    Eip7702Auth, PackedUserOperation, UserOperation, UserOperationGasLimits, UserOperationHash,
     UserOperationReceipt,
 };

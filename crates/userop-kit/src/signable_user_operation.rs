@@ -13,7 +13,7 @@ use crate::{
 
 /// A signable UserOperation, which includes the UserOperation data alongside the EntryPoint to
 /// which it will be sent.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignableUserOperation {
     pub user_op: UserOperation,
@@ -23,9 +23,9 @@ pub struct SignableUserOperation {
 
 impl SignableUserOperation {
     /// Signs the UserOperation with the provided signer
-    pub async fn sign(
+    pub async fn sign<S: Signer + ?Sized>(
         &self,
-        signer: &dyn Signer,
+        signer: &S,
     ) -> Result<SignedUserOperation, alloy::signers::Error> {
         let mut user_op = self.user_op.clone();
 

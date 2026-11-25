@@ -15,6 +15,7 @@ bundler = ["dep:tokio", "dep:gloo-timers", "dep:web-time"]
 
 [dependencies]
 alloy = { workspace = true, features = [
+    "contract",
     "signers",
     "dyn-abi",
     "eip712",

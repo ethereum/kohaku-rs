@@ -22,7 +22,7 @@ use kohaku_railgun::{
     wallet::{RailgunTransactor, RailgunWallet},
 };
 use kohaku_userop_kit::{
-    SignableUserOperation, UserOperationBuilder, UserOperationGasEstimate,
+    SignableUserOperation, UserOperationBuilder, UserOperationGasLimits,
     bundler::{BundlerApi, PimlicoApi},
     smart_account::SmartAccount,
 };
@@ -53,7 +53,7 @@ pub struct SingleProofReport {
 /// Gas limits and fees for a `UserOperation`.
 #[derive(Debug, Clone, Copy)]
 pub struct UserOpGas {
-    pub limits: UserOperationGasEstimate,
+    pub limits: UserOperationGasLimits,
     pub fees: Eip1559Estimation,
 }
 
@@ -439,7 +439,7 @@ impl<'a> RailgunUserOps<'a> {
                     calldata,
                     fee,
                     UserOpGas {
-                        limits: UserOperationGasEstimate {
+                        limits: UserOperationGasLimits {
                             pre_verification_gas: 0,
                             verification_gas_limit: 0,
                             call_gas_limit: 0,
@@ -675,7 +675,7 @@ impl<'a> RailgunUserOps<'a> {
 }
 
 /// The sum of the limits, what the privacy paymaster multiplies by `maxFeePerGas` for the fee.
-fn total_gas_limit(gas: &UserOperationGasEstimate) -> u128 {
+fn total_gas_limit(gas: &UserOperationGasLimits) -> u128 {
     gas.pre_verification_gas
         + gas.verification_gas_limit
         + gas.call_gas_limit

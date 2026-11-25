@@ -102,6 +102,8 @@ pub trait SmartAccount: MaybeSend {
 pub enum SmartAccountError {
     #[error("Provider error: {0}")]
     ProviderError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
+    #[error("Contract call error: {0}")]
+    ContractError(#[from] alloy::contract::Error),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

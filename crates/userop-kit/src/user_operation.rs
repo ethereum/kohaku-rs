@@ -102,20 +102,20 @@ impl Eip7702Auth {
     }
 }
 
-/// A submitted user operation hash.
+/// A UserOperation hash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(js, derive(tsify::Tsify))]
 #[cfg_attr(js, tsify(into_wasm_abi, from_wasm_abi, type = "`0x${string}`"))]
 pub struct UserOperationHash(pub B256);
 
-/// Gas estimates returned by `eth_estimateUserOperationGas`.
+/// Gas limits returned by `eth_estimateUserOperationGas`.
 ///
 /// EntryPoint 0.7 & 0.8
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[cfg_attr(js, derive(tsify::Tsify))]
 #[cfg_attr(js, tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "camelCase")]
-pub struct UserOperationGasEstimate {
+pub struct UserOperationGasLimits {
     #[serde(with = "alloy::serde::quantity")]
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]
     pub pre_verification_gas: u128,

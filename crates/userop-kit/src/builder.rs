@@ -10,7 +10,7 @@ use crate::bundler::BundlerApi;
 use crate::{
     signable_user_operation::SignableUserOperation,
     smart_account::{AccountInit, SmartAccount, SmartAccountError},
-    user_operation::{Eip7702Auth, UserOperation, UserOperationGasEstimate},
+    user_operation::{Eip7702Auth, UserOperation, UserOperationGasLimits},
 };
 
 pub struct UserOperationBuilder<S> {
@@ -108,7 +108,7 @@ impl<S> UserOperationBuilder<S> {
     }
 
     /// Sets the gas limits for this UserOperation.
-    pub fn with_gas_limits(mut self, gas: UserOperationGasEstimate) -> Self {
+    pub fn with_gas_limits(mut self, gas: UserOperationGasLimits) -> Self {
         self.set_gas_limits(gas);
         self
     }
@@ -168,7 +168,7 @@ impl<S> UserOperationBuilder<S> {
         self
     }
 
-    fn set_gas_limits(&mut self, gas: UserOperationGasEstimate) {
+    fn set_gas_limits(&mut self, gas: UserOperationGasLimits) {
         self.user_op.call_gas_limit = gas.call_gas_limit;
         self.user_op.verification_gas_limit = gas.verification_gas_limit;
         self.user_op.pre_verification_gas = gas.pre_verification_gas;

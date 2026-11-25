@@ -6,6 +6,7 @@ use alloy::{
 use crate::user_operation::UserOperation;
 
 sol! {
+    #[sol(rpc)]
     contract EntryPoint {
         function getNonce(address sender, uint192 key) external view returns (uint256 nonce);
 
