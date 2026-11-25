@@ -7,12 +7,9 @@ use alloy::{
 };
 use kohaku_railgun::{account::signer::RailgunSigner, caip::AssetId, transact::Spend};
 use kohaku_userop_kit::{
-    signed_user_operation::SignedUserOperation,
+    SignedUserOperation,
     smart_account::{
-        Call as AccountCall,
-        simple_7702_smart_account::{
-            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
-        },
+        Call as AccountCall, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
     },
 };
 use serde::{Deserialize, Serialize};

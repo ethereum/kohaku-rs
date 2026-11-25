@@ -78,27 +78,27 @@ pub struct UserOperation {
     #[serde(
         rename = "eip7702Auth",
         default,
-        skip_serializing_if = "Authorization::is_none"
+        skip_serializing_if = "Eip7702Auth::is_none"
     )]
-    pub authorization: Authorization,
+    pub authorization: Eip7702Auth,
 
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]
     pub signature: Bytes,
 }
 
-/// Eip-7702 authorization
+/// An EIP-7702 authorization delegating the sender, if any.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Authorization {
+pub enum Eip7702Auth {
     #[default]
     None,
-    SignedEip7702(alloy::eips::eip7702::SignedAuthorization),
-    Eip7702(alloy::eips::eip7702::Authorization),
+    Signed(alloy::eips::eip7702::SignedAuthorization),
+    Unsigned(alloy::eips::eip7702::Authorization),
 }
 
-impl Authorization {
+impl Eip7702Auth {
     fn is_none(&self) -> bool {
-        matches!(self, Authorization::None)
+        matches!(self, Eip7702Auth::None)
     }
 }
 

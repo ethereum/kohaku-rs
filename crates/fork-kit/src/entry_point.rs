@@ -6,7 +6,7 @@ use alloy::{
     providers::{DynProvider, Provider},
     rpc::types::TransactionRequest,
 };
-use kohaku_userop_kit::entry_point::ENTRY_POINT_08;
+use kohaku_userop_kit::ENTRY_POINT_08;
 
 const DETERMINISTIC_DEPLOYER: Address = address!("0x4e59b44847b379578588920ca78fbf26c0b4956c");
 

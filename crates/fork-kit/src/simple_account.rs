@@ -9,7 +9,7 @@ use alloy::{
     providers::{DynProvider, Provider},
     rpc::types::TransactionRequest,
 };
-use kohaku_userop_kit::smart_account::simple_7702_smart_account::SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08;
+use kohaku_userop_kit::smart_account::SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08;
 
 const DETERMINISTIC_DEPLOYER: Address = address!("0x4e59b44847b379578588920ca78fbf26c0b4956c");
 

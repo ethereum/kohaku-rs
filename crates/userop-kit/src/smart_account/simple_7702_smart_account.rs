@@ -90,7 +90,7 @@ mod tests {
     use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
 
     use super::*;
-    use crate::{builder::UserOperationBuilder, user_operation::Authorization as OpAuthorization};
+    use crate::{builder::UserOperationBuilder, user_operation::Eip7702Auth};
 
     #[tokio::test]
     async fn init_uses_selected_implementation_and_current_native_nonce() {
@@ -126,7 +126,7 @@ mod tests {
             .await
             .unwrap()
             .build();
-        let OpAuthorization::Eip7702(auth) = operation.user_op.authorization else {
+        let Eip7702Auth::Unsigned(auth) = operation.user_op.authorization else {
             panic!("Expected EIP-7702 delegation");
         };
 

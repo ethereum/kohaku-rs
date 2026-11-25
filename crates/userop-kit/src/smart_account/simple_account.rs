@@ -125,7 +125,7 @@ mod tests {
     use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
 
     use super::*;
-    use crate::{builder::UserOperationBuilder, user_operation::Authorization};
+    use crate::{builder::UserOperationBuilder, user_operation::Eip7702Auth};
 
     #[tokio::test]
     async fn from_factory_resolves_address_from_factory() {
@@ -251,9 +251,6 @@ mod tests {
 
         assert_eq!(operation.user_op.factory, Some(factory));
         assert!(operation.user_op.factory_data.is_some());
-        assert!(matches!(
-            operation.user_op.authorization,
-            Authorization::None
-        ));
+        assert!(matches!(operation.user_op.authorization, Eip7702Auth::None));
     }
 }

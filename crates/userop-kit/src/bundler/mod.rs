@@ -2,7 +2,8 @@
 
 mod api;
 mod pending;
-pub mod pimlico;
+mod pimlico;
 
 pub use api::BundlerApi;
 pub use pending::{PendingUserOperation, PendingUserOperationError};
+pub use pimlico::{PimlicoApi, PimlicoGasPrice};

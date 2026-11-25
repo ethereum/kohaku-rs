@@ -12,8 +12,8 @@ Supports EIP-7702 delegation, existing smart accounts, and factory deployment.
 #     providers::DynProvider,
 # };
 # use kohaku_userop_kit::{
-#     builder::UserOperationBuilder,
-#     smart_account::simple_account::SimpleAccount,
+#     UserOperationBuilder,
+#     smart_account::SimpleAccount,
 # };
 #
 # async fn example(

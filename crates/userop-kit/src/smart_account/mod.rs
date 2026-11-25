@@ -8,8 +8,13 @@ use alloy_sol_types::Eip712Domain;
 use serde::{Deserialize, Serialize};
 
 mod shared;
-pub mod simple_7702_smart_account;
-pub mod simple_account;
+mod simple_7702_smart_account;
+mod simple_account;
+
+pub use simple_7702_smart_account::{
+    SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
+};
+pub use simple_account::SimpleAccount;
 
 // A nonzero 65-byte signature used when estimating ECDSA account validation.
 pub(crate) const DUMMY_SIGNATURE: Bytes = bytes!(

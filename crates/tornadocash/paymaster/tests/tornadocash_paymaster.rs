@@ -20,14 +20,9 @@ use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
 use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
-    builder::UserOperationBuilder,
+    UserOperationBuilder,
     bundler::BundlerApi,
-    smart_account::{
-        Call,
-        simple_7702_smart_account::{
-            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
-        },
-    },
+    smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount},
 };
 use tracing::info;
 

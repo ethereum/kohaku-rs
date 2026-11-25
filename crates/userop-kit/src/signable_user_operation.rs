@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     signed_user_operation::SignedUserOperation,
-    user_operation::{Authorization, PackedUserOperation, UserOperation},
+    user_operation::{Eip7702Auth, PackedUserOperation, UserOperation},
 };
 
 /// A signable UserOperation, which includes the UserOperation data alongside the EntryPoint to
@@ -36,13 +36,13 @@ impl SignableUserOperation {
             .into();
 
         user_op.authorization = match user_op.authorization {
-            Authorization::Eip7702(auth) => {
+            Eip7702Auth::Unsigned(auth) => {
                 let auth_hash = auth.signature_hash();
                 let auth_sig = signer.sign_hash(&auth_hash).await?;
-                Authorization::SignedEip7702(auth.into_signed(auth_sig))
+                Eip7702Auth::Signed(auth.into_signed(auth_sig))
             }
-            Authorization::SignedEip7702(auth) => Authorization::SignedEip7702(auth),
-            Authorization::None => Authorization::None,
+            Eip7702Auth::Signed(auth) => Eip7702Auth::Signed(auth),
+            Eip7702Auth::None => Eip7702Auth::None,
         };
 
         Ok(SignedUserOperation::new(
@@ -77,7 +77,7 @@ impl SignableUserOperation {
             "UserOperation signature does not match the selected owner"
         );
         anyhow::ensure!(
-            !matches!(self.user_op.authorization, Authorization::Eip7702(_)),
+            !matches!(self.user_op.authorization, Eip7702Auth::Unsigned(_)),
             "EIP-7702 authorization is still unsigned"
         );
         self.user_op.signature = signature.as_bytes().into();
@@ -192,12 +192,11 @@ mod tests {
     #[test]
     fn with_signature_rejects_an_unsigned_authorization() {
         let mut operation = test_user_operation();
-        operation.user_op.authorization =
-            Authorization::Eip7702(alloy::rpc::types::Authorization {
-                chain_id: U256::from(1),
-                address: Address::repeat_byte(0x77),
-                nonce: 9,
-            });
+        operation.user_op.authorization = Eip7702Auth::Unsigned(alloy::rpc::types::Authorization {
+            chain_id: U256::from(1),
+            address: Address::repeat_byte(0x77),
+            nonce: 9,
+        });
         let owner = owner();
         let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
 
@@ -224,15 +223,14 @@ mod tests {
         let signature = owner
             .sign_hash_sync(&authorization.signature_hash())
             .unwrap();
-        operation.user_op.authorization =
-            Authorization::SignedEip7702(authorization.into_signed(signature));
+        operation.user_op.authorization = Eip7702Auth::Signed(authorization.into_signed(signature));
         let signature = owner.sign_hash_sync(&operation.signing_hash()).unwrap();
 
         let signed = operation.into_signed(owner.address(), signature).unwrap();
 
         assert!(matches!(
             signed.user_op.authorization,
-            Authorization::SignedEip7702(_)
+            Eip7702Auth::Signed(_)
         ));
     }
 

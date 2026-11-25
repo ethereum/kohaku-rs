@@ -10,7 +10,7 @@ use crate::bundler::BundlerApi;
 use crate::{
     signable_user_operation::SignableUserOperation,
     smart_account::{AccountInit, SmartAccount, SmartAccountError},
-    user_operation::{UserOperation, UserOperationGasEstimate},
+    user_operation::{Eip7702Auth, UserOperation, UserOperationGasEstimate},
 };
 
 pub struct UserOperationBuilder<S> {
@@ -102,7 +102,7 @@ impl<S> UserOperationBuilder<S> {
 
     /// Sets the EIP-7702 authorization for this UserOperation.
     pub fn with_authorization(mut self, auth: alloy::eips::eip7702::Authorization) -> Self {
-        self.user_op.authorization = crate::user_operation::Authorization::Eip7702(auth);
+        self.user_op.authorization = Eip7702Auth::Unsigned(auth);
         self
     }
 
