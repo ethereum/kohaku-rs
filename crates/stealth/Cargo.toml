@@ -3,7 +3,7 @@ name = "kohaku-stealth"
 version = "0.1.0"
 edition = "2024"
 description = "ERC-5564 scheme 3 client: register, announce, scan, and spend."
-license = "Apache-2.0 OR MIT"
+license.workspace = true
 publish = false
 
 [dependencies]
@@ -43,6 +43,7 @@ serde = { workspace = true, features = ["derive"] }
 alloy = { workspace = true, features = ["provider-anvil-node"] }
 anyhow = { workspace = true }
 hex = { workspace = true }
+kohaku-fork-kit = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

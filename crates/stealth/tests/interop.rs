@@ -315,8 +315,9 @@ async fn rate_limit_exhausts_retries() {
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn addresses_are_not_logged() {
-    use kohaku_stealth::{StealthProviderExt, contracts::register_keys_on_behalf};
     use std::sync::Mutex;
+
+    use kohaku_stealth::{StealthProviderExt, contracts::register_keys_on_behalf};
     use tracing::instrument::WithSubscriber;
 
     // Keep callsite interest dynamic while tests run in parallel.

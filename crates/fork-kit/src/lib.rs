@@ -9,6 +9,7 @@ pub mod pool;
 pub mod railgun;
 pub mod relayer;
 pub mod simple_account;
+pub mod stealth;
 
 use alloy::{
     primitives::{Address, U256},

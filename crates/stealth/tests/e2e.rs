@@ -3,7 +3,7 @@
 use alloy::{
     network::TransactionBuilder,
     node_bindings::Anvil,
-    primitives::{Address, Bytes, U256},
+    primitives::{Address, U256},
     providers::{Provider, ProviderBuilder, ext::AnvilApi},
     rpc::types::TransactionRequest,
     signers::{SignerSync, local::PrivateKeySigner},
@@ -11,9 +11,10 @@ use alloy::{
     sol_types::{SolCall, SolStruct, eip712_domain},
 };
 use futures::{TryStreamExt, pin_mut, stream};
+use kohaku_fork_kit::stealth::deploy_stealth;
 use kohaku_stealth::{
-    Account, AccountSeed, Deployment, ExposeSecret, FetchError, FetchEvent, ScanEvent, SchemeError,
-    SchemeId3, StealthProviderExt, StealthScheme, StreamedEventConfig,
+    Account, AccountSeed, ExposeSecret, FetchError, FetchEvent, ScanEvent, SchemeError, SchemeId3,
+    StealthProviderExt, StealthScheme, StreamedEventConfig,
     contracts::{prepare_announcement, register_keys, register_keys_on_behalf},
     generate_stealth_address, get_announcements, get_announcements_for_user,
 };
@@ -26,9 +27,6 @@ use abis::{IERC5564Announcer, IERC6538Registry};
 
 #[path = "fixtures/mod.rs"]
 mod fixtures;
-
-const ANNOUNCER: Address = Deployment::ETHEREUM.announcer;
-const REGISTRY: Address = Deployment::ETHEREUM.registry;
 
 sol! {
     struct Erc6538RegistryEntry {
@@ -63,20 +61,7 @@ async fn receive_and_spend() -> anyhow::Result<()> {
     let recipient_provider = ProviderBuilder::new()
         .wallet(recipient.clone())
         .connect_http(url.clone());
-    for (address, runtime) in [
-        (ANNOUNCER, include_str!("contracts/ERC5564Announcer.hex")),
-        (REGISTRY, include_str!("contracts/ERC6538Registry.hex")),
-    ] {
-        let code = runtime.trim().parse::<Bytes>()?;
-        provider.anvil_set_code(address, code.clone()).await?;
-        assert_eq!(provider.get_code_at(address).await?, code);
-    }
-    let deployment = Deployment {
-        chain_id: provider.get_chain_id().await?,
-        announcer: ANNOUNCER,
-        registry: REGISTRY,
-        start_block: 0,
-    };
+    let deployment = deploy_stealth(provider.clone()).await?;
     let fixture = fixtures::Payment::load();
     let account = fixture.account();
     assert_eq!(fixture.scheme_id, SchemeId3::SCHEME_ID);
@@ -159,7 +144,7 @@ async fn receive_and_spend() -> anyhow::Result<()> {
         let receipt = provider
             .send_transaction(
                 TransactionRequest::default()
-                    .with_to(ANNOUNCER)
+                    .with_to(deployment.announcer)
                     .with_input(call.abi_encode()),
             )
             .await?
@@ -281,21 +266,8 @@ async fn registration_on_behalf() -> anyhow::Result<()> {
         .wallet(relayer.clone())
         .connect_http(anvil.endpoint_url())
         .erased();
-    provider
-        .anvil_set_code(
-            REGISTRY,
-            include_str!("contracts/ERC6538Registry.hex")
-                .trim()
-                .parse()?,
-        )
-        .await?;
-    let registry = IERC6538Registry::new(REGISTRY, &provider);
-    let deployment = Deployment {
-        chain_id: provider.get_chain_id().await?,
-        announcer: ANNOUNCER,
-        registry: REGISTRY,
-        start_block: 0,
-    };
+    let deployment = deploy_stealth(provider.clone()).await?;
+    let registry = IERC6538Registry::new(deployment.registry, &provider);
     let fixture = fixtures::Payment::load();
     let meta_address = SchemeId3::meta_from_bytes(&fixture.meta_address).unwrap();
     assert!(
@@ -313,7 +285,7 @@ async fn registration_on_behalf() -> anyhow::Result<()> {
         name: "ERC6538Registry",
         version: "1.0",
         chain_id: deployment.chain_id,
-        verifying_contract: REGISTRY,
+        verifying_contract: deployment.registry,
     };
     assert_eq!(
         domain.hash_struct(),
