@@ -1,0 +1,11 @@
+{
+  "name": "kohaku-tornadocash-wasm-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test *.test.cjs",
+    "test:browser": "node --test browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

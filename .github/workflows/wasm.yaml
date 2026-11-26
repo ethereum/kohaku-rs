@@ -76,3 +76,37 @@ jobs:
       - name: Smoke test Railgun Node bindings
         if: matrix.name == 'Railgun'
         run: node crates/railgun/wasm/tests/node-smoke.cjs
+
+      - name: Build release Tornado WASM for JS integration tests
+        if: matrix.name == 'Tornado'
+        run: >-
+          nix develop .#ci --command cargo build --release --locked --manifest-path crates/Cargo.toml
+          -p kohaku-tornadocash-wasm --target wasm32-unknown-unknown --target-dir crates/target
+
+      - name: Generate release Tornado JS bindings
+        if: matrix.name == 'Tornado'
+        run: |
+          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/release/kohaku_tornadocash_wasm.wasm \
+            --target nodejs --out-dir crates/target/tornadocash-wasm-release-node
+          nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/release/kohaku_tornadocash_wasm.wasm \
+            --target web --out-dir crates/target/tornadocash-wasm-release-web
+
+      - name: Test Tornado Node integration
+        if: matrix.name == 'Tornado'
+        run: nix develop .#ci --command node --test crates/tornadocash/wasm/tests/js/*.test.cjs
+
+      - name: Install Tornado browser test driver
+        if: matrix.name == 'Tornado'
+        run: >-
+          nix develop .#ci --command npm ci --prefix crates/tornadocash/wasm/tests/js
+          --ignore-scripts --no-audit --no-fund
+
+      - name: Install test Chromium
+        if: matrix.name == 'Tornado'
+        run: |
+          cd crates/tornadocash/wasm/tests/js
+          nix develop "$GITHUB_WORKSPACE#ci" --command npx playwright install --with-deps chromium
+
+      - name: Test Tornado browser integration
+        if: matrix.name == 'Tornado'
+        run: nix develop .#ci --command node --test crates/tornadocash/wasm/tests/js/browser.cjs
