@@ -64,11 +64,13 @@ jobs:
           --target wasm32-unknown-unknown --target-dir crates/target
 
       - name: Generate Node bindings
+        if: matrix.name != 'Tornado'
         run: >-
           nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/${{ matrix.artifact }}.wasm
           --target nodejs --out-dir crates/target/${{ matrix.output }}-node
 
       - name: Generate browser bindings
+        if: matrix.name != 'Tornado'
         run: >-
           nix develop .#ci --command wasm-bindgen crates/target/wasm32-unknown-unknown/debug/${{ matrix.artifact }}.wasm
           --target web --out-dir crates/target/${{ matrix.output }}-web

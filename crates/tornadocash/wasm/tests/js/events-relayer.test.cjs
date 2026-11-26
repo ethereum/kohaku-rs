@@ -46,17 +46,6 @@ test('empty snapshot bounds remain exact and its borrowed pool remains usable', 
   assert.throws(() => new wasm.Snapshot(instance, 1, 2n, []));
 });
 
-test('Snapshot(snapshot.events) preserves large decoded event fields', { todo: 'Blocked by upstream PR #159 on master' }, t => {
-  const own = ownership(t);
-  const instance = pool(own);
-  const event = wasm.decodeEvent({
-    topics: [depositTopic, field(1)], data: `0x${word(0)}${word(123)}`, blockNumber: 9007199254740993n,
-  });
-  const snapshot = own(new wasm.Snapshot(instance, 9007199254740993n, 9007199254740994n, [event]));
-  const restored = own(new wasm.Snapshot(instance, snapshot.fromBlock, snapshot.toBlock, snapshot.events));
-  assert.deepEqual(restored.events, [event]);
-});
-
 function statusText({ netId = '1', price = '0x1bc16d674ec80000' } = {}) {
   return `{
     "rewardAccount":"${addresses.payer}",

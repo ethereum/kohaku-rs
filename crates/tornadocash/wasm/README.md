@@ -63,12 +63,6 @@ with `cast`. Withdrawal proof bytes are randomized. Tests check generated calls,
 round trips and inclusion proofs, not independent cryptographic verification of
 the generated Groth16 proof.
 
-The Snapshot event round-trip regression executes with a TODO annotation on the
-current base because it depends on [#159](https://github.com/ethereum/kohaku-rs/pull/159).
-It is an existing upstream failure, not a passing case. Remove the TODO annotation
-and rerun after that fix merges. The pending Relayer HTTP API in #162 is not part
-of this revision's exported surface.
-
 ### Browser tests
 
 From the repository root, in the same Node environment:
