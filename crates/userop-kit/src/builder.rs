@@ -1,8 +1,12 @@
+#[cfg(feature = "bundler")]
+use alloy::rpc::types::state::StateOverride;
 use alloy::{
     dyn_abi::Eip712Domain,
     primitives::{Address, Bytes, U256},
 };
 
+#[cfg(feature = "bundler")]
+use crate::bundler::{Bundler, BundlerError};
 use crate::{
     signable_user_operation::SignableUserOperation,
     smart_account::{AccountInit, SmartAccount, SmartAccountError},
@@ -12,7 +16,6 @@ use crate::{
 pub struct UserOperationBuilder<S> {
     user_op: UserOperation,
 
-    gas_set: bool,
     entry_point: Address,
     domain: Eip712Domain,
     smart_account_type: std::marker::PhantomData<S>,
@@ -24,7 +27,6 @@ impl<S: SmartAccount> UserOperationBuilder<S> {
     /// # Errors
     /// Returns an error if the account's nonce or initialization state cannot be read.
     pub async fn new_with_smart_account(smart_account: &S) -> Result<Self, SmartAccountError> {
-        smart_account.validate_sender().await?;
         let builder = Self::new(
             smart_account.address(),
             smart_account.entry_point(),
@@ -73,7 +75,6 @@ impl<S> UserOperationBuilder<S> {
             },
             entry_point,
             domain,
-            gas_set: false,
             smart_account_type: std::marker::PhantomData,
         }
     }
@@ -111,6 +112,24 @@ impl<S> UserOperationBuilder<S> {
         self
     }
 
+    /// Estimates and sets the gas for this UserOperation.
+    ///
+    /// Simulates against `state_override` if provided.
+    ///
+    /// # Errors
+    /// Returns an error if the bundler's gas estimation fails.
+    #[cfg(feature = "bundler")]
+    pub async fn with_gas_estimate<B: Bundler + ?Sized>(
+        self,
+        bundler: &B,
+        state_override: Option<&StateOverride>,
+    ) -> Result<Self, BundlerError> {
+        let op = self.build();
+        let est = bundler.estimate_gas(&op, state_override).await?;
+
+        Ok(self.with_gas(est))
+    }
+
     /// Sets the factory and factory data for this UserOperation.
     pub fn with_factory(mut self, factory: Address, data: Bytes) -> Self {
         self.user_op.factory = Some(factory);
@@ -134,8 +153,6 @@ impl<S> UserOperationBuilder<S> {
     }
 
     fn set_gas(&mut self, gas: UserOperationGasEstimate) {
-        self.gas_set = true;
-
         self.user_op.call_gas_limit = gas.call_gas_limit;
         self.user_op.verification_gas_limit = gas.verification_gas_limit;
         self.user_op.pre_verification_gas = gas.pre_verification_gas;

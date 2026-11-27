@@ -11,7 +11,7 @@ use kohaku_fork_kit::{
     entry_point::deploy_entry_point,
     paymaster::{deploy_railgun_fee_adapter, deploy_railgun_paymaster},
     railgun::deploy_railgun,
-    simple_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, deploy_simple_account},
+    simple_account::deploy_simple_account,
 };
 use kohaku_railgun::{
     account::signer::{PrivateKeySigner, RailgunSigner},
@@ -22,7 +22,12 @@ use kohaku_railgun_paymaster::RailgunUserOps;
 use kohaku_railgun_sync::RpcSyncer;
 use kohaku_userop_kit::{
     bundler::Bundler,
-    smart_account::simple_smart_account::{self, SimpleSmartAccount},
+    smart_account::{
+        Call,
+        simple_7702_smart_account::{
+            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
+        },
+    },
 };
 use tracing_subscriber::EnvFilter;
 
@@ -126,8 +131,12 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
 
     // The recipient starts without gas ETH: the private fee note pays the paymaster.
     let owner = alloy::signers::local::PrivateKeySigner::random();
-    let smart_account =
-        SimpleSmartAccount::new(owner.address(), chain.id, Arc::new(provider.clone()));
+    let smart_account = Simple7702SmartAccount::new(
+        provider.clone(),
+        owner.address(),
+        SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
+        chain.id,
+    );
     let weth_contract = WETH::new(chain.wrapped_base_token, provider.clone());
     let native_before = provider.get_balance(owner.address()).await?;
     let tokens_before = weth_contract.balanceOf(owner.address()).call().await?;
@@ -143,7 +152,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
             &mut rand::rng(),
         )
         .await?;
-    let calls = vec![simple_smart_account::Call {
+    let calls = vec![Call {
         target: chain.wrapped_base_token,
         value: U256::ZERO,
         data: weth_contract

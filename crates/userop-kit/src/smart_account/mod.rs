@@ -5,11 +5,11 @@ use alloy::{
     rpc::types::Authorization,
 };
 use alloy_sol_types::Eip712Domain;
+use serde::{Deserialize, Serialize};
 
-pub mod deployed_simple_account;
+mod shared;
 pub mod simple_7702_smart_account;
 pub mod simple_account;
-pub mod simple_smart_account;
 
 // A nonzero 65-byte signature used when estimating ECDSA account validation.
 pub(crate) const DUMMY_SIGNATURE: Bytes = bytes!(
@@ -44,6 +44,20 @@ pub enum AccountInit {
     },
 }
 
+/// A call executed by a Smart Account batch.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(js, derive(tsify::Tsify))]
+#[cfg_attr(js, tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct Call {
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub target: Address,
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub value: U256,
+    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
+    pub data: Bytes,
+}
+
 /// Provides account initialization, nonce reads, and execution encoding.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
@@ -72,15 +86,6 @@ pub trait SmartAccount: MaybeSend {
     /// Returns an error if the account's initialization state cannot be read.
     async fn init(&self) -> Result<AccountInit, SmartAccountError>;
 
-    /// Checks whether the sender can safely be used by this account profile.
-    ///
-    /// # Errors
-    /// Returns an error if the sender is already used and reuse was not allowed,
-    /// or if its state cannot be read.
-    async fn validate_sender(&self) -> Result<(), SmartAccountError> {
-        Ok(())
-    }
-
     /// Returns an estimation signature with the account's expected format.
     fn dummy_signature(&self) -> Bytes;
 
@@ -96,42 +101,4 @@ pub enum SmartAccountError {
     ProviderError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
-}
-
-/// Shared preflight for the built-in Railgun delegated and deployed account profiles.
-/// Cannot detect ERC20 holdings or past activity that leaves no current state.
-pub async fn validate_unused_sender<P: alloy::providers::Provider + ?Sized>(
-    provider: &P,
-    sender: Address,
-    entry_point: Address,
-    allow_used: bool,
-) -> Result<(), SmartAccountError> {
-    if allow_used {
-        return Ok(());
-    }
-    use alloy::{
-        network::TransactionBuilder, primitives::aliases::U192, rpc::types::TransactionRequest,
-    };
-    use alloy_sol_types::SolCall;
-
-    use crate::abis::entry_point::EntryPoint;
-    let code = provider.get_code_at(sender).await?;
-    let balance = provider.get_balance(sender).await?;
-    let native_nonce = provider.get_transaction_count(sender).await?;
-    let data = EntryPoint::getNonceCall::new((sender, U192::ZERO)).abi_encode();
-    let ret = provider
-        .call(
-            TransactionRequest::default()
-                .with_to(entry_point)
-                .with_input(data),
-        )
-        .await?;
-    let nonce = EntryPoint::getNonceCall::abi_decode_returns(&ret)
-        .map_err(|e| SmartAccountError::Other(e.into()))?;
-    if !code.is_empty() || !balance.is_zero() || native_nonce != 0 || !nonce.is_zero() {
-        return Err(SmartAccountError::Other(anyhow::anyhow!(
-            "Execution account {sender} appears touched (code/delegation, nonce or ETH); explicitly set allow_used(true) to use it"
-        )));
-    }
-    Ok(())
 }

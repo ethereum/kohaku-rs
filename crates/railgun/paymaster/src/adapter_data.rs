@@ -3,7 +3,6 @@ use alloy::{
     sol,
     sol_types::SolValue,
 };
-
 use kohaku_railgun::{
     abis::railgun::Transaction,
     account::{address::RailgunAddress, chain::ChainId},

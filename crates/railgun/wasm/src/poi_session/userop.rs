@@ -8,7 +8,12 @@ use kohaku_railgun::{account::signer::RailgunSigner, caip::AssetId, transact::Sp
 use kohaku_userop_kit::{
     bundler::pimlico::PimlicoBundler,
     signed_user_operation::SignedUserOperation,
-    smart_account::simple_7702_smart_account::{Call as AccountCall, Simple7702SmartAccount},
+    smart_account::{
+        Call as AccountCall,
+        simple_7702_smart_account::{
+            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
+        },
+    },
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -91,6 +96,7 @@ impl PoiSession {
         let account = Simple7702SmartAccount::new(
             self.provider.clone(),
             account_signer.address(),
+            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
             self.wallet.chain().id,
         );
         let bundler_url = reqwest::Url::parse(&bundler_url).map_err(js_error)?;
@@ -116,7 +122,7 @@ impl PoiSession {
             .map_err(js_error)?;
         let signed = signable.sign(&account_signer).await.map_err(js_error)?;
         let result = PreparedUserOp {
-            user_op_hash: format!("{:#x}", signed.hash(self.wallet.chain().id).0),
+            user_op_hash: format!("{:#x}", signed.hash().0),
             signed,
         };
         json(&result)

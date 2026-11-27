@@ -2,7 +2,7 @@
 
 use alloy::{
     network::TransactionBuilder,
-    primitives::{Address, Bytes, U256, aliases::U192},
+    primitives::{Address, Bytes, U256},
     providers::Provider,
     rpc::types::TransactionRequest,
 };
@@ -10,11 +10,11 @@ use alloy_sol_types::{Eip712Domain, SolCall};
 use anyhow::Context;
 
 use crate::{
-    abis::{entry_point::EntryPoint, simple_account_factory::SimpleAccountFactory},
+    abis::simple_account_factory::SimpleAccountFactory,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        AccountInit, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
-        simple_7702_smart_account::{Call, Simple7702SmartAccount},
+        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
+        shared::{encode_execute_batch, entry_point_nonce},
     },
 };
 
@@ -93,18 +93,7 @@ impl<P: Provider> SmartAccount for SimpleAccount<P> {
     }
 
     async fn nonce(&self) -> Result<U256, SmartAccountError> {
-        let data = EntryPoint::getNonceCall::new((self.address, U192::ZERO)).abi_encode();
-        let ret = self
-            .provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(ENTRY_POINT_08)
-                    .with_input(data),
-            )
-            .await?;
-
-        Ok(EntryPoint::getNonceCall::abi_decode_returns(&ret)
-            .context("Invalid EntryPoint nonce response")?)
+        entry_point_nonce(&self.provider, ENTRY_POINT_08, self.address).await
     }
 
     async fn init(&self) -> Result<AccountInit, SmartAccountError> {
@@ -127,7 +116,7 @@ impl<P: Provider> SmartAccount for SimpleAccount<P> {
     }
 
     fn abi_encode_call(call: &Self::Call) -> Bytes {
-        Simple7702SmartAccount::<P>::abi_encode_call(call)
+        encode_execute_batch(call)
     }
 }
 

@@ -22,7 +22,7 @@ use kohaku_railgun::{
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
-    bundler::{Bundler, BundlerError, BundlerExt},
+    bundler::{Bundler, BundlerError},
     signable_user_operation::SignableUserOperation,
     smart_account::SmartAccount,
     user_operation::UserOperationGasEstimate,
@@ -707,7 +707,7 @@ async fn estimate_paymaster_verification_gas_limit(
     let Some(paymaster) = user_op.user_op.paymaster else {
         return Ok(0);
     };
-    let user_op = user_op.user_op.into_packed();
+    let user_op = user_op.user_op.to_packed();
     let data: Bytes = abi::PrivacyPaymaster::validatePaymasterUserOpCall {
         userOp: abi::PrivacyPaymaster::PackedUserOperation {
             sender: user_op.sender,

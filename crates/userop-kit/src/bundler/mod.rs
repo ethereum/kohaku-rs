@@ -1,7 +1,6 @@
 use alloy::rpc::types::state::StateOverride;
 
 use crate::{
-    builder::UserOperationBuilder,
     signable_user_operation::SignableUserOperation,
     signed_user_operation::SignedUserOperation,
     user_operation::{UserOperationGasEstimate, UserOperationHash, UserOperationReceipt},
@@ -10,21 +9,12 @@ use crate::{
 pub mod pimlico;
 mod rpc_client;
 
-pub trait BundlerExt: Sized {
-    /// Estimates and sets the gas for this UserOperation.
-    ///
-    /// Simulates against `state_override` if provided.
-    fn with_gas_estimate<B: Bundler + ?Sized>(
-        self,
-        bundler: &B,
-        state_override: Option<&StateOverride>,
-    ) -> impl Future<Output = Result<Self, BundlerError>>;
-}
-
 /// A bundler provider for 4337 UserOperation JSON-RPC methods.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait Bundler {
+    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError>;
+
     /// Estimates gas for `op`.
     ///
     /// Simulates against `state_override` if provided.
@@ -45,14 +35,6 @@ pub trait Bundler {
         &self,
         hash: UserOperationHash,
     ) -> Result<UserOperationReceipt, BundlerError>;
-
-    /// Gas price the bundler currently accepts, without needing a UserOperation to simulate.
-    ///
-    /// `estimate_gas` returns a price too, but only for a UserOperation that passes simulation,
-    /// which for the privacy paymaster means one carrying a real proof. A caller that must fix the
-    /// fee before proving (single signature on a hardware signer) needs the price first.
-    /// `None` when the bundler has no such endpoint.
-    async fn gas_price(&self) -> Result<Option<GasPrice>, BundlerError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,17 +50,4 @@ pub enum BundlerError {
     Timeout,
     #[error("Other: {0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
-}
-
-impl<S> BundlerExt for UserOperationBuilder<S> {
-    async fn with_gas_estimate<B: Bundler + ?Sized>(
-        self,
-        bundler: &B,
-        state_override: Option<&StateOverride>,
-    ) -> Result<Self, BundlerError> {
-        let op = self.build();
-        let est = bundler.estimate_gas(&op, state_override).await?;
-
-        Ok(self.with_gas(est))
-    }
 }

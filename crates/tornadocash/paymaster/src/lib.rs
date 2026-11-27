@@ -11,10 +11,7 @@ use kohaku_tornadocash::{
 };
 use kohaku_tornadocash_circuit::CircuitArtifacts;
 use kohaku_tornadocash_provider::TornadoProviderExt;
-use kohaku_userop_kit::{
-    builder::UserOperationBuilder,
-    bundler::{Bundler, BundlerExt},
-};
+use kohaku_userop_kit::{builder::UserOperationBuilder, bundler::Bundler};
 
 use crate::abis::{TornadoPaymaster, TornadoPaymasterData};
 
