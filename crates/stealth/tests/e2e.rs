@@ -6,50 +6,30 @@ use alloy::{
     primitives::{Address, U256},
     providers::{Provider, ProviderBuilder, ext::AnvilApi},
     rpc::types::TransactionRequest,
-    signers::{SignerSync, local::PrivateKeySigner},
-    sol,
-    sol_types::{SolCall, SolStruct, eip712_domain},
+    signers::local::PrivateKeySigner,
+    sol_types::SolCall,
 };
 use futures::{TryStreamExt, pin_mut, stream};
 use kohaku_fork_kit::stealth::deploy_stealth;
 use kohaku_stealth::{
     Account, AccountSeed, ExposeSecret, FetchError, FetchEvent, ScanEvent, SchemeError, SchemeId3,
     StealthProviderExt, StealthScheme, StreamedEventConfig,
-    contracts::{prepare_announcement, register_keys, register_keys_on_behalf},
-    generate_stealth_address, get_announcements, get_announcements_for_user,
+    contracts::{announce, register_keys},
+    get_announcements, get_announcements_for_user,
 };
 use pqsa_core::SenderState;
-use rand::{SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 #[path = "../src/abis.rs"]
 mod abis;
-use abis::{IERC5564Announcer, IERC6538Registry};
+use abis::IERC5564Announcer;
 
 #[path = "fixtures/mod.rs"]
 mod fixtures;
 
-sol! {
-    struct Erc6538RegistryEntry {
-        uint256 schemeId;
-        bytes stealthMetaAddress;
-        uint256 nonce;
-    }
-}
-
-fn init_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("kohaku_stealth=debug")),
-        )
-        .with_test_writer()
-        .try_init();
-}
-
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn receive_and_spend() -> anyhow::Result<()> {
-    init_tracing();
     let anvil = Anvil::new().try_spawn()?;
     let url = anvil.endpoint_url();
     let funder = PrivateKeySigner::from(anvil.keys()[0].clone());
@@ -98,7 +78,7 @@ async fn receive_and_spend() -> anyhow::Result<()> {
         SchemeId3::announcement_to_bytes(&published)
     );
     let announcement_receipt = provider
-        .send_transaction(prepare_announcement(&deployment, &announcement))
+        .send_transaction(announce(&deployment, &announcement))
         .await?
         .get_receipt()
         .await?;
@@ -120,9 +100,10 @@ async fn receive_and_spend() -> anyhow::Result<()> {
     let mut rng = StdRng::from_seed([0x52; 32]);
     let other_seed = AccountSeed::generate(&mut rng);
     let other_account = Account::from_seed(other_seed.expose_secret())?;
-    let other_announcement = generate_stealth_address(other_account.meta_address(), &mut rng)?;
+    let other_announcement =
+        SchemeId3::announce(other_account.meta_address(), &rng.random::<[u8; 64]>())?;
     let foreign_receipt = provider
-        .send_transaction(prepare_announcement(&deployment, &other_announcement))
+        .send_transaction(announce(&deployment, &other_announcement))
         .await?
         .get_receipt()
         .await?;
@@ -153,9 +134,9 @@ async fn receive_and_spend() -> anyhow::Result<()> {
         assert!(receipt.status());
     }
 
-    let unfunded_announcement = generate_stealth_address(&registered, &mut rng)?;
+    let unfunded_announcement = SchemeId3::announce(&registered, &rng.random::<[u8; 64]>())?;
     let unfunded_receipt = provider
-        .send_transaction(prepare_announcement(&deployment, &unfunded_announcement))
+        .send_transaction(announce(&deployment, &unfunded_announcement))
         .await?
         .get_receipt()
         .await?;
@@ -252,88 +233,6 @@ async fn receive_and_spend() -> anyhow::Result<()> {
     assert_eq!(
         provider.get_balance(funder.address()).await?,
         balance_before + U256::from(1000)
-    );
-    Ok(())
-}
-
-#[tokio::test]
-async fn registration_on_behalf() -> anyhow::Result<()> {
-    init_tracing();
-    let anvil = Anvil::new().try_spawn()?;
-    let relayer = PrivateKeySigner::from(anvil.keys()[0].clone());
-    let registrant = PrivateKeySigner::from(anvil.keys()[1].clone());
-    let provider = ProviderBuilder::new()
-        .wallet(relayer.clone())
-        .connect_http(anvil.endpoint_url())
-        .erased();
-    let deployment = deploy_stealth(provider.clone()).await?;
-    let registry = IERC6538Registry::new(deployment.registry, &provider);
-    let fixture = fixtures::Payment::load();
-    let meta_address = SchemeId3::meta_from_bytes(&fixture.meta_address).unwrap();
-    assert!(
-        provider
-            .resolve_meta_address(&deployment, registrant.address())
-            .await?
-            .is_none()
-    );
-    let entry = Erc6538RegistryEntry {
-        schemeId: U256::from(SchemeId3::SCHEME_ID),
-        stealthMetaAddress: fixture.meta_address.clone(),
-        nonce: registry.nonceOf(registrant.address()).call().await?,
-    };
-    let domain = eip712_domain! {
-        name: "ERC6538Registry",
-        version: "1.0",
-        chain_id: deployment.chain_id,
-        verifying_contract: deployment.registry,
-    };
-    assert_eq!(
-        domain.hash_struct(),
-        registry.DOMAIN_SEPARATOR().call().await?
-    );
-    let signature = registrant.sign_hash_sync(&entry.eip712_signing_hash(&domain))?;
-    let transaction = register_keys_on_behalf(
-        &deployment,
-        registrant.address(),
-        &signature.as_bytes(),
-        &meta_address,
-    );
-    let receipt = provider
-        .send_transaction(transaction.clone())
-        .await?
-        .get_receipt()
-        .await?;
-    assert!(receipt.status());
-    assert_eq!(receipt.from, relayer.address());
-    let registered = provider
-        .resolve_meta_address(&deployment, registrant.address())
-        .await?
-        .expect("meta-address was registered on behalf");
-    assert_eq!(
-        SchemeId3::meta_to_bytes(&registered),
-        fixture.meta_address.as_ref()
-    );
-    assert!(
-        provider
-            .resolve_meta_address(&deployment, relayer.address())
-            .await?
-            .is_none()
-    );
-    assert_eq!(
-        registry.nonceOf(registrant.address()).call().await?,
-        entry.nonce + U256::from(1)
-    );
-
-    let replay = provider
-        .send_transaction(transaction.with_gas_limit(200_000))
-        .await?
-        .get_receipt()
-        .await?;
-    assert!(!replay.status());
-    assert!(replay.gas_used < 200_000);
-    assert_eq!(
-        registry.nonceOf(registrant.address()).call().await?,
-        entry.nonce + U256::from(1)
     );
     Ok(())
 }

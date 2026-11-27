@@ -25,17 +25,16 @@ Generate a stealth address and prepare its announcement transaction:
 ```rust,no_run
 use alloy::{primitives::Address, rpc::types::TransactionRequest};
 use kohaku_stealth::{
-    Deployment, MetaAddress, contracts::prepare_announcement, generate_stealth_address,
+    Deployment, MetaAddress, SchemeId3, StealthScheme, contracts::announce,
 };
 
 fn example(
     deployment: &Deployment,
     recipient: &MetaAddress,
-) -> Result<(Address, TransactionRequest), kohaku_stealth::SchemeError> {
-    let mut rng = rand::rng();
-    let generated = generate_stealth_address(recipient, &mut rng)?;
-    let address = Address::from(generated.stealth_address);
-    let transaction = prepare_announcement(deployment, &generated);
+) -> Result<(Address, TransactionRequest), kohaku_stealth::EngineError> {
+    let announcement = SchemeId3::announce_random(recipient)?;
+    let address = Address::from(announcement.stealth_address);
+    let transaction = announce(deployment, &announcement);
     Ok((address, transaction))
 }
 ```
@@ -132,7 +131,7 @@ own copy of the key.
 
 `SchemeId3::announce` takes a 64-byte seed. Reusing a seed repeats
 the ephemeral key and, for the same recipient, the stealth address. Use
-`generate_stealth_address` with an RNG for new payments.
+`SchemeId3::announce_random` for new payments.
 
 Import `StealthScheme` to call `SchemeId3` methods such as `bind`, `scan`,
 `spend_key` and `meta_from_bytes`. Methods returning `Result` use `EngineError`;

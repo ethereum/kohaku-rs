@@ -6,7 +6,6 @@ use alloy::{
 use pqsa_core::StealthScheme;
 use pqsa_per_payment::SchemeId3;
 use thiserror::Error;
-use tracing::debug;
 
 use crate::{abis::IERC6538Registry, contracts::Deployment, scheme3::MetaAddress};
 
@@ -60,11 +59,6 @@ impl<P: Provider> StealthProviderExt for P {
         }
         let meta_address =
             SchemeId3::meta_from_bytes(&bytes).ok_or(ContractError::InvalidMetaAddress)?;
-        debug!(
-            chain_id = deployment.chain_id,
-            meta_address_len = bytes.len(),
-            "resolved stealth meta-address"
-        );
         Ok(Some(meta_address))
     }
 }

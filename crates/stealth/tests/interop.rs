@@ -17,8 +17,8 @@ use futures::{TryStreamExt, pin_mut};
 use kohaku_stealth::{
     Account, AccountSeed, Deployment, EngineError, ExposeSecret, FetchError, FetchEvent, ScanEvent,
     SchemeId3, StealthScheme, StreamedEventConfig,
-    contracts::{prepare_announcement, register_keys},
-    generate_stealth_address, get_announcements, get_announcements_for_user,
+    contracts::{announce, register_keys},
+    get_announcements, get_announcements_for_user,
 };
 
 #[path = "../src/abis.rs"]
@@ -88,7 +88,7 @@ fn prepares_transactions_from_upstream_types() {
         fixture.meta_address.as_ref()
     );
     assert_eq!(registration_call.schemeId, U256::from(fixture.scheme_id));
-    let announcement = prepare_announcement(&deployment, &generated);
+    let announcement = announce(&deployment, &generated);
     assert_eq!(announcement.to, Some(TxKind::Call(deployment.announcer)));
     assert_eq!(announcement.chain_id, Some(deployment.chain_id));
     let announcement_call =
@@ -112,8 +112,8 @@ fn random_announcements_match_the_account() {
     let seed = AccountSeed::generate(&mut rng);
     let account = Account::from_seed(seed.expose_secret()).unwrap();
     let scanner: pqsa_per_payment::Scanner = account.scanner().unwrap();
-    let first = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
-    let second = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
+    let first = SchemeId3::announce_random(account.meta_address()).unwrap();
+    let second = SchemeId3::announce_random(account.meta_address()).unwrap();
     assert_ne!(first.stealth_address, second.stealth_address);
 
     for announcement in [&first, &second] {
@@ -309,77 +309,5 @@ async fn rate_limit_exhausts_retries() {
         assert!(message.contains("429"), "{message}");
         assert!(events.try_next().await.unwrap().is_none());
         assert!(asserter.read_q().is_empty());
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[tokio::test]
-async fn addresses_are_not_logged() {
-    use std::sync::Mutex;
-
-    use kohaku_stealth::{StealthProviderExt, contracts::register_keys_on_behalf};
-    use tracing::instrument::WithSubscriber;
-
-    // Keep callsite interest dynamic while tests run in parallel.
-    let _inactive = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
-    let capture = tracing::Dispatch::new(
-        tracing_subscriber::fmt()
-            .with_env_filter("kohaku_stealth=trace")
-            .with_ansi(false)
-            .without_time()
-            .with_writer(Mutex::new(Vec::<u8>::new()))
-            .finish(),
-    );
-    let fixture = fixtures::Payment::load();
-    let deployment = Deployment {
-        chain_id: 1,
-        announcer: Address::repeat_byte(0x11),
-        registry: Address::repeat_byte(0x22),
-        start_block: 0,
-    };
-    let registrant = Address::repeat_byte(0x77);
-    let asserter = Asserter::new();
-    asserter.push_success(&"0x1");
-    asserter.push_success(&Bytes::from(
-        IERC6538Registry::stealthMetaAddressOfCall::abi_encode_returns(&fixture.meta_address),
-    ));
-    let provider = ProviderBuilder::new().connect_mocked_client(asserter.clone());
-    let address = async {
-        let meta = provider
-            .resolve_meta_address(&deployment, registrant)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            SchemeId3::meta_to_bytes(&meta),
-            fixture.meta_address.as_ref()
-        );
-        let generated = generate_stealth_address(&meta, &mut rand::rng()).unwrap();
-        let _ = register_keys(&deployment, &meta);
-        let _ = register_keys_on_behalf(&deployment, registrant, &[0x88; 65], &meta);
-        let _ = prepare_announcement(&deployment, &generated);
-        Address::from(generated.stealth_address)
-    }
-    .with_subscriber(capture.clone())
-    .await;
-    assert!(asserter.read_q().is_empty());
-    let output = capture
-        .downcast_ref::<Mutex<Vec<u8>>>()
-        .unwrap()
-        .lock()
-        .unwrap();
-    let logged = std::str::from_utf8(&output).unwrap();
-    for event in [
-        "resolved stealth meta-address",
-        "generated stealth address",
-        "prepared stealth-key registration",
-        "prepared delegated stealth-key registration",
-        "prepared stealth announcement",
-    ] {
-        assert!(logged.contains(event), "missing captured event: {event}");
-    }
-    let logged = logged.to_ascii_lowercase();
-    for address in [registrant, address] {
-        assert!(!logged.contains(&hex::encode(address)));
     }
 }
