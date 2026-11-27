@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 use alloy::{
-    primitives::{Address, Bytes, U256, address, hex},
+    primitives::{Address, B256, Bytes, U256, address, hex, keccak256},
     providers::Provider,
     rpc::types::state::{StateOverride, StateOverridesBuilder},
     sol_types::SolValue,
@@ -12,7 +12,7 @@ use kohaku_tornadocash::{
 use kohaku_tornadocash_circuit::CircuitArtifacts;
 use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_userop_kit::{
-    UserOperationRequest,
+    SignableUserOperation, UserOperationRequest,
     bundler::{BundlerApi, PimlicoApi, PrepareUserOperationError},
     smart_account::SmartAccount,
 };
@@ -21,44 +21,39 @@ use crate::abis::{TornadoPaymaster, TornadoPaymasterData};
 
 mod abis;
 
-/// Safety margin added to the quoted fee, in basis points.
-const FEE_BUFFER_BPS: u128 = 100;
-
-/// Fraction of the denomination offered as the fee for the gas estimate.
-const SEED_FEE_DENOMINATOR: u64 = 10;
-
 /// Arbitrary mocked address a pool's verifier is moved to during gas estimation.
 const SHADOW_VERIFIER: Address = address!("0x00000000000000000000000000004b6f68616b75");
 
-/// Extension trait for [`UserOperationRequest`] that pays for an operation with a tornadocash
-/// note.
+/// Preimage of the paymaster's `SIMULATE_SLOT`, which skips its fee check when set.
+const SIMULATE_SLOT_KEY: &[u8] = b"privacy-paymaster.simulate";
+
+/// Extension trait for bundlers that prepares withdrawals paid for with tornadocash notes.
 ///
 /// Tornadocash paymasters use a shielded note to pay for a `UserOp`'s gas. The remainder of the
-/// note is withdrawn to the recipient during validation and available during the operation's
-/// execution.
-pub trait UserOperationPaymasterExt<C>: Sized {
-    /// Pays for `account`'s operation's gas out of `withdrawal`'s note.
+/// note is withdrawn to the recipient.
+pub trait TornadoPaymasterExt: BundlerApi + PimlicoApi {
+    /// Prepares an operation from `account` that withdraws `withdrawal`'s note.
     ///
-    /// Fixes the operation's gas limits and fees, so preparing it again does not re-estimate.
+    /// Gas is paid out of the note.
+    ///
+    /// Returns the operation and the fee in the pool's asset. The recipient receives
+    /// `denomination - fee`.
     ///
     /// # Errors
     /// Returns an error if the pool has no paymaster, if the note cannot cover the operation's
-    /// gas, or if proving, estimation, or the fee quote fails.
-    #[expect(clippy::too_many_arguments)]
-    fn with_tornado_paymaster<S, R, B>(
-        self,
+    /// gas, or if estimation, the fee quote, proving or filling fails.
+    fn prepare_tornado_withdrawal<S, R>(
+        &self,
         account: &S,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        circuit_artifacts: &CircuitArtifacts,
         provider: &impl Provider,
-        bundler: &B,
+        circuit_artifacts: &CircuitArtifacts,
         rng: &mut R,
-    ) -> impl std::future::Future<Output = Result<Self, PaymasterError>>
+    ) -> impl std::future::Future<Output = Result<(SignableUserOperation, U256), PaymasterError>>
     where
-        S: SmartAccount<Call = C>,
-        R: rand::CryptoRng,
-        B: BundlerApi + PimlicoApi + ?Sized;
+        S: SmartAccount,
+        R: rand::CryptoRng;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -78,119 +73,83 @@ pub enum PaymasterError {
     Withdrawal(#[from] WithdrawalError),
 }
 
-impl<C> UserOperationPaymasterExt<C> for UserOperationRequest<C> {
+impl<B: BundlerApi + PimlicoApi + ?Sized> TornadoPaymasterExt for B {
     #[tracing::instrument(skip_all)]
-    async fn with_tornado_paymaster<S, R, B>(
-        self,
+    async fn prepare_tornado_withdrawal<S, R>(
+        &self,
         account: &S,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
-        circuit_artifacts: &CircuitArtifacts,
         provider: &impl Provider,
-        bundler: &B,
+        circuit_artifacts: &CircuitArtifacts,
         rng: &mut R,
-    ) -> Result<Self, PaymasterError>
+    ) -> Result<(SignableUserOperation, U256), PaymasterError>
     where
-        S: SmartAccount<Call = C>,
+        S: SmartAccount,
         R: rand::CryptoRng,
-        B: BundlerApi + PimlicoApi + ?Sized,
     {
         let pool = &withdrawal.pool;
-        let paymaster_address = pool
-            .paymaster
-            .ok_or_else(|| PaymasterError::PoolMissingPaymaster(pool.clone()))?;
+        let paymaster = paymaster_address(pool)?;
+        let denomination = U256::from(pool.amount_wei);
 
-        let (request, fee) = estimate_fee(
-            self,
-            account,
-            &withdrawal,
-            paymaster_address,
-            merkle_proof,
-            provider,
-            bundler,
-        )
-        .await?;
+        let fees = self.get_user_operation_gas_price().await?.slow;
+        let request = UserOperationRequest::<S::Call>::default()
+            .with_max_fee_per_gas(fees.max_fee_per_gas)
+            .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas);
 
-        //? The placeholder costs what a real proof does, so the estimate holds once proven.
+        //? Leaving the recipient 1 wei makes both of the pool's transfers and `postOp`'s refund
+        //? nonzero, like a real withdrawal's.
+        let placeholder_fee = denomination - U256::from(1);
+        let placeholder_data =
+            placeholder_paymaster_data(&withdrawal, paymaster, placeholder_fee, merkle_proof);
+        let estimate = self
+            .prepare_user_operation(
+                account,
+                request
+                    .clone()
+                    .with_paymaster(paymaster, placeholder_data)
+                    .with_state_override(estimation_overrides(provider, pool, paymaster).await?),
+            )
+            .await?;
+
+        let max_cost = U256::from(estimate.total_gas_limit()) * U256::from(fees.max_fee_per_gas);
+        let fee = quote_in_fee_token(provider, pool, paymaster, max_cost).await?;
+        if fee > denomination {
+            return Err(PaymasterError::InsufficientDenomination {
+                required: fee,
+                denomination,
+            });
+        }
+
         let proven = withdrawal
             .with_payer(Payer {
-                address: paymaster_address,
+                address: paymaster,
                 fee,
                 refund: U256::ZERO,
             })
             .prove(merkle_proof, circuit_artifacts, rng)?;
+        let request = request
+            .with_gas_limits(estimate.user_op.gas_limits())
+            .with_paymaster(paymaster, encode_paymaster_data(&proven));
+        let op = self.prepare_user_operation(account, request).await?;
 
-        Ok(request.with_paymaster(paymaster_address, encode_paymaster_data(&proven)))
+        Ok((op, fee))
     }
 }
 
-/// Estimates the operation's gas and fixes its gas limits and fees.
-async fn estimate_fee<S, B>(
-    request: UserOperationRequest<S::Call>,
-    account: &S,
-    withdrawal: &Withdrawal,
-    paymaster_address: Address,
-    merkle_proof: &MerkleProof,
-    provider: &impl Provider,
-    bundler: &B,
-) -> Result<(UserOperationRequest<S::Call>, U256), PaymasterError>
-where
-    S: SmartAccount,
-    B: BundlerApi + PimlicoApi + ?Sized,
-{
-    let pool = &withdrawal.pool;
-    let denomination = U256::from(pool.amount_wei);
-
-    //? The paymaster still checks the fee against the bundler's max cost, and
-    //? the operation's calls may spend what the fee leaves, so the seed fee must
-    //? sit between the two.
-    // TODO: Find a better way to handle this. Maybe override the paymaster to accept any fee?
-    let seed = denomination / U256::from(SEED_FEE_DENOMINATOR);
-    let placeholder = withdrawal
-        .clone()
-        .with_payer(Payer {
-            address: paymaster_address,
-            fee: seed,
-            refund: U256::ZERO,
-        })
-        .prove_dummy(merkle_proof);
-
-    let overrides = verifier_override(provider, pool).await?;
-    let fees = bundler.get_user_operation_gas_price().await?.slow;
-    let estimated = bundler
-        .prepare_user_operation(
-            account,
-            request
-                .clone()
-                .with_paymaster(paymaster_address, encode_paymaster_data(&placeholder))
-                .with_state_override(overrides),
-        )
-        .await?;
-    let request = request
-        .with_gas_limits(estimated.user_op.gas_limits())
-        .with_max_fee_per_gas(fees.max_fee_per_gas)
-        .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas);
-
-    let cost = U256::from(estimated.total_gas_limit()) * U256::from(fees.max_fee_per_gas);
-    let cost = quote_in_fee_token(provider, pool, paymaster_address, cost).await?;
-    let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
-    if fee > denomination {
-        return Err(PaymasterError::InsufficientDenomination {
-            required: fee,
-            denomination,
-        });
-    }
-
-    Ok((request, fee))
+fn paymaster_address(pool: &Pool) -> Result<Address, PaymasterError> {
+    pool.paymaster
+        .ok_or_else(|| PaymasterError::PoolMissingPaymaster(pool.clone()))
 }
 
-/// Overrides the pool's verifier contract to accept any proof while consuming similar gas.
+/// Gas estimation state override.
 ///
-/// The forwarder's extra call makes a withdrawal about 3k gas more expensive than with a real
-/// proof, so estimates on err slightly high.
-async fn verifier_override(
+/// Overrides the pool's verifier to accept any proof and sets the paymaster's
+/// simulation flag. State overrides increase estimated gas costs by ~3k.
+async fn estimation_overrides(
     provider: &impl Provider,
     pool: &Pool,
+    paymaster: Address,
 ) -> Result<StateOverride, PaymasterError> {
     let verifier = provider.verifier(pool).await?;
     let code = provider.get_code_at(verifier).await?;
@@ -198,18 +157,41 @@ async fn verifier_override(
     Ok(StateOverridesBuilder::default()
         .with_code(SHADOW_VERIFIER, code)
         .with_code(verifier, forwarder(SHADOW_VERIFIER))
+        .with_state_diff(
+            paymaster,
+            [(keccak256(SIMULATE_SLOT_KEY), B256::with_last_byte(1))],
+        )
         .build())
 }
 
-/// Quotes a gas cost in wei in the pool's fee token.
+/// Paymaster data for a placeholder `withdrawal` proof.
+fn placeholder_paymaster_data(
+    withdrawal: &Withdrawal,
+    paymaster: Address,
+    fee: U256,
+    merkle_proof: &MerkleProof,
+) -> Bytes {
+    let placeholder = withdrawal
+        .clone()
+        .with_payer(Payer {
+            address: paymaster,
+            fee,
+            refund: U256::ZERO,
+        })
+        .prove_dummy(merkle_proof);
+    encode_paymaster_data(&placeholder)
+}
+
+/// Quotes a gas cost in wei in the pool's fee token, including the paymaster's markup.
 async fn quote_in_fee_token(
     provider: &impl Provider,
     pool: &Pool,
     paymaster: Address,
     cost: U256,
 ) -> Result<U256, PaymasterError> {
-    let Asset::Erc20 { address: token, .. } = pool.asset else {
-        return Ok(cost);
+    let token = match pool.asset {
+        Asset::Native { .. } => Address::ZERO,
+        Asset::Erc20 { address, .. } => address,
     };
 
     Ok(TornadoPaymaster::new(paymaster, provider)
@@ -238,7 +220,9 @@ fn forwarder(target: Address) -> Bytes {
         // staticcall(gas, target, 0, calldatasize, 0, 0)
         &hex!("3660006000376000600036600073")[..],
         target.as_slice(),
-        // pop the call's success; mstore(0, 1); return(0, 32)
+        // pop the call's success
+        // mstore(0, 1)
+        // return(0, 32)
         &hex!("5afa50600160005260206000f3"),
     ]
     .concat()

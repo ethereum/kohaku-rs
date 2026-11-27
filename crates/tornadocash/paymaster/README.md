@@ -21,11 +21,10 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 #     Withdrawal,
 # };
 # use kohaku_tornadocash_circuit::CircuitArtifacts;
-# use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
+# use kohaku_tornadocash_paymaster::TornadoPaymasterExt;
 # use kohaku_userop_kit::{
-#     UserOperationRequest,
 #     bundler::BundlerApi,
-#     smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
+#     smart_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
 # };
 #
 # async fn example(
@@ -45,29 +44,22 @@ let smart_account = Simple7702Account::new(
     SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
     pool.chain_id,
 );
-let request = UserOperationRequest::default().with_calls([Call::default()]);
 
-// The note pays for gas, and its remainder is withdrawn to `owner` during validation, so the
-// operation's own calls can spend it.
+// The note pays for gas, and its remainder is withdrawn to `owner`.
 let withdrawal_merkle_proof = tree.note_proof(&note)?;
 let withdrawal = Withdrawal::new(&pool, note, owner.address());
-let request = request
-    .with_tornado_paymaster(
+let (userop, fee) = bundler
+    .prepare_tornado_withdrawal(
         &smart_account,
         withdrawal,
         &withdrawal_merkle_proof,
-        artifacts,
         &provider,
-        &bundler,
+        artifacts,
         rng,
     )
     .await?;
-
-let userop = bundler
-    .prepare_user_operation(&smart_account, request)
-    .await?
-    .sign(&owner)
-    .await?;
+println!("Fee: {fee}");
+let userop = userop.sign(&owner).await?;
 let receipt = bundler.send_user_operation(&userop).await?.get_receipt().await?;
 println!("{receipt:?}");
 
