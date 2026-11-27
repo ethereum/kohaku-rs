@@ -14,32 +14,34 @@ pub mod rpc;
 #[cfg(feature = "saga-sync")]
 pub mod saga;
 
-/// Fetches a pool's events from some source.
+/// Fetches pools' events from some source.
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait Syncer: Send + Sync {
-    /// Fetch the events emitted by the given `pool` within the given block range.
+    /// Fetch the events emitted by each of the given `pools` within the given block range.
+    ///
+    /// Returns one snapshot per pool, in the order of `pools`, and fails if any pool fails.
     ///
     /// `from_block` and `to_block` form a half-open range. Implementers are expected to
-    /// clamp this range to what they can serve. The returned range may be a subset of the requested
-    /// range.
+    /// clamp this range to what they can serve for each pool. Each returned range may be a subset
+    /// of the requested range.
     async fn sync_range(
         &self,
-        pool: &Pool,
+        pools: &[Pool],
         from_block: u64,
         to_block: u64,
-    ) -> Result<Snapshot, SyncerError>;
+    ) -> Result<Vec<Snapshot>, SyncerError>;
 
     async fn sync(
         &self,
-        pool: &Pool,
+        pools: &[Pool],
         range: impl RangeBounds<u64> + Send,
-    ) -> Result<Snapshot, SyncerError>
+    ) -> Result<Vec<Snapshot>, SyncerError>
     where
         Self: Sized,
     {
         let range = block_range(range);
-        self.sync_range(pool, range.start, range.end).await
+        self.sync_range(pools, range.start, range.end).await
     }
 }
 
@@ -68,11 +70,11 @@ impl DynSyncer {
 impl Syncer for DynSyncer {
     async fn sync_range(
         &self,
-        pool: &Pool,
+        pools: &[Pool],
         from_block: u64,
         to_block: u64,
-    ) -> Result<Snapshot, SyncerError> {
-        self.0.sync_range(pool, from_block, to_block).await
+    ) -> Result<Vec<Snapshot>, SyncerError> {
+        self.0.sync_range(pools, from_block, to_block).await
     }
 }
 

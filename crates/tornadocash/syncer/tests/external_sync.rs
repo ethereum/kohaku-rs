@@ -35,10 +35,10 @@ async fn assert_matches_snapshot(target_syncer: &dyn Syncer) -> Result<(), anyho
 
     let pool = Pool::SEPOLIA_ETHER_01;
     let synced = target_syncer
-        .sync_range(&pool, FROM_BLOCK, TO_BLOCK)
+        .sync_range(std::slice::from_ref(&pool), FROM_BLOCK, TO_BLOCK)
         .await?;
 
-    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(synced.events());
+    let (mut commitments, mut nullifiers) = commitments_and_nullifiers(synced[0].events());
     commitments.sort();
     nullifiers.sort();
 

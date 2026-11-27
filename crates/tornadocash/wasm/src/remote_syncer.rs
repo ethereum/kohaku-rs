@@ -44,9 +44,11 @@ impl RemoteSyncer {
             let from_block = u64::try_from(from_block)?;
             let to_block = u64::try_from(to_block)?;
             let snapshot = client
-                .sync_range(&pool, from_block, to_block)
+                .sync_range(std::slice::from_ref(&pool), from_block, to_block)
                 .await
-                .map_err(JsError::from)?;
+                .map_err(JsError::from)?
+                .pop()
+                .ok_or_else(|| JsError::new("syncer returned no snapshot for the pool"))?;
             Ok(Snapshot::from(snapshot).into())
         })
     }

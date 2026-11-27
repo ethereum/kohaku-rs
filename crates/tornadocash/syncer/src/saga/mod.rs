@@ -74,11 +74,11 @@ impl SagaSyncer {
 impl Syncer for SagaSyncer {
     async fn sync_range(
         &self,
-        pool: &Pool,
+        pools: &[Pool],
         from_block: u64,
         to_block: u64,
-    ) -> Result<Snapshot, SyncerError> {
-        self.sync(pool, from_block, to_block)
+    ) -> Result<Vec<Snapshot>, SyncerError> {
+        self.sync(pools, from_block, to_block)
             .await
             .map_err(SyncerError::other)
     }
@@ -87,11 +87,28 @@ impl Syncer for SagaSyncer {
 impl SagaSyncer {
     async fn sync(
         &self,
+        pools: &[Pool],
+        from_block: u64,
+        to_block: u64,
+    ) -> Result<Vec<Snapshot>, SagaSyncError> {
+        let manifest = self.fetch_manifest().await?;
+        let mut snapshots = Vec::with_capacity(pools.len());
+        for pool in pools {
+            snapshots.push(
+                self.sync_pool(&manifest, pool, from_block, to_block)
+                    .await?,
+            );
+        }
+        Ok(snapshots)
+    }
+
+    async fn sync_pool(
+        &self,
+        manifest: &Manifest,
         pool: &Pool,
         from_block: u64,
         to_block: u64,
     ) -> Result<Snapshot, SagaSyncError> {
-        let manifest = self.fetch_manifest().await?;
         let key = stream_key(pool);
 
         let from = from_block.max(pool.deployed_block);
@@ -104,7 +121,7 @@ impl SagaSyncer {
         let published = entry.last_block().unwrap_or(pool.deployed_block);
         let range = from..to_block.min(published).max(from);
 
-        info!("Syncing from {} to {}", range.start, range.end);
+        info!("Syncing {} from {} to {}", pool, range.start, range.end);
 
         let overlapping = entry
             .chunks

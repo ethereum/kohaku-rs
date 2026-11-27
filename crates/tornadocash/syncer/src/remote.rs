@@ -65,18 +65,24 @@ impl RemoteSyncer {
 impl Syncer for RemoteSyncer {
     async fn sync_range(
         &self,
-        pool: &Pool,
+        pools: &[Pool],
         from_block: u64,
         to_block: u64,
-    ) -> Result<Snapshot, SyncerError> {
-        self.sync(pool, from_block, to_block)
-            .await
-            .map_err(SyncerError::other)
+    ) -> Result<Vec<Snapshot>, SyncerError> {
+        let mut snapshots = Vec::with_capacity(pools.len());
+        for pool in pools {
+            let snapshot = self
+                .sync_pool(pool, from_block, to_block)
+                .await
+                .map_err(SyncerError::other)?;
+            snapshots.push(snapshot);
+        }
+        Ok(snapshots)
     }
 }
 
 impl RemoteSyncer {
-    async fn sync(
+    async fn sync_pool(
         &self,
         pool: &Pool,
         from_block: u64,
@@ -90,7 +96,7 @@ impl RemoteSyncer {
         let latest = latest_block(&deposits, &withdrawals).saturating_add(1);
         let range = from..to_block.min(latest).max(from);
 
-        info!("Syncing from {} to {}", range.start, range.end);
+        info!("Syncing {} from {} to {}", pool, range.start, range.end);
 
         let deposits: Vec<SyncEvent> = deposits
             .iter()

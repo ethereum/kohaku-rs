@@ -16,10 +16,10 @@ Syncers for retrieving Tornado Cash notes and Merkle tree data.
 #
 # async fn example(provider: DynProvider) -> Result<(), Box<dyn std::error::Error>> {
 let syncer = RpcSyncer::new(provider);
-let snapshot = syncer.sync(&Pool::SEPOLIA_ETHER_01, ..).await?;
+let snapshots = syncer.sync(&[Pool::SEPOLIA_ETHER_01], ..).await?;
 
 let mut tree = MerkleTree::new();
-tree.splice_events(&snapshot)?;
+tree.splice_events(&snapshots[0])?;
 
 # Ok(())
 # }
@@ -36,10 +36,10 @@ tree.splice_events(&snapshot)?;
 #
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 let syncer = RemoteSyncer::new("https://example.com/tornadocash-sync");
-let snapshot = syncer.sync(&Pool::SEPOLIA_ETHER_01, ..).await?;
+let snapshots = syncer.sync(&[Pool::SEPOLIA_ETHER_01], ..).await?;
 
 let mut tree = MerkleTree::new();
-tree.splice_events(&snapshot)?;
+tree.splice_events(&snapshots[0])?;
 
 # Ok(())
 # }
@@ -60,10 +60,10 @@ Requires the `saga-sync` feature.
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 #     use kohaku_tornadocash_syncer::saga::SagaSyncer;
 let syncer = SagaSyncer::new("https://saga.fatsolutions.xyz/sepolia");
-let snapshot = syncer.sync(&Pool::SEPOLIA_ETHER_01, ..).await?;
+let snapshots = syncer.sync(&[Pool::SEPOLIA_ETHER_01], ..).await?;
 
 let mut tree = MerkleTree::new();
-tree.splice_events(&snapshot)?;
+tree.splice_events(&snapshots[0])?;
 
 # Ok(())
 # }
