@@ -3,6 +3,7 @@
 use alloy::sol;
 
 sol! {
+    #[sol(rpc)]
     interface SimpleAccountFactory {
         function getAddress(address owner, uint256 salt) external view returns (address);
         function createAccount(address owner, uint256 salt) external returns (address);

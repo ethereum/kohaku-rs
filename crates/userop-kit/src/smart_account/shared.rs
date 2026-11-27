@@ -1,11 +1,8 @@
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes, U256, aliases::U192},
     providers::Provider,
-    rpc::types::TransactionRequest,
 };
 use alloy_sol_types::SolCall;
-use anyhow::Context;
 
 use crate::{
     abis::{base_account::BaseAccount, entry_point::EntryPoint},
@@ -18,17 +15,10 @@ pub async fn entry_point_nonce<P: Provider>(
     entry_point: Address,
     sender: Address,
 ) -> Result<U256, SmartAccountError> {
-    let data = EntryPoint::getNonceCall::new((sender, U192::ZERO)).abi_encode();
-    let ret = provider
-        .call(
-            TransactionRequest::default()
-                .with_to(entry_point)
-                .with_input(data),
-        )
-        .await?;
-
-    Ok(EntryPoint::getNonceCall::abi_decode_returns(&ret)
-        .context("Invalid EntryPoint nonce response")?)
+    Ok(EntryPoint::new(entry_point, provider)
+        .getNonce(sender, U192::ZERO)
+        .call()
+        .await?)
 }
 
 /// Encodes `calls` as `executeBatch(Call[])`, or empty calldata when there are none.

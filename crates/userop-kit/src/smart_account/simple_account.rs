@@ -1,19 +1,16 @@
 //! SimpleAccount v0.8 accounts deployed directly or through SimpleAccountFactory.
 
 use alloy::{
-    network::TransactionBuilder,
     primitives::{Address, Bytes, U256},
     providers::Provider,
-    rpc::types::TransactionRequest,
 };
 use alloy_sol_types::{Eip712Domain, SolCall};
-use anyhow::Context;
 
 use crate::{
     abis::simple_account_factory::SimpleAccountFactory,
     entry_point::{ENTRY_POINT_08, entry_point_08_domain},
     smart_account::{
-        AccountInit, Call, DUMMY_SIGNATURE, SmartAccount, SmartAccountError,
+        AccountInit, Call, ECDSA_STUB_SIGNATURE, SmartAccount, SmartAccountError,
         shared::{encode_execute_batch, entry_point_nonce},
     },
 };
@@ -52,16 +49,10 @@ impl<P: Provider> SimpleAccount<P> {
         salt: U256,
         chain_id: u64,
     ) -> Result<Self, SmartAccountError> {
-        let data = SimpleAccountFactory::getAddressCall::new((owner, salt)).abi_encode();
-        let ret = provider
-            .call(
-                TransactionRequest::default()
-                    .with_to(factory)
-                    .with_input(data),
-            )
+        let address = SimpleAccountFactory::new(factory, &provider)
+            .getAddress(owner, salt)
+            .call()
             .await?;
-        let address = SimpleAccountFactory::getAddressCall::abi_decode_returns(&ret)
-            .context("Invalid SimpleAccountFactory address response")?;
         let data = SimpleAccountFactory::createAccountCall::new((owner, salt))
             .abi_encode()
             .into();
@@ -78,7 +69,7 @@ impl<P: Provider> SimpleAccount<P> {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 impl<P: Provider> SmartAccount for SimpleAccount<P> {
-    type Call = Vec<Call>;
+    type Call = Call;
 
     fn address(&self) -> Address {
         self.address
@@ -111,12 +102,12 @@ impl<P: Provider> SmartAccount for SimpleAccount<P> {
         }
     }
 
-    fn dummy_signature(&self) -> Bytes {
-        DUMMY_SIGNATURE.clone()
+    fn stub_signature(&self) -> Bytes {
+        ECDSA_STUB_SIGNATURE.clone()
     }
 
-    fn abi_encode_call(call: &Self::Call) -> Bytes {
-        encode_execute_batch(call)
+    fn encode_calls(calls: &[Self::Call]) -> Bytes {
+        encode_execute_batch(calls)
     }
 }
 
@@ -125,8 +116,6 @@ mod tests {
     use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
 
     use super::*;
-    use crate::{builder::UserOperationBuilder, user_operation::Authorization};
-
     #[tokio::test]
     async fn from_factory_resolves_address_from_factory() {
         let mock = Asserter::new();
@@ -189,71 +178,5 @@ mod tests {
         mock.push_success(&Bytes::from_static(&[0x60, 0x00]));
 
         assert!(matches!(account.init().await.unwrap(), AccountInit::None));
-    }
-
-    #[tokio::test]
-    async fn builds_user_op_with_entrypoint_nonce() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let address = Address::repeat_byte(0x99);
-        let account = SimpleAccount::new(provider, address, 1);
-        mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-
-        assert_eq!(operation.user_op.nonce, U256::from(7));
-        assert_eq!(operation.user_op.sender, address);
-    }
-
-    #[tokio::test]
-    async fn builder_serializes_existing_account_without_deployment_or_authorization() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account = SimpleAccount::new(provider, Address::repeat_byte(0x99), 1);
-        mock.push_success(&Bytes::from(U256::ZERO.abi_encode()));
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-        let json = serde_json::to_value(operation.user_op).unwrap();
-
-        assert!(json.get("eip7702Auth").is_none());
-        assert!(json.get("factory").is_none());
-        assert!(json.get("factoryData").is_none());
-    }
-
-    #[tokio::test]
-    async fn builder_sets_factory_fields_without_delegation_authorization() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let factory = Address::repeat_byte(0x88);
-        mock.push_success(&Bytes::from(Address::repeat_byte(0x99).abi_encode()));
-        let account = SimpleAccount::from_factory(
-            provider,
-            factory,
-            Address::repeat_byte(0x44),
-            U256::ZERO,
-            1,
-        )
-        .await
-        .unwrap();
-        mock.push_success(&Bytes::from(U256::ZERO.abi_encode()));
-        mock.push_success(&Bytes::new());
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-
-        assert_eq!(operation.user_op.factory, Some(factory));
-        assert!(operation.user_op.factory_data.is_some());
-        assert!(matches!(
-            operation.user_op.authorization,
-            Authorization::None
-        ));
     }
 }

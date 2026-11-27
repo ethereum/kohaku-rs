@@ -22,11 +22,9 @@ use kohaku_railgun::{
     wallet::{RailgunTransactor, RailgunWallet},
 };
 use kohaku_userop_kit::{
-    builder::UserOperationBuilder,
-    bundler::{BundlerApi, pimlico::PimlicoApi},
-    signable_user_operation::SignableUserOperation,
+    SignableUserOperation, UserOperationGasLimits, UserOperationRequest,
+    bundler::{BundlerApi, PimlicoApi, PrepareUserOperationError},
     smart_account::SmartAccount,
-    user_operation::UserOperationGasEstimate,
 };
 use rand::CryptoRng;
 use serde::Serialize;
@@ -55,7 +53,7 @@ pub struct SingleProofReport {
 /// Gas limits and fees for a `UserOperation`.
 #[derive(Debug, Clone, Copy)]
 pub struct UserOpGas {
-    pub limits: UserOperationGasEstimate,
+    pub limits: UserOperationGasLimits,
     pub fees: Eip1559Estimation,
 }
 
@@ -83,6 +81,8 @@ pub enum UserOpError {
     },
     #[error("Privacy Paymaster not configured for chain: {0}")]
     PrivacyPaymasterNotConfigured(u64),
+    #[error("UserOperation preparation error: {0}")]
+    Prepare(#[from] PrepareUserOperationError),
     #[error("Other: {0}")]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -231,7 +231,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         fee: u128,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
@@ -253,7 +253,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         fee: u128,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
@@ -312,7 +312,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         gas: UserOpGas,
         rng: &mut impl CryptoRng,
     ) -> Result<(SignableUserOperation, SingleProofReport), UserOpError> {
@@ -425,7 +425,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         rng: &mut impl CryptoRng,
     ) -> Result<UserOpGas, UserOpError> {
         let mut fee = SEED_FEE;
@@ -441,7 +441,7 @@ impl<'a> RailgunUserOps<'a> {
                     calldata,
                     fee,
                     UserOpGas {
-                        limits: UserOperationGasEstimate {
+                        limits: UserOperationGasLimits {
                             pre_verification_gas: 0,
                             verification_gas_limit: 0,
                             call_gas_limit: 0,
@@ -485,7 +485,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         rng: &mut impl CryptoRng,
     ) -> Result<SignableUserOperation, UserOpError> {
         let gas = self
@@ -540,7 +540,7 @@ impl<'a> RailgunUserOps<'a> {
         // `&Vec` because `get_fee_operation` takes one.
         operations: &Vec<ProvedOperation>,
         sender: &S,
-        calldata: &S::Call,
+        calldata: &[S::Call],
         privacy_paymaster: Address,
         railgun_fee_adapter: Address,
         fee_token: Address,
@@ -555,15 +555,13 @@ impl<'a> RailgunUserOps<'a> {
             railgun_fee_adapter,
             encode_railgun_adapter_data(fee_note.random(), fee_token, fee, transactions),
         );
-        Ok(UserOperationBuilder::new_with_smart_account(sender)
-            .await
-            .map_err(|e| UserOpError::Other(Box::new(e)))?
-            .with_call(calldata)
-            .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
+        let request = UserOperationRequest::default()
+            .with_calls(calldata.iter().cloned())
+            .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data))
             .with_gas_limits(gas.limits)
             .with_max_fee_per_gas(gas.fees.max_fee_per_gas)
-            .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas)
-            .build())
+            .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas);
+        Ok(self.provider.prepare_user_operation(sender, request).await?)
     }
 
     /// Build spends into a `UserOperation` for a compatible delegated or deployed account.
@@ -580,7 +578,7 @@ impl<'a> RailgunUserOps<'a> {
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
-        calldata: S::Call,
+        calldata: Vec<S::Call>,
         rng: &mut impl CryptoRng,
     ) -> Result<SignableUserOperation, UserOpError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
@@ -629,18 +627,16 @@ impl<'a> RailgunUserOps<'a> {
                 encode_railgun_adapter_data(random, asset, value, transactions),
             );
 
-            // Construct UserOperation
+            // Construct UserOperation, estimating its gas before the fees are set.
             let fees = bundler.get_user_operation_gas_price().await?.slow;
-            let mut signable = UserOperationBuilder::new_with_smart_account(sender)
-                .await
-                .map_err(|e| UserOpError::Other(Box::new(e)))?
-                .with_call(&calldata)
-                .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
-                .with_gas_estimate(bundler, None)
-                .await?
-                .with_max_fee_per_gas(fees.max_fee_per_gas)
-                .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas)
-                .build();
+            let request = UserOperationRequest::default()
+                .with_calls(calldata.iter().cloned())
+                .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data));
+            let mut signable = bundler.prepare_user_operation(sender, request).await?;
+
+            //? Set after estimation, or the bundler's placeholder gas pushes max cost past the fee.
+            signable.user_op.max_fee_per_gas = fees.max_fee_per_gas;
+            signable.user_op.max_priority_fee_per_gas = fees.max_priority_fee_per_gas;
 
             // Recalculate fee and check for convergence.
             info!("Prepared broadcast transaction: {:?}", signable);
@@ -677,7 +673,7 @@ impl<'a> RailgunUserOps<'a> {
 }
 
 /// The sum of the limits, what the privacy paymaster multiplies by `maxFeePerGas` for the fee.
-fn total_gas_limit(gas: &UserOperationGasEstimate) -> u128 {
+fn total_gas_limit(gas: &UserOperationGasLimits) -> u128 {
     gas.pre_verification_gas
         + gas.verification_gas_limit
         + gas.call_gas_limit

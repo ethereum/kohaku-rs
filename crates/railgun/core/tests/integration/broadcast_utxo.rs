@@ -22,12 +22,7 @@ use kohaku_railgun_paymaster::RailgunUserOps;
 use kohaku_railgun_sync::RpcSyncer;
 use kohaku_userop_kit::{
     bundler::BundlerApi,
-    smart_account::{
-        Call,
-        simple_7702_smart_account::{
-            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount,
-        },
-    },
+    smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
 };
 use tracing_subscriber::EnvFilter;
 
@@ -131,7 +126,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
 
     // The recipient starts without gas ETH: the private fee note pays the paymaster.
     let owner = alloy::signers::local::PrivateKeySigner::random();
-    let smart_account = Simple7702SmartAccount::new(
+    let smart_account = Simple7702Account::new(
         provider.clone(),
         owner.address(),
         SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,

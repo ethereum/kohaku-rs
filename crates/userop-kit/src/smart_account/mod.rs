@@ -8,11 +8,14 @@ use alloy_sol_types::Eip712Domain;
 use serde::{Deserialize, Serialize};
 
 mod shared;
-pub mod simple_7702_smart_account;
-pub mod simple_account;
+mod simple_7702_account;
+mod simple_account;
 
-// A nonzero 65-byte signature used when estimating ECDSA account validation.
-pub(crate) const DUMMY_SIGNATURE: Bytes = bytes!(
+pub use simple_7702_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account};
+pub use simple_account::SimpleAccount;
+
+/// The conventional 65-byte stub signature for estimating ECDSA account validation.
+pub const ECDSA_STUB_SIGNATURE: Bytes = bytes!(
     "0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c"
 );
 
@@ -62,8 +65,8 @@ pub struct Call {
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait SmartAccount: MaybeSend {
-    /// Calls accepted by this account's execution ABI.
-    type Call;
+    /// One call in this account's execution ABI.
+    type Call: Clone + Send + Sync;
 
     /// Returns the UserOperation sender address.
     fn address(&self) -> Address;
@@ -87,10 +90,10 @@ pub trait SmartAccount: MaybeSend {
     async fn init(&self) -> Result<AccountInit, SmartAccountError>;
 
     /// Returns an estimation signature with the account's expected format.
-    fn dummy_signature(&self) -> Bytes;
+    fn stub_signature(&self) -> Bytes;
 
-    /// Encodes calls using the account's execution ABI.
-    fn abi_encode_call(call_data: &Self::Call) -> Bytes;
+    /// Encodes `calls` using the account's execution ABI.
+    fn encode_calls(calls: &[Self::Call]) -> Bytes;
 }
 
 /// An account state read or decoding failure.
@@ -99,6 +102,8 @@ pub trait SmartAccount: MaybeSend {
 pub enum SmartAccountError {
     #[error("Provider error: {0}")]
     ProviderError(#[from] alloy::transports::RpcError<alloy::transports::TransportErrorKind>),
+    #[error("Contract call error: {0}")]
+    ContractError(#[from] alloy::contract::Error),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
