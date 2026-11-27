@@ -14,6 +14,5 @@ pub use scan::{MatchedStealthAddress, ScanEvent, get_announcements_for_user, sca
 pub use scheme3::{
     Account, AccountSeed, Announcement, DerivedAccount, EngineError, ExposeSecret, Master, Match,
     MetaAddress, Scanner, SchemeError, SchemeId3, SpendKey, StealthScheme, Tracking,
-    generate_stealth_address,
 };
 pub use syncer::{AnnouncementRecord, FetchError, FetchEvent, get_announcements};

@@ -74,18 +74,19 @@ where
 mod tests {
     use alloy::primitives::B256;
     use futures::{StreamExt, pin_mut, stream};
-    use rand::{SeedableRng, rngs::StdRng};
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
-    use crate::{Account, generate_stealth_address};
+    use crate::Account;
 
     #[tokio::test]
     async fn matches_before_progress() {
         let account = Account::from_keygen_master(&[7; 32]).unwrap().account;
         let scanner = account.scanner().unwrap();
         let mut rng = StdRng::from_seed([0x52; 32]);
-        let first = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
-        let second = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
+        let first = SchemeId3::announce(account.meta_address(), &rng.random::<[u8; 64]>()).unwrap();
+        let second =
+            SchemeId3::announce(account.meta_address(), &rng.random::<[u8; 64]>()).unwrap();
         let expected = [
             Address::from(first.stealth_address),
             Address::from(second.stealth_address),

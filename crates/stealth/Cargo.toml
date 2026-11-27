@@ -23,7 +23,6 @@ pqsa-per-payment = { workspace = true }
 rand = { workspace = true }
 secrecy = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 zeroize = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -45,7 +44,6 @@ anyhow = { workspace = true }
 hex = { workspace = true }
 kohaku-fork-kit = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = { workspace = true }

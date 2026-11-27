@@ -6,7 +6,6 @@ pub use pqsa_per_payment::{
 use rand::CryptoRng;
 pub use secrecy::ExposeSecret;
 use thiserror::Error;
-use tracing::debug;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +18,6 @@ pub enum SchemeError {
 }
 
 const KEYGEN_ATTEMPTS: u64 = 1_024;
-const RANDOM_ANNOUNCEMENT_ATTEMPTS: usize = 4;
 
 pub struct AccountSeed(Zeroizing<[u8; 128]>);
 
@@ -108,7 +106,6 @@ impl Account {
     }
 
     fn from_keys((meta, master, tracking): pqsa_core::Keys<SchemeId3>) -> Self {
-        debug!(scheme_id = SchemeId3::SCHEME_ID, "scheme 3 keygen");
         Self {
             meta_address: meta,
             master_key: master,
@@ -141,40 +138,9 @@ impl Account {
     }
 }
 
-/// Generates a stealth address and its public announcement data.
-///
-/// # Errors
-///
-/// Forwards engine errors. Returns [`EngineError::SeedRejected`] after four rejected seeds.
-pub fn generate_stealth_address(
-    meta_address: &MetaAddress,
-    rng: &mut impl CryptoRng,
-) -> Result<Announcement, SchemeError> {
-    for _ in 0..RANDOM_ANNOUNCEMENT_ATTEMPTS {
-        let mut seed = Zeroizing::new([0u8; 64]);
-        rng.fill_bytes(seed.as_mut());
-        match SchemeId3::announce(meta_address, seed.as_slice()) {
-            Ok(announcement) => {
-                debug!(
-                    scheme_id = SchemeId3::SCHEME_ID,
-                    ciphertext_len = announcement.ct().len(),
-                    "generated stealth address"
-                );
-                return Ok(announcement);
-            }
-            Err(EngineError::SeedRejected) => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Err(EngineError::SeedRejected.into())
-}
-
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use std::sync::Mutex;
-
     use alloy::primitives::Address;
-    use tracing::Level;
 
     use super::*;
 
@@ -225,25 +191,6 @@ mod tests {
 
     fn unhex(s: &str) -> Vec<u8> {
         hex::decode(s).unwrap()
-    }
-
-    fn captured(body: impl FnOnce()) -> String {
-        // Multiple dispatches force tracing to check the thread's current subscriber.
-        let _inactive = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
-        let subscriber = tracing_subscriber::fmt()
-            .with_ansi(false)
-            .without_time()
-            .with_max_level(Level::TRACE)
-            .with_writer(Mutex::new(Vec::<u8>::new()))
-            .finish();
-        let capture = tracing::Dispatch::new(subscriber);
-        tracing::dispatcher::with_default(&capture, body);
-        let bytes = capture
-            .downcast_ref::<Mutex<Vec<u8>>>()
-            .unwrap()
-            .lock()
-            .unwrap();
-        String::from_utf8(bytes.clone()).unwrap()
     }
 
     #[test]
@@ -406,104 +353,8 @@ mod tests {
     }
 
     #[test]
-    fn retries_rejected_seed() {
-        let account = Account::from_keygen_master(&[7; 32]).unwrap().account;
-        let mut rng = SeedRng {
-            bytes: [vec![0; 64], vec![0x44; 64]].concat(),
-            consumed: 0,
-        };
-        let generated = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
-        let expected = SchemeId3::announce(account.meta_address(), &[0x44; 64]).unwrap();
-        assert_eq!(
-            SchemeId3::announcement_to_bytes(&generated),
-            SchemeId3::announcement_to_bytes(&expected)
-        );
-        assert_eq!(rng.consumed, 128);
-    }
-
-    #[test]
-    fn seed_retry_limit() {
-        let account = Account::from_keygen_master(&[7; 32]).unwrap().account;
-        let mut rng = SeedRng {
-            bytes: vec![0; 5 * 64],
-            consumed: 0,
-        };
-        assert_eq!(
-            generate_stealth_address(account.meta_address(), &mut rng).unwrap_err(),
-            SchemeError::Engine(EngineError::SeedRejected)
-        );
-        assert_eq!(rng.consumed, 256);
-    }
-
-    #[test]
-    fn invalid_kem_key() {
-        let account = Account::from_keygen_master(&[7; 32]).unwrap().account;
-        let meta = account.meta_address();
-        let recipient =
-            MetaAddress::new(meta.spending, meta.viewing_ec, vec![0xff; meta.ek().len()]).unwrap();
-        let mut rng = SeedRng {
-            bytes: vec![0x44; 2 * 64],
-            consumed: 0,
-        };
-        assert_eq!(
-            generate_stealth_address(&recipient, &mut rng).unwrap_err(),
-            SchemeError::Engine(EngineError::Kem)
-        );
-        assert_eq!(rng.consumed, 64);
-    }
-
-    #[test]
     fn seed_debug_is_redacted() {
         let account_seed = AccountSeed::from_bytes([0x7f; 128]);
         assert_eq!(format!("{account_seed:?}"), "AccountSeed([REDACTED])");
-    }
-
-    #[test]
-    fn secrets_are_not_logged() {
-        let seed = unhex(V3_09_SEED);
-        let mut secret_renderings = Vec::new();
-        let logged = captured(|| {
-            let account = Account::from_seed(&seed).unwrap();
-            let account_debug = format!("{account:?}");
-            let master = account.master_key();
-            for secret in [
-                master.spending_seed.as_slice(),
-                master.viewing_ec_seed.as_ref().unwrap().as_slice(),
-                master.kem_seed.as_slice(),
-            ] {
-                secret_renderings.push(hex::encode(secret));
-                secret_renderings.push(format!("{secret:?}"));
-                assert!(!account_debug.contains(&hex::encode(secret)));
-                assert!(!account_debug.contains(&format!("{secret:?}")));
-            }
-
-            let mut rng = SeedRng {
-                bytes: vec![0x44; 64],
-                consumed: 0,
-            };
-            let generated = generate_stealth_address(account.meta_address(), &mut rng).unwrap();
-            let scanner = account.scanner().unwrap();
-            let matched = SchemeId3::scan(&scanner, &generated).unwrap();
-            let key = account.spend_key(&matched).unwrap();
-
-            for secret in [
-                matched.shared_secret.as_slice(),
-                key.expose_secret().as_slice(),
-            ] {
-                secret_renderings.push(hex::encode(secret));
-                secret_renderings.push(format!("{secret:?}"));
-            }
-        });
-        for message in ["scheme 3 keygen", "generated stealth address"] {
-            assert!(
-                logged.contains(message),
-                "missing captured event: {message}"
-            );
-        }
-        assert!(!logged.contains(&hex::encode(&seed)));
-        assert!(!logged.contains(&hex::encode([0x44; 64])));
-        for secret in secret_renderings {
-            assert!(!logged.contains(&secret));
-        }
     }
 }
