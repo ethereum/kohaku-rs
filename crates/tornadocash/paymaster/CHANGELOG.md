@@ -6,7 +6,7 @@ All notable changes to `kohaku-tornadocash-paymaster` are documented here. This 
 
 ### Changed
 
-- **Breaking:** `UserOperationPaymasterExt::with_tornado_paymaster` takes `&CircuitArtifacts` after the Merkle proof ([#145](https://github.com/ethereum/kohaku-rs/pull/145))
+- **Breaking:** `UserOperationPaymasterExt::with_tornado_paymaster` is replaced by `TornadoPaymasterExt::prepare_tornado_withdrawal`.
 
 ## 0.0.1 - 2026-10-25
 

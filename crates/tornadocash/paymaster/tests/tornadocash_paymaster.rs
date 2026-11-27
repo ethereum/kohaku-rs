@@ -1,6 +1,6 @@
 use alloy::{
     node_bindings::Anvil,
-    primitives::{Address, U256, address},
+    primitives::{Address, address},
     providers::{Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
@@ -16,20 +16,18 @@ use kohaku_tornadocash::{
     Asset, Deposit, Pool, Withdrawal,
     merkle_tree::{MerkleTree, MerkleTreeExt},
 };
-use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
+use kohaku_tornadocash_paymaster::TornadoPaymasterExt;
 use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
-    UserOperationRequest,
     bundler::BundlerApi,
-    smart_account::{Call, SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
+    smart_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702Account},
 };
 use tracing::info;
 
 const ALTO_EXECUTOR_PK: &str = "0x4a3a02862ddcb260ed52d40ef03f8e3d78fa3d174b0ef333afdf1ffb4a648cd5";
 const ALTO_UTILITY_PK: &str = "0xdd4b2564c83ff7de602c39ffda1146055dc1814b07c083d7971722384f1f01a6";
 
-const SINK: Address = address!("0x000000000000000000000000000000000000dead");
 const PLACEHOLDER_FACTORY: Address = address!("0x0000000000000000000000000000000000000011");
 const PLACEHOLDER_WETH: Address = address!("0x0000000000000000000000000000000000000022");
 
@@ -108,27 +106,21 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         chain_id,
     );
 
-    let request = UserOperationRequest::default().with_calls([Call {
-        to: SINK,
-        ..Default::default()
-    }]);
-
     let withdrawal = Withdrawal::new(&pool, note.clone(), owner.address());
     let withdrawal_merkle_proof = tree.note_proof(&withdrawal.note)?;
-    let request = request
-        .with_tornado_paymaster(
+    let (userop, _fee) = alto
+        .prepare_tornado_withdrawal(
             &smart_account,
             withdrawal,
             &withdrawal_merkle_proof,
-            tornado_artifacts(),
             &provider,
-            &*alto,
+            tornado_artifacts(),
             &mut rand::rng(),
         )
         .await?;
-
-    let userop = alto.prepare_user_operation(&smart_account, request).await?;
-    let pending = alto.send_user_operation(&userop.sign(&owner).await?).await?;
+    let pending = alto
+        .send_user_operation(&userop.sign(&owner).await?)
+        .await?;
     let userop_receipt = pending.get_receipt().await?;
     info!("Userop receipt: {userop_receipt:?}");
 
@@ -136,127 +128,6 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     assert!(
         provider.is_spent(&pool, note.nullifier_hash()).await?,
         "note should be spent"
-    );
-
-    Ok(())
-}
-
-/// The fee must be driven down to what the operation actually costs, so that the rest of the note
-/// reaches the recipient during validation and the operation's own calls can spend it.
-#[tokio::test]
-#[ignore = "run with `cargo test --release -- --ignored`"]
-async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init()
-        .ok();
-
-    let anvil = Anvil::new().try_spawn()?;
-    let wallet = anvil.wallet().expect("anvil provides a dev wallet");
-    let provider = ProviderBuilder::new()
-        .wallet(wallet)
-        .connect_http(anvil.endpoint_url())
-        .erased();
-    let chain_id = provider.get_chain_id().await?;
-
-    let entrypoint = deploy_entry_point(&provider).await?;
-    deploy_simple_account(&provider).await?;
-
-    let mut pool = Pool::new(
-        provider.get_chain_id().await?,
-        deploy_pool(provider.clone(), 10_u128.pow(17)).await?,
-        Asset::ETH,
-        10_u128.pow(17),
-        0,
-        None,
-    );
-    let paymaster_address = deploy_paymaster(
-        provider.clone(),
-        entrypoint,
-        PLACEHOLDER_FACTORY,
-        PLACEHOLDER_WETH,
-    )
-    .await?;
-    allow_instance(provider.clone(), paymaster_address, pool.address).await?;
-    pool.paymaster = Some(paymaster_address);
-
-    // Deposit a note
-    info!("Depositing into pool");
-    let deposit = Deposit::new(&pool, rand::random());
-    let note = deposit.note.clone();
-    provider
-        .send_transaction(deposit.call().into())
-        .await?
-        .watch()
-        .await?;
-
-    // Sync a Merkle tree against the provider
-    let syncer = RpcSyncer::new(provider.clone());
-    let mut tree = MerkleTree::new();
-    let snapshot = syncer.sync(&pool, ..).await?;
-    tree.splice_events(&snapshot)?;
-
-    info!("Starting local alto bundler");
-    let alto = AltoBuilder::new(
-        anvil.endpoint(),
-        entrypoint,
-        ALTO_EXECUTOR_PK,
-        ALTO_UTILITY_PK,
-    )
-    .prefund(&provider)
-    .await?
-    .spawn()
-    .await?;
-
-    // Spend 90% of the note within the same operation that withdraws it
-    let spend = U256::from(pool.amount_wei) * U256::from(90) / U256::from(100);
-    let owner = PrivateKeySigner::random();
-    let smart_account = Simple7702Account::new(
-        provider.clone(),
-        owner.address(),
-        SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
-        chain_id,
-    );
-
-    let request = UserOperationRequest::default().with_calls([Call {
-        to: SINK,
-        value: spend,
-        ..Default::default()
-    }]);
-
-    let sink_before = provider.get_balance(SINK).await?;
-
-    info!("Withdrawing {spend} wei and spending it in the same operation");
-    let withdrawal = Withdrawal::new(&pool, note, owner.address());
-    let withdrawal_merkle_proof = tree.note_proof(&withdrawal.note)?;
-    let request = request
-        .with_tornado_paymaster(
-            &smart_account,
-            withdrawal,
-            &withdrawal_merkle_proof,
-            tornado_artifacts(),
-            &provider,
-            &*alto,
-            &mut rand::rng(),
-        )
-        .await?;
-
-    let userop = alto.prepare_user_operation(&smart_account, request).await?;
-    let pending = alto.send_user_operation(&userop.sign(&owner).await?).await?;
-    let userop_receipt = pending.get_receipt().await?;
-    info!("Userop receipt: {userop_receipt:?}");
-
-    assert!(
-        userop_receipt.success,
-        "flashcall should succeed, but reverted: {:?}",
-        userop_receipt.reason
-    );
-
-    let sink_after = provider.get_balance(SINK).await?;
-    assert_eq!(
-        sink_after - sink_before,
-        spend,
-        "sink should have received the flashcalled funds"
     );
 
     Ok(())
