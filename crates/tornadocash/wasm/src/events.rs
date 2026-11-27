@@ -25,7 +25,7 @@ pub struct LogInput {
 }
 
 /// A plain JavaScript snapshot of [`SyncEvent`].
-#[derive(Serialize, Deserialize, Tsify)]
+#[derive(Serialize, Tsify)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -121,6 +121,37 @@ impl TryFrom<DecodedEvent> for SyncEvent {
                 fee: fee.try_into()?,
                 block_number: block_number.try_into()?,
             }),
+        })
+    }
+}
+
+impl TryFrom<Ts<Self>> for DecodedEvent {
+    type Error = JsError;
+
+    fn try_from(event: Ts<Self>) -> Result<Self, Self::Error> {
+        // Serde buffers internally tagged enums before `preserve` can read the JS values.
+        let event = JsValue::from(event);
+        let get = |field: &str| {
+            js_sys::Reflect::get(&event, &JsValue::from_str(field))
+                .map_err(|_| JsError::new(&format!("Could not read event field {field}")))
+        };
+        let hex = |field: &str| -> Result<Hex, JsError> {
+            Ok(Ts::<Hex>::new_unchecked(get(field)?).to_rust()?)
+        };
+        Ok(match get("kind")?.as_string().as_deref() {
+            Some("deposit") => Self::Deposit {
+                commitment: hex("commitment")?,
+                leaf_index: get("leafIndex")?.unchecked_into(),
+                block_number: get("blockNumber")?.unchecked_into(),
+            },
+            Some("withdrawal") => Self::Withdrawal {
+                to: hex("to")?,
+                nullifier_hash: hex("nullifierHash")?,
+                relayer: hex("relayer")?,
+                fee: get("fee")?.unchecked_into(),
+                block_number: get("blockNumber")?.unchecked_into(),
+            },
+            _ => return Err(JsError::new("Unknown event kind")),
         })
     }
 }

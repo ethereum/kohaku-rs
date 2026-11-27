@@ -29,7 +29,7 @@ impl Snapshot {
         let range = u64::try_from(from_block)?..u64::try_from(to_block)?;
         let events = events
             .into_iter()
-            .map(|event| SyncEvent::try_from(event.to_rust()?))
+            .map(|event| SyncEvent::try_from(DecodedEvent::try_from(event)?))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(CoreSnapshot::new(pool.inner.clone(), range, events)?.into())
     }
@@ -73,5 +73,49 @@ impl Snapshot {
 impl From<CoreSnapshot> for Snapshot {
     fn from(inner: CoreSnapshot) -> Self {
         Self { inner }
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod wasm_tests {
+    use alloy::primitives::{Address, U256};
+    use kohaku_tornadocash::{
+        Field,
+        event::{DepositEvent, SyncEvent, WithdrawalEvent},
+    };
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    use super::*;
+
+    #[wasm_bindgen_test]
+    fn reconstructs_snapshot_from_its_js_events() {
+        let pool = Pool::known().pop().unwrap();
+        let block = 9_007_199_254_740_993;
+        let events = vec![
+            SyncEvent::Deposit(DepositEvent {
+                commitment: Field::from(1),
+                leaf_index: 0,
+                block_number: block,
+            }),
+            SyncEvent::Withdrawal(WithdrawalEvent {
+                to: Address::ZERO,
+                nullifier_hash: Field::from(2),
+                relayer: Address::ZERO,
+                fee: U256::from(1) << 200,
+                block_number: block,
+            }),
+        ];
+        let original: Snapshot = CoreSnapshot::new(pool.inner.clone(), block..block + 1, events)
+            .unwrap()
+            .into();
+
+        let rebuilt = Snapshot::new(
+            &pool,
+            block.into(),
+            (block + 1).into(),
+            original.events().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rebuilt.inner.events(), original.inner.events());
     }
 }
