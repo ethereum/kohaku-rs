@@ -21,7 +21,7 @@ use kohaku_railgun::{
 use kohaku_railgun_paymaster::RailgunUserOps;
 use kohaku_railgun_sync::RpcSyncer;
 use kohaku_userop_kit::{
-    bundler::Bundler,
+    bundler::BundlerApi,
     smart_account::{
         Call,
         simple_7702_smart_account::{
@@ -153,7 +153,7 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
         )
         .await?;
     let calls = vec![Call {
-        target: chain.wrapped_base_token,
+        to: chain.wrapped_base_token,
         value: U256::ZERO,
         data: weth_contract
             .withdraw(U256::from(UNWRAP_AMOUNT))
@@ -192,8 +192,8 @@ async fn test_broadcast_utxo() -> Result<(), anyhow::Error> {
     );
 
     let signed = signable.sign(&owner).await?;
-    let hash = alto.send_user_operation(&signed).await?;
-    let receipt = alto.wait_for_receipt(hash).await?;
+    let pending = alto.send_user_operation(&signed).await?;
+    let receipt = pending.get_receipt().await?;
     assert!(receipt.success);
 
     railgun.sync().await?;

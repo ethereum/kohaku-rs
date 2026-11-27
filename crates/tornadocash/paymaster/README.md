@@ -10,7 +10,10 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 ## Example
 
 ```rust,no_run
-# use alloy::{providers::DynProvider, signers::local::PrivateKeySigner};
+# use alloy::{
+#     providers::{DynProvider, RootProvider},
+#     signers::local::PrivateKeySigner,
+# };
 # use kohaku_tornadocash::{
 #     merkle_tree::{MerkleTree, MerkleTreeExt},
 #     Note,
@@ -21,7 +24,7 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 # use kohaku_tornadocash_paymaster::UserOperationPaymasterExt;
 # use kohaku_userop_kit::{
 #     builder::UserOperationBuilder,
-#     bundler::{Bundler, pimlico::PimlicoBundler},
+#     bundler::BundlerApi,
 #     smart_account::{
 #         Call,
 #         simple_7702_smart_account::{SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08, Simple7702SmartAccount},
@@ -37,7 +40,7 @@ Supports sponsoring 4337 `UserOps` with Tornado Cash notes. Uses the [`privacy-p
 #     rng: &mut impl rand::CryptoRng,
 # ) -> Result<(), Box<dyn std::error::Error>> {
 let owner = PrivateKeySigner::random();
-let bundler = PimlicoBundler::new("https://bundler.pimlico.com".parse()?);
+let bundler = RootProvider::new_http("https://bundler.pimlico.com".parse()?);
 
 let smart_account = Simple7702SmartAccount::new(
     provider.clone(),
@@ -65,8 +68,8 @@ let builder = builder
     .await?;
 
 let userop = builder.build().sign(&owner).await?;
-let hash = bundler.send_user_operation(&userop).await?;
-println!("{hash:?}");
+let receipt = bundler.send_user_operation(&userop).await?.get_receipt().await?;
+println!("{receipt:?}");
 
 Ok(())
 # }

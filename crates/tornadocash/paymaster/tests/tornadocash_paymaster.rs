@@ -21,7 +21,7 @@ use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_tornadocash_syncer::{Syncer, rpc::RpcSyncer};
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
-    bundler::Bundler,
+    bundler::BundlerApi,
     smart_account::{
         Call,
         simple_7702_smart_account::{
@@ -116,7 +116,7 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
         .with_call(&vec![Call {
-            target: SINK,
+            to: SINK,
             ..Default::default()
         }]);
 
@@ -134,8 +134,8 @@ async fn test_tornadocash_paymaster() -> Result<(), anyhow::Error> {
         .await?;
 
     let userop = builder.build().sign(&owner).await?;
-    let userop_hash = alto.send_user_operation(&userop).await?;
-    let userop_receipt = alto.wait_for_receipt(userop_hash).await?;
+    let pending = alto.send_user_operation(&userop).await?;
+    let userop_receipt = pending.get_receipt().await?;
     info!("Userop receipt: {userop_receipt:?}");
 
     assert!(userop_receipt.success, "userop should succeed");
@@ -227,7 +227,7 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
     let builder = UserOperationBuilder::new_with_smart_account(&smart_account)
         .await?
         .with_call(&vec![Call {
-            target: SINK,
+            to: SINK,
             value: spend,
             ..Default::default()
         }]);
@@ -249,8 +249,8 @@ async fn test_tornadocash_paymaster_flashcall() -> Result<(), anyhow::Error> {
         .await?;
 
     let userop = builder.build().sign(&owner).await?;
-    let userop_hash = alto.send_user_operation(&userop).await?;
-    let userop_receipt = alto.wait_for_receipt(userop_hash).await?;
+    let pending = alto.send_user_operation(&userop).await?;
+    let userop_receipt = pending.get_receipt().await?;
     info!("Userop receipt: {userop_receipt:?}");
 
     assert!(

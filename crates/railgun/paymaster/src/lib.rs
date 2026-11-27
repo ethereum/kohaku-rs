@@ -6,6 +6,7 @@ pub mod verifier_override;
 use std::sync::Arc;
 
 use alloy::{
+    eips::eip1559::Eip1559Estimation,
     primitives::{Address, B256, Bytes, U256},
     providers::{DynProvider, Provider},
     rpc::types::TransactionRequest,
@@ -22,7 +23,7 @@ use kohaku_railgun::{
 };
 use kohaku_userop_kit::{
     builder::UserOperationBuilder,
-    bundler::{Bundler, BundlerError},
+    bundler::{BundlerApi, pimlico::PimlicoApi},
     signable_user_operation::SignableUserOperation,
     smart_account::SmartAccount,
     user_operation::UserOperationGasEstimate,
@@ -51,12 +52,17 @@ pub struct SingleProofReport {
     pub paymaster_verification_limit: u128,
 }
 
+/// Gas limits and fees for a `UserOperation`.
+#[derive(Debug, Clone, Copy)]
+pub struct UserOpGas {
+    pub limits: UserOperationGasEstimate,
+    pub fees: Eip1559Estimation,
+}
+
 #[derive(Debug, Error)]
 pub enum UserOpError {
     #[error("Railgun transaction error: {0}")]
     Railgun(#[from] kohaku_railgun::wallet::RailgunError),
-    #[error("Bundler error: {0}")]
-    Bundler(#[from] BundlerError),
     #[error("RPC error: {0}")]
     Rpc(#[from] RpcError<TransportErrorKind>),
     #[error("Unable to construct valid note configuration for fee payment")]
@@ -227,7 +233,7 @@ impl<'a> RailgunUserOps<'a> {
         fee_token: Address,
         calldata: &S::Call,
         fee: u128,
-        gas: UserOperationGasEstimate,
+        gas: UserOpGas,
         rng: &mut impl CryptoRng,
     ) -> Result<SignableUserOperation, UserOpError> {
         let (userop, _) = self
@@ -249,7 +255,7 @@ impl<'a> RailgunUserOps<'a> {
         fee_token: Address,
         calldata: &S::Call,
         fee: u128,
-        gas: UserOperationGasEstimate,
+        gas: UserOpGas,
         rng: &mut impl CryptoRng,
     ) -> Result<(SignableUserOperation, Vec<ProvedOperation>), UserOpError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
@@ -296,21 +302,24 @@ impl<'a> RailgunUserOps<'a> {
     /// bundler is asked for its own estimate. If either exceeds a limit the call fails before
     /// anything is sent: that costs a second signature, never funds.
     #[allow(clippy::too_many_arguments)]
-    pub async fn prepare_userop_single_proof<S: SmartAccount>(
+    pub async fn prepare_userop_single_proof<
+        S: SmartAccount,
+        B: BundlerApi + PimlicoApi + ?Sized,
+    >(
         &mut self,
         spends: &[Spend],
-        bundler: &dyn Bundler,
+        bundler: &B,
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
         calldata: S::Call,
-        gas: UserOperationGasEstimate,
+        gas: UserOpGas,
         rng: &mut impl CryptoRng,
     ) -> Result<(SignableUserOperation, SingleProofReport), UserOpError> {
         let (privacy_paymaster, railgun_fee_adapter) = self.paymaster_contracts(fee_token)?;
         let fee_address = paymaster_railgun_address(ChainId::evm(self.wallet.chain().id));
-        let total_gas = total_gas_limit(&gas);
-        let fee = total_gas * gas.max_fee_per_gas;
+        let total_gas = total_gas_limit(&gas.limits);
+        let fee = total_gas * gas.fees.max_fee_per_gas;
 
         // The one proof. This is the only place the spending signer is used.
         let with_fee = self
@@ -340,7 +349,7 @@ impl<'a> RailgunUserOps<'a> {
             .await?;
 
         // Check the limits against the real proof before anything leaves.
-        let pmv_limit = gas.paymaster_verification_gas_limit.unwrap_or(0);
+        let pmv_limit = gas.limits.paymaster_verification_gas_limit.unwrap_or(0);
         let pmv_measured =
             estimate_paymaster_verification_gas_limit(&self.provider, &signable).await?;
         if pmv_measured > pmv_limit {
@@ -350,17 +359,17 @@ impl<'a> RailgunUserOps<'a> {
                 limit: pmv_limit,
             });
         }
-        let bundler_view = bundler.estimate_gas(&signable, None).await?;
+        let bundler_view = bundler.estimate_user_operation_gas(&signable, None).await?;
         for (what, needed, limit) in [
             (
                 "pre-verification",
                 bundler_view.pre_verification_gas,
-                gas.pre_verification_gas,
+                gas.limits.pre_verification_gas,
             ),
             (
                 "account verification",
                 bundler_view.verification_gas_limit,
-                gas.verification_gas_limit,
+                gas.limits.verification_gas_limit,
             ),
             // Without execution calldata the call limit constrains nothing: a bundler's default
             // there is not a requirement.
@@ -371,7 +380,7 @@ impl<'a> RailgunUserOps<'a> {
                 } else {
                     bundler_view.call_gas_limit
                 },
-                gas.call_gas_limit,
+                gas.limits.call_gas_limit,
             ),
         ] {
             if needed > limit {
@@ -386,7 +395,7 @@ impl<'a> RailgunUserOps<'a> {
         self.register_ops(&operations)?;
         let report = SingleProofReport {
             total_gas_limit: total_gas,
-            max_fee_per_gas: gas.max_fee_per_gas,
+            max_fee_per_gas: gas.fees.max_fee_per_gas,
             fee,
             paymaster_verification_measured: pmv_measured,
             paymaster_verification_limit: pmv_limit,
@@ -409,16 +418,16 @@ impl<'a> RailgunUserOps<'a> {
     ///
     /// Panics only if the fixed two-round estimation loop does not run.
     #[allow(clippy::too_many_arguments)]
-    pub async fn simulate_gas_limits<S: SmartAccount>(
+    pub async fn simulate_gas_limits<S: SmartAccount, B: BundlerApi + PimlicoApi + ?Sized>(
         &mut self,
         spends: &[Spend],
-        bundler: &dyn Bundler,
+        bundler: &B,
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
         calldata: &S::Call,
         rng: &mut impl CryptoRng,
-    ) -> Result<UserOperationGasEstimate, UserOpError> {
+    ) -> Result<UserOpGas, UserOpError> {
         let mut fee = SEED_FEE;
         let mut estimate = None;
         for _round in 0..2 {
@@ -431,14 +440,18 @@ impl<'a> RailgunUserOps<'a> {
                     fee_token,
                     calldata,
                     fee,
-                    UserOperationGasEstimate {
-                        pre_verification_gas: 0,
-                        verification_gas_limit: 0,
-                        call_gas_limit: 0,
-                        paymaster_verification_gas_limit: Some(0),
-                        paymaster_post_op_gas_limit: Some(0),
-                        max_fee_per_gas: 0,
-                        max_priority_fee_per_gas: 0,
+                    UserOpGas {
+                        limits: UserOperationGasEstimate {
+                            pre_verification_gas: 0,
+                            verification_gas_limit: 0,
+                            call_gas_limit: 0,
+                            paymaster_verification_gas_limit: Some(0),
+                            paymaster_post_op_gas_limit: Some(0),
+                        },
+                        fees: Eip1559Estimation {
+                            max_fee_per_gas: 0,
+                            max_priority_fee_per_gas: 0,
+                        },
                     },
                     rng,
                 )
@@ -451,9 +464,12 @@ impl<'a> RailgunUserOps<'a> {
             });
             let overrides =
                 verifier_state_override(self.wallet.chain().railgun_smart_wallet, circuits);
-            let gas = bundler.estimate_gas(&dummy, Some(&overrides)).await?;
-            fee = total_gas_limit(&gas) * gas.max_fee_per_gas;
-            estimate = Some(gas);
+            let limits = bundler
+                .estimate_user_operation_gas(&dummy, Some(&overrides))
+                .await?;
+            let fees = bundler.get_user_operation_gas_price().await?.slow;
+            fee = total_gas_limit(&limits) * fees.max_fee_per_gas;
+            estimate = Some(UserOpGas { limits, fees });
         }
         Ok(estimate.expect("two rounds ran"))
     }
@@ -462,10 +478,10 @@ impl<'a> RailgunUserOps<'a> {
     /// ([`Self::prepare_userop_single_proof`]): one spending signature, no iterative re-proving.
     /// Falls back to nothing: if the estimate fails, the error is returned and nothing is signed.
     #[allow(clippy::too_many_arguments)]
-    pub async fn prepare_userop_single<S: SmartAccount>(
+    pub async fn prepare_userop_single<S: SmartAccount, B: BundlerApi + PimlicoApi + ?Sized>(
         &mut self,
         spends: &[Spend],
-        bundler: &dyn Bundler,
+        bundler: &B,
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
@@ -485,13 +501,13 @@ impl<'a> RailgunUserOps<'a> {
             .await?;
         info!(
             "Estimated before signing: pre-verification {}, account verification {}, call {}, paymaster verification {}, post-op {}; total {} gas at {} wei/gas",
-            gas.pre_verification_gas,
-            gas.verification_gas_limit,
-            gas.call_gas_limit,
-            gas.paymaster_verification_gas_limit.unwrap_or(0),
-            gas.paymaster_post_op_gas_limit.unwrap_or(0),
-            total_gas_limit(&gas),
-            gas.max_fee_per_gas,
+            gas.limits.pre_verification_gas,
+            gas.limits.verification_gas_limit,
+            gas.limits.call_gas_limit,
+            gas.limits.paymaster_verification_gas_limit.unwrap_or(0),
+            gas.limits.paymaster_post_op_gas_limit.unwrap_or(0),
+            total_gas_limit(&gas.limits),
+            gas.fees.max_fee_per_gas,
         );
         let (signable, _report) = self
             .prepare_userop_single_proof(
@@ -529,7 +545,7 @@ impl<'a> RailgunUserOps<'a> {
         railgun_fee_adapter: Address,
         fee_token: Address,
         fee: u128,
-        gas: UserOperationGasEstimate,
+        gas: UserOpGas,
     ) -> Result<SignableUserOperation, UserOpError> {
         let fee_asset = AssetId::Erc20(fee_token);
         let fee_operation = get_fee_operation(operations, fee_asset, fee)?;
@@ -544,7 +560,9 @@ impl<'a> RailgunUserOps<'a> {
             .map_err(|e| UserOpError::Other(Box::new(e)))?
             .with_call(calldata)
             .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
-            .with_gas(gas)
+            .with_gas_limits(gas.limits)
+            .with_max_fee_per_gas(gas.fees.max_fee_per_gas)
+            .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas)
             .build())
     }
 
@@ -555,10 +573,10 @@ impl<'a> RailgunUserOps<'a> {
     /// `fee_payer` is the signer that will authorize the fee note transfer to the bundler's
     /// address for the estimated fee amount in `fee_token`.
     #[allow(clippy::too_many_arguments)]
-    pub async fn prepare_userop<S: SmartAccount>(
+    pub async fn prepare_userop<S: SmartAccount, B: BundlerApi + PimlicoApi + ?Sized>(
         &mut self,
         spends: &[Spend],
-        bundler: &dyn Bundler,
+        bundler: &B,
         sender: &S,
         fee_payer: Arc<dyn RailgunSigner>,
         fee_token: Address,
@@ -612,6 +630,7 @@ impl<'a> RailgunUserOps<'a> {
             );
 
             // Construct UserOperation
+            let fees = bundler.get_user_operation_gas_price().await?.slow;
             let mut signable = UserOperationBuilder::new_with_smart_account(sender)
                 .await
                 .map_err(|e| UserOpError::Other(Box::new(e)))?
@@ -619,6 +638,8 @@ impl<'a> RailgunUserOps<'a> {
                 .with_paymaster_and_data(privacy_paymaster, Bytes::from(paymaster_data))
                 .with_gas_estimate(bundler, None)
                 .await?
+                .with_max_fee_per_gas(fees.max_fee_per_gas)
+                .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas)
                 .build();
 
             // Recalculate fee and check for convergence.

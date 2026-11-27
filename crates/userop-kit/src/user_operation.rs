@@ -135,14 +135,6 @@ pub struct UserOperationGasEstimate {
     #[serde(default, with = "alloy::serde::quantity::opt")]
     #[cfg_attr(js, tsify(type = "`0x${string}`"))]
     pub paymaster_post_op_gas_limit: Option<u128>,
-
-    #[serde(with = "alloy::serde::quantity")]
-    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub max_fee_per_gas: u128,
-
-    #[serde(with = "alloy::serde::quantity")]
-    #[cfg_attr(js, tsify(type = "`0x${string}`"))]
-    pub max_priority_fee_per_gas: u128,
 }
 
 /// Receipt returned by `eth_getUserOperationReceipt`.
