@@ -1,14 +1,13 @@
 use pqsa_core::keygen_seed;
-use rand::CryptoRng;
-use thiserror::Error;
-use tracing::debug;
-use zeroize::Zeroizing;
-
 pub use pqsa_core::{Error as EngineError, StealthScheme};
 pub use pqsa_per_payment::{
     Announcement, Master, Match, MetaAddress, Scanner, SchemeId3, SpendKey, Tracking,
 };
+use rand::CryptoRng;
 pub use secrecy::ExposeSecret;
+use thiserror::Error;
+use tracing::debug;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -172,10 +171,12 @@ pub fn generate_stealth_address(
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use super::*;
-    use alloy::primitives::Address;
     use std::sync::Mutex;
+
+    use alloy::primitives::Address;
     use tracing::Level;
+
+    use super::*;
 
     const V3_09_SEED: &str = "1111111111111111111111111111111111111111111111111111111111111111\
          3333333333333333333333333333333333333333333333333333333333333333\

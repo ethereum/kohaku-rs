@@ -77,8 +77,8 @@ pub enum FetchError {
 /// Streams announcements in block and log order.
 /// Uses [`StreamedEvent`] for chunking, concurrency and retries.
 /// Both range endpoints are inclusive. The range is limited to `deployment.start_block`
-/// through the finalized block read on first poll. Use `from_block..=u64::MAX` to scan to that block.
-/// Invalid scheme 3 payloads are skipped and counted in [`FetchEvent::RangeFetched`].
+/// through the finalized block read on first poll. Use `from_block..=u64::MAX` to scan to that
+/// block. Invalid scheme 3 payloads are skipped and counted in [`FetchEvent::RangeFetched`].
 /// Emits one `RangeFetched` for the actual range after all logs are processed, even if none match.
 /// If the clamped range is empty, the stream ends without querying logs or emitting a range.
 ///

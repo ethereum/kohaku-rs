@@ -10,8 +10,7 @@ cargo clippy --locked -p kohaku-stealth -p kohaku-rpc-provider --all-targets -- 
 cargo fmt -p kohaku-stealth -p kohaku-rpc-provider -- --check
 ```
 
-`e2e.rs` installs ERC-5564/6538 runtime bytecode on Anvil. Contract deployment
-and constructors are not tested.
+`e2e.rs` deploys the ERC-5564 announcer and ERC-6538 registry runtime bytecode on Anvil with fork-kit's `deploy_stealth`.
 
 ## Firefox
 
@@ -32,8 +31,8 @@ The fixtures come from [pq-stealth-scheme3-public v0.1.0][upstream].
 
 | Fixture or test | Upstream source |
 | --- | --- |
-| `contracts/ERC5564Announcer.hex` | [harness/announcement/deployed_bytecode.hex][announcer] |
-| `contracts/ERC6538Registry.hex` | [harness/registration/deployed_bytecode.hex][registry] |
+| `crates/fork-kit/fixtures/stealth/erc5564_announcer.runtime.hex` | [harness/announcement/deployed_bytecode.hex][announcer] |
+| `crates/fork-kit/fixtures/stealth/erc6538_registry.runtime.hex` | [harness/registration/deployed_bytecode.hex][registry] |
 | `fixtures/payment.json` | Output of [emit_payment_json.rs][payment] |
 | Keygen seed | [keygen_seed_golden][keygen] in `crates/core/src/lib.rs` |
 | Token metadata in `interop.rs` | V3-08a, `given.metadata_with_token_block` in [vectors/section-2.json][vectors] |

@@ -23,6 +23,7 @@ alloy = { workspace = true, features = [
 ] }
 anyhow = { workspace = true }
 kohaku-railgun = { workspace = true }
+kohaku-stealth = { workspace = true }
 kohaku-tornadocash = { workspace = true }
 kohaku-tornadocash-relayer = { workspace = true }
 kohaku-userop-kit = { workspace = true }
