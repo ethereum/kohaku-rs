@@ -1,0 +1,14 @@
+{
+  "name": "kohaku-tornadocash-wasm-benchmarks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:assets": "node prepare.mjs",
+    "bench": "npm run prepare:assets && vitest bench --run"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3",
+    "@vitest/browser-playwright": "5.0.3",
+    "playwright": "1.63.0"
+  }
+}
