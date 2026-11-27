@@ -3,7 +3,7 @@
 use alloy::{
     network::TransactionBuilder,
     node_bindings::Anvil,
-    primitives::{Address, Bytes, U256, address},
+    primitives::{Address, Bytes, U256},
     providers::{Provider, ProviderBuilder, ext::AnvilApi},
     rpc::types::TransactionRequest,
     signers::{SignerSync, local::PrivateKeySigner},
@@ -27,8 +27,8 @@ use abis::{IERC5564Announcer, IERC6538Registry};
 #[path = "fixtures/mod.rs"]
 mod fixtures;
 
-const ANNOUNCER: Address = address!("55649E01B5Df198D18D95b5cc5051630cfD45564");
-const REGISTRY: Address = address!("6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538");
+const ANNOUNCER: Address = Deployment::ETHEREUM.announcer;
+const REGISTRY: Address = Deployment::ETHEREUM.registry;
 
 sol! {
     struct Erc6538RegistryEntry {

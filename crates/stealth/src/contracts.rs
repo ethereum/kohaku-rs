@@ -1,6 +1,6 @@
 use alloy::{
     network::TransactionBuilder,
-    primitives::{Address, U256},
+    primitives::{Address, U256, address},
     rpc::types::TransactionRequest,
     sol_types::SolCall,
 };
@@ -19,6 +19,22 @@ pub struct Deployment {
     pub announcer: Address,
     pub registry: Address,
     pub start_block: u64,
+}
+
+impl Deployment {
+    pub const ETHEREUM: Deployment = Deployment {
+        chain_id: 1,
+        announcer: address!("0x55649E01B5Df198D18D95b5cc5051630cfD45564"),
+        registry: address!("0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538"),
+        start_block: 20_042_207,
+    };
+
+    pub const SEPOLIA: Deployment = Deployment {
+        chain_id: 11_155_111,
+        announcer: address!("0x55649E01B5Df198D18D95b5cc5051630cfD45564"),
+        registry: address!("0x6538E6bf4B0eBd30A8Ea093027Ac2422ce5d6538"),
+        start_block: 5_486_597,
+    };
 }
 
 /// Builds an unsigned ERC-6538 `registerKeys` transaction.
