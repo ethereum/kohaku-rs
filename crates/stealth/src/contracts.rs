@@ -37,6 +37,7 @@ impl Deployment {
 }
 
 /// Builds an unsigned ERC-6538 `registerKeys` transaction.
+#[must_use]
 pub fn register_keys(deployment: &Deployment, meta_address: &MetaAddress) -> TransactionRequest {
     let call = IERC6538Registry::registerKeysCall {
         schemeId: U256::from(SchemeId3::SCHEME_ID),
@@ -49,6 +50,7 @@ pub fn register_keys(deployment: &Deployment, meta_address: &MetaAddress) -> Tra
 }
 
 /// Builds an unsigned ERC-5564 announcement transaction.
+#[must_use]
 pub fn announce(deployment: &Deployment, announcement: &Announcement) -> TransactionRequest {
     let (address, ephemeral_public_key, metadata) = SchemeId3::announcement_to_bytes(announcement);
     let call = IERC5564Announcer::announceCall {
