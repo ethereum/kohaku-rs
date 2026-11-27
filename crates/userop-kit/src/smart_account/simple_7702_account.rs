@@ -87,10 +87,9 @@ impl<P: Provider> SmartAccount for Simple7702Account<P> {
 
 #[cfg(all(test, native))]
 mod tests {
-    use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
+    use alloy::{providers::ProviderBuilder, transports::mock::Asserter};
 
     use super::*;
-    use crate::{builder::UserOperationBuilder, user_operation::Eip7702Auth};
 
     #[tokio::test]
     async fn init_uses_selected_implementation_and_current_native_nonce() {
@@ -107,45 +106,5 @@ mod tests {
 
         assert_eq!(auth.address, implementation);
         assert_eq!(auth.nonce, 9);
-    }
-
-    #[tokio::test]
-    async fn builder_keeps_entrypoint_and_authorization_nonces_separate() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account = Simple7702Account::new(
-            provider,
-            Address::repeat_byte(0x44),
-            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
-            1,
-        );
-        mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
-        mock.push_success(&"0x9");
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-        let Eip7702Auth::Unsigned(auth) = operation.user_op.authorization else {
-            panic!("Expected EIP-7702 delegation");
-        };
-
-        assert_eq!(operation.user_op.nonce, U256::from(7));
-        assert_eq!(auth.nonce, 9);
-        assert!(operation.user_op.factory.is_none());
-    }
-
-    #[test]
-    fn builder_future_is_send_on_native() {
-        fn assert_send(_: impl Send) {}
-
-        let provider = ProviderBuilder::new().connect_mocked_client(Asserter::new());
-        let account = Simple7702Account::new(
-            provider,
-            Address::repeat_byte(0x44),
-            SIMPLE_7702_ACCOUNT_IMPLEMENTATION_V08,
-            1,
-        );
-        assert_send(UserOperationBuilder::new_with_smart_account(&account));
     }
 }

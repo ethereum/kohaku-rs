@@ -12,8 +12,9 @@ use kohaku_tornadocash::{
 use kohaku_tornadocash_circuit::CircuitArtifacts;
 use kohaku_tornadocash_provider::TornadoProviderExt;
 use kohaku_userop_kit::{
-    UserOperationBuilder,
-    bundler::{BundlerApi, PimlicoApi},
+    UserOperationRequest,
+    bundler::{BundlerApi, PimlicoApi, PrepareUserOperationError},
+    smart_account::SmartAccount,
 };
 
 use crate::abis::{TornadoPaymaster, TornadoPaymasterData};
@@ -29,20 +30,24 @@ const SEED_FEE_DENOMINATOR: u64 = 10;
 /// Arbitrary mocked address a pool's verifier is moved to during gas estimation.
 const SHADOW_VERIFIER: Address = address!("0x00000000000000000000000000004b6f68616b75");
 
-/// Extension trait for [`UserOperationBuilder`] that pays for an operation with a tornadocash
+/// Extension trait for [`UserOperationRequest`] that pays for an operation with a tornadocash
 /// note.
 ///
 /// Tornadocash paymasters use a shielded note to pay for a `UserOp`'s gas. The remainder of the
 /// note is withdrawn to the recipient during validation and available during the operation's
 /// execution.
-pub trait UserOperationPaymasterExt: Sized {
-    /// Pays for this operation's gas out of `withdrawal`'s note.
+pub trait UserOperationPaymasterExt<C>: Sized {
+    /// Pays for `account`'s operation's gas out of `withdrawal`'s note.
+    ///
+    /// Fixes the operation's gas limits and fees, so preparing it again does not re-estimate.
     ///
     /// # Errors
     /// Returns an error if the pool has no paymaster, if the note cannot cover the operation's
     /// gas, or if proving, estimation, or the fee quote fails.
-    fn with_tornado_paymaster<R, B>(
+    #[expect(clippy::too_many_arguments)]
+    fn with_tornado_paymaster<S, R, B>(
         self,
+        account: &S,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
         circuit_artifacts: &CircuitArtifacts,
@@ -51,6 +56,7 @@ pub trait UserOperationPaymasterExt: Sized {
         rng: &mut R,
     ) -> impl std::future::Future<Output = Result<Self, PaymasterError>>
     where
+        S: SmartAccount<Call = C>,
         R: rand::CryptoRng,
         B: BundlerApi + PimlicoApi + ?Sized;
 }
@@ -66,14 +72,17 @@ pub enum PaymasterError {
     Provider(#[from] alloy::contract::Error),
     #[error("Transport error: {0}")]
     Transport(#[from] alloy::transports::TransportError),
+    #[error("Prepare error: {0}")]
+    Prepare(#[from] PrepareUserOperationError),
     #[error("Withdrawal error: {0}")]
     Withdrawal(#[from] WithdrawalError),
 }
 
-impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
+impl<C> UserOperationPaymasterExt<C> for UserOperationRequest<C> {
     #[tracing::instrument(skip_all)]
-    async fn with_tornado_paymaster<R, B>(
+    async fn with_tornado_paymaster<S, R, B>(
         self,
+        account: &S,
         withdrawal: Withdrawal,
         merkle_proof: &MerkleProof,
         circuit_artifacts: &CircuitArtifacts,
@@ -82,6 +91,7 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
         rng: &mut R,
     ) -> Result<Self, PaymasterError>
     where
+        S: SmartAccount<Call = C>,
         R: rand::CryptoRng,
         B: BundlerApi + PimlicoApi + ?Sized,
     {
@@ -90,8 +100,9 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
             .paymaster
             .ok_or_else(|| PaymasterError::PoolMissingPaymaster(pool.clone()))?;
 
-        let (builder, fee) = estimate_fee(
+        let (request, fee) = estimate_fee(
             self,
+            account,
             &withdrawal,
             paymaster_address,
             merkle_proof,
@@ -109,20 +120,22 @@ impl<S> UserOperationPaymasterExt for UserOperationBuilder<S> {
             })
             .prove(merkle_proof, circuit_artifacts, rng)?;
 
-        Ok(builder.with_paymaster(paymaster_address, encode_paymaster_data(&proven)))
+        Ok(request.with_paymaster(paymaster_address, encode_paymaster_data(&proven)))
     }
 }
 
-/// Estimates the operation's gas.
+/// Estimates the operation's gas and fixes its gas limits and fees.
 async fn estimate_fee<S, B>(
-    builder: UserOperationBuilder<S>,
+    request: UserOperationRequest<S::Call>,
+    account: &S,
     withdrawal: &Withdrawal,
     paymaster_address: Address,
     merkle_proof: &MerkleProof,
     provider: &impl Provider,
     bundler: &B,
-) -> Result<(UserOperationBuilder<S>, U256), PaymasterError>
+) -> Result<(UserOperationRequest<S::Call>, U256), PaymasterError>
 where
+    S: SmartAccount,
     B: BundlerApi + PimlicoApi + ?Sized,
 {
     let pool = &withdrawal.pool;
@@ -144,14 +157,22 @@ where
 
     let overrides = verifier_override(provider, pool).await?;
     let fees = bundler.get_user_operation_gas_price().await?.slow;
-    let builder = builder
-        .with_paymaster(paymaster_address, encode_paymaster_data(&placeholder))
-        .with_gas_estimate(bundler, Some(&overrides))
-        .await?
+    let estimated = bundler
+        .prepare_user_operation(
+            account,
+            request
+                .clone()
+                .with_paymaster(paymaster_address, encode_paymaster_data(&placeholder))
+                .with_state_override(overrides),
+        )
+        .await?;
+    let request = request
+        .with_gas_limits(estimated.user_op.gas_limits())
         .with_max_fee_per_gas(fees.max_fee_per_gas)
         .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas);
 
-    let cost = gas_cost(provider, pool, paymaster_address, &builder).await?;
+    let cost = U256::from(estimated.total_gas_limit()) * U256::from(fees.max_fee_per_gas);
+    let cost = quote_in_fee_token(provider, pool, paymaster_address, cost).await?;
     let fee = cost + cost * U256::from(FEE_BUFFER_BPS) / U256::from(10_000);
     if fee > denomination {
         return Err(PaymasterError::InsufficientDenomination {
@@ -160,7 +181,7 @@ where
         });
     }
 
-    Ok((builder, fee))
+    Ok((request, fee))
 }
 
 /// Overrides the pool's verifier contract to accept any proof while consuming similar gas.
@@ -180,18 +201,13 @@ async fn verifier_override(
         .build())
 }
 
-/// Quotes the operation's maximum gas cost in the pool's fee token.
-async fn gas_cost<S>(
+/// Quotes a gas cost in wei in the pool's fee token.
+async fn quote_in_fee_token(
     provider: &impl Provider,
     pool: &Pool,
     paymaster: Address,
-    builder: &UserOperationBuilder<S>,
+    cost: U256,
 ) -> Result<U256, PaymasterError> {
-    let user_op = builder.build();
-    let gas = U256::from(user_op.total_gas_limit());
-    let price = U256::from(user_op.user_op.max_fee_per_gas);
-    let cost = gas * price;
-
     let Asset::Erc20 { address: token, .. } = pool.asset else {
         return Ok(cost);
     };

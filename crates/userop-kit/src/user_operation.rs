@@ -178,6 +178,26 @@ impl UserOperation {
         self.into()
     }
 
+    /// Returns this UserOperation's gas limits.
+    pub fn gas_limits(&self) -> UserOperationGasLimits {
+        UserOperationGasLimits {
+            pre_verification_gas: self.pre_verification_gas,
+            verification_gas_limit: self.verification_gas_limit,
+            call_gas_limit: self.call_gas_limit,
+            paymaster_verification_gas_limit: self.paymaster_verification_gas_limit,
+            paymaster_post_op_gas_limit: self.paymaster_post_op_gas_limit,
+        }
+    }
+
+    /// Sets this UserOperation's gas limits.
+    pub fn set_gas_limits(&mut self, gas_limits: UserOperationGasLimits) {
+        self.pre_verification_gas = gas_limits.pre_verification_gas;
+        self.verification_gas_limit = gas_limits.verification_gas_limit;
+        self.call_gas_limit = gas_limits.call_gas_limit;
+        self.paymaster_verification_gas_limit = gas_limits.paymaster_verification_gas_limit;
+        self.paymaster_post_op_gas_limit = gas_limits.paymaster_post_op_gas_limit;
+    }
+
     /// Returns the total gas limit for this UserOperation, including paymaster gas limits if
     /// applicable.
     pub fn total_gas_limit(&self) -> u128 {

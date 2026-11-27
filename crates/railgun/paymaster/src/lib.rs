@@ -22,8 +22,8 @@ use kohaku_railgun::{
     wallet::{RailgunTransactor, RailgunWallet},
 };
 use kohaku_userop_kit::{
-    SignableUserOperation, UserOperationBuilder, UserOperationGasLimits,
-    bundler::{BundlerApi, PimlicoApi},
+    SignableUserOperation, UserOperationGasLimits, UserOperationRequest,
+    bundler::{BundlerApi, PimlicoApi, PrepareUserOperationError},
     smart_account::SmartAccount,
 };
 use rand::CryptoRng;
@@ -81,6 +81,8 @@ pub enum UserOpError {
     },
     #[error("Privacy Paymaster not configured for chain: {0}")]
     PrivacyPaymasterNotConfigured(u64),
+    #[error("UserOperation preparation error: {0}")]
+    Prepare(#[from] PrepareUserOperationError),
     #[error("Other: {0}")]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -553,15 +555,13 @@ impl<'a> RailgunUserOps<'a> {
             railgun_fee_adapter,
             encode_railgun_adapter_data(fee_note.random(), fee_token, fee, transactions),
         );
-        Ok(UserOperationBuilder::new_with_smart_account(sender)
-            .await
-            .map_err(|e| UserOpError::Other(Box::new(e)))?
+        let request = UserOperationRequest::default()
             .with_calls(calldata.iter().cloned())
             .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data))
             .with_gas_limits(gas.limits)
             .with_max_fee_per_gas(gas.fees.max_fee_per_gas)
-            .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas)
-            .build())
+            .with_max_priority_fee_per_gas(gas.fees.max_priority_fee_per_gas);
+        Ok(self.provider.prepare_user_operation(sender, request).await?)
     }
 
     /// Build spends into a `UserOperation` for a compatible delegated or deployed account.
@@ -627,18 +627,16 @@ impl<'a> RailgunUserOps<'a> {
                 encode_railgun_adapter_data(random, asset, value, transactions),
             );
 
-            // Construct UserOperation
+            // Construct UserOperation, estimating its gas before the fees are set.
             let fees = bundler.get_user_operation_gas_price().await?.slow;
-            let mut signable = UserOperationBuilder::new_with_smart_account(sender)
-                .await
-                .map_err(|e| UserOpError::Other(Box::new(e)))?
+            let request = UserOperationRequest::default()
                 .with_calls(calldata.iter().cloned())
-                .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data))
-                .with_gas_estimate(bundler, None)
-                .await?
-                .with_max_fee_per_gas(fees.max_fee_per_gas)
-                .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas)
-                .build();
+                .with_paymaster(privacy_paymaster, Bytes::from(paymaster_data));
+            let mut signable = bundler.prepare_user_operation(sender, request).await?;
+
+            //? Set after estimation, or the bundler's placeholder gas pushes max cost past the fee.
+            signable.user_op.max_fee_per_gas = fees.max_fee_per_gas;
+            signable.user_op.max_priority_fee_per_gas = fees.max_priority_fee_per_gas;
 
             // Recalculate fee and check for convergence.
             info!("Prepared broadcast transaction: {:?}", signable);

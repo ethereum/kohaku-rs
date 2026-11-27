@@ -66,7 +66,7 @@ pub struct Call {
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait SmartAccount: MaybeSend {
     /// One call in this account's execution ABI.
-    type Call: Clone;
+    type Call: Clone + Send + Sync;
 
     /// Returns the UserOperation sender address.
     fn address(&self) -> Address;

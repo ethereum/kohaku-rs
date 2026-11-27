@@ -1,6 +1,6 @@
 # userop-kit
 
-ERC-4337 user operation builder and bundler client (EntryPoint 0.7 & 0.8).
+ERC-4337 UserOperation preparation and bundler client (EntryPoint 0.7 & 0.8).
 
 Supports EIP-7702 delegation, existing smart accounts, and factory deployment.
 
@@ -9,22 +9,29 @@ Supports EIP-7702 delegation, existing smart accounts, and factory deployment.
 ```rust,no_run
 # use alloy::{
 #     primitives::{Address, U256},
-#     providers::DynProvider,
+#     providers::{DynProvider, RootProvider},
 # };
 # use kohaku_userop_kit::{
-#     UserOperationBuilder,
-#     smart_account::SimpleAccount,
+#     UserOperationRequest,
+#     bundler::BundlerApi,
+#     smart_account::{Call, SimpleAccount},
 # };
 #
 # async fn example(
 #     provider: DynProvider,
+#     bundler: RootProvider,
 #     factory: Address,
 #     owner: Address,
+#     call: Call,
 # ) -> anyhow::Result<()> {
 let account = SimpleAccount::from_factory(provider, factory, owner, U256::ZERO, 1).await?;
-let operation = UserOperationBuilder::new_with_smart_account(&account)
-    .await?
-    .build();
+let request = UserOperationRequest::default()
+    .with_calls([call])
+    .with_max_fee_per_gas(2_000_000_000)
+    .with_max_priority_fee_per_gas(1_000_000_000);
+
+// Reads the account's nonce and initialization, then estimates the gas limits.
+let operation = bundler.prepare_user_operation(&account, request).await?;
 
 // Send this payload to the owner's eth_signTypedData_v4 signer.
 let payload = operation.typed_data();
@@ -53,8 +60,13 @@ already be signed. `sign(&owner)` remains available for local signers.
 The `bundler` module adds ERC-4337 bundler methods to any alloy provider
 connected to a bundler, such as `RootProvider::new_http(bundler_url)`:
 `BundlerApi` for the standard methods, and `PimlicoApi` for Pimlico's gas
-price. `send_user_operation` returns a `PendingUserOperation`; call
-`.get_receipt()` on it to wait for inclusion.
+price.
+
+`prepare_user_operation` fills a `UserOperationRequest` from the account and
+estimates any unset gas limits. With gas limits set it never calls the bundler,
+so any provider can prepare the operation.
+`send_user_operation` returns a `PendingUserOperation`; call `.get_receipt()`
+on it to wait for inclusion.
 
 Use final bundler simulation before broadcasting, including factory gas and
 the full withdrawal call sequence. Keep the account recoverable if execution

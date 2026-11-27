@@ -116,8 +116,6 @@ mod tests {
     use alloy::{providers::ProviderBuilder, sol_types::SolValue, transports::mock::Asserter};
 
     use super::*;
-    use crate::{builder::UserOperationBuilder, user_operation::Eip7702Auth};
-
     #[tokio::test]
     async fn from_factory_resolves_address_from_factory() {
         let mock = Asserter::new();
@@ -180,68 +178,5 @@ mod tests {
         mock.push_success(&Bytes::from_static(&[0x60, 0x00]));
 
         assert!(matches!(account.init().await.unwrap(), AccountInit::None));
-    }
-
-    #[tokio::test]
-    async fn builds_user_op_with_entrypoint_nonce() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let address = Address::repeat_byte(0x99);
-        let account = SimpleAccount::new(provider, address, 1);
-        mock.push_success(&Bytes::from(U256::from(7).abi_encode()));
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-
-        assert_eq!(operation.user_op.nonce, U256::from(7));
-        assert_eq!(operation.user_op.sender, address);
-    }
-
-    #[tokio::test]
-    async fn builder_serializes_existing_account_without_deployment_or_authorization() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let account = SimpleAccount::new(provider, Address::repeat_byte(0x99), 1);
-        mock.push_success(&Bytes::from(U256::ZERO.abi_encode()));
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-        let json = serde_json::to_value(operation.user_op).unwrap();
-
-        assert!(json.get("eip7702Auth").is_none());
-        assert!(json.get("factory").is_none());
-        assert!(json.get("factoryData").is_none());
-    }
-
-    #[tokio::test]
-    async fn builder_sets_factory_fields_without_delegation_authorization() {
-        let mock = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(mock.clone());
-        let factory = Address::repeat_byte(0x88);
-        mock.push_success(&Bytes::from(Address::repeat_byte(0x99).abi_encode()));
-        let account = SimpleAccount::from_factory(
-            provider,
-            factory,
-            Address::repeat_byte(0x44),
-            U256::ZERO,
-            1,
-        )
-        .await
-        .unwrap();
-        mock.push_success(&Bytes::from(U256::ZERO.abi_encode()));
-        mock.push_success(&Bytes::new());
-
-        let operation = UserOperationBuilder::new_with_smart_account(&account)
-            .await
-            .unwrap()
-            .build();
-
-        assert_eq!(operation.user_op.factory, Some(factory));
-        assert!(operation.user_op.factory_data.is_some());
-        assert!(matches!(operation.user_op.authorization, Eip7702Auth::None));
     }
 }

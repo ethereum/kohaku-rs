@@ -1,10 +1,16 @@
-use alloy::{providers::Provider, rpc::types::state::StateOverride, transports::TransportResult};
+use alloy::{
+    providers::Provider,
+    rpc::types::state::StateOverride,
+    transports::{TransportError, TransportResult},
+};
 
 use crate::{
-    bundler::PendingUserOperation,
+    bundler::{PendingUserOperation, fill::fill_user_operation},
     signable_user_operation::SignableUserOperation,
     signed_user_operation::SignedUserOperation,
+    smart_account::{SmartAccount, SmartAccountError},
     user_operation::{UserOperationGasLimits, UserOperationHash, UserOperationReceipt},
+    user_operation_request::UserOperationRequest,
 };
 
 /// ERC-4337 bundler methods (ERC-7769).
@@ -13,6 +19,32 @@ use crate::{
 #[cfg_attr(native, async_trait::async_trait)]
 #[cfg_attr(wasm, async_trait::async_trait(?Send))]
 pub trait BundlerApi: Send + Sync {
+    /// Fills `request` from `account`, then estimates its gas limits if they are unset.
+    ///
+    /// With gas limits set, the bundler is never called, so any provider can prepare the operation.
+    ///
+    /// Estimation applies the request's state override and simulates with its fees.
+    ///
+    /// # Errors
+    /// Returns an error if the account's state cannot be read or estimation fails.
+    async fn prepare_user_operation<S: SmartAccount>(
+        &self,
+        account: &S,
+        mut request: UserOperationRequest<S::Call>,
+    ) -> Result<SignableUserOperation, PrepareUserOperationError> {
+        let estimate = request.gas_limits.is_none();
+        let state_override = request.state_override.take();
+        let mut op = fill_user_operation(account, request).await?;
+        if estimate {
+            let gas_limits = self
+                .estimate_user_operation_gas(&op, state_override.as_ref())
+                .await?;
+            op.user_op.set_gas_limits(gas_limits);
+        }
+
+        Ok(op)
+    }
+
     async fn estimate_user_operation_gas(
         &self,
         op: &SignableUserOperation,
@@ -81,4 +113,14 @@ impl<P: Provider> BundlerApi for P {
             .request("eth_getUserOperationReceipt", (hash,))
             .await
     }
+}
+
+/// A failure preparing a UserOperation.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum PrepareUserOperationError {
+    #[error("Smart account error: {0}")]
+    SmartAccount(#[from] SmartAccountError),
+    #[error("Transport error: {0}")]
+    Transport(#[from] TransportError),
 }
